@@ -17,6 +17,17 @@ function appendLog(message) {
   logsEl.scrollTop = logsEl.scrollHeight;
 }
 
+function resolveErrorTip(error) {
+  const errorCode = error?.code;
+  const tips = {
+    SHEET_MISSING: '规则中配置的 sheet 不存在。请检查 sheet 名称，或将策略改为 warnAndContinue。',
+    COLUMN_INVALID: '拆分列配置无效。请在规则中使用 A、B、C 这类列名。',
+    FILE_LOCKED: '输出文件被其他程序占用。请关闭占用文件后重试。',
+    PERMISSION_DENIED: '当前账号没有文件读写权限。请更换目录或调整权限后重试。'
+  };
+  return tips[errorCode] || '请查看日志定位问题并重试。';
+}
+
 document.getElementById('pickFileBtn').addEventListener('click', async () => {
   const file = await window.excelToolsApi.selectFile();
   if (file) {
@@ -41,7 +52,11 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     outputDir: outputDirEl.value
   });
   appendLog(`任务结束：${result.success ? '成功' : '失败'}，输出 ${result.fileCount || 0} 个文件`);
-  if (result.error) appendLog(`错误：${result.error}`);
+  if (result.error) {
+    const err = typeof result.error === 'string' ? { code: 'UNKNOWN_ERROR', message: result.error } : result.error;
+    appendLog(`错误[${err.code || 'UNKNOWN_ERROR'}]：${err.message || '未知错误'}`);
+    appendLog(`建议：${resolveErrorTip(err)}`);
+  }
 });
 
 window.excelToolsApi.onSplitLog((msg) => appendLog(msg));

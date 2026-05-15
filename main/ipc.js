@@ -29,7 +29,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle('split:run', async (_event, payload) => {
     const rulesPath = path.join(__dirname, '..', 'config', 'defaultRules.json');
-    return runSplitTask({ ...payload, rulesPath, onLog: sendLog });
+    const result = await runSplitTask({ ...payload, rulesPath, onLog: sendLog });
+    if (!result.success && result.error && typeof result.error === 'string') {
+      return { ...result, error: { code: 'UNKNOWN_ERROR', message: result.error, detail: {} } };
+    }
+    return result;
   });
 }
 

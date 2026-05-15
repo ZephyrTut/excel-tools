@@ -5,17 +5,25 @@ const { readWorkbook } = require('./excelReader');
 const { ensureDir, writeWorkbook } = require('./excelWriter');
 const { copyColumnMeta, copyRowStyle, copyMerges } = require('./styleCopier');
 
+function createAppError(code, message, detail = {}) {
+  return { code, message, detail };
+}
+
 function sanitizeFileName(name) {
   return String(name ?? 'EMPTY').replace(/[\\/:*?"<>|]/g, '_').trim() || 'EMPTY';
 }
 
 function columnToIndex(column) {
-  if (!column || typeof column !== 'string') throw new Error(`非法拆分列: ${column}`);
+  if (!column || typeof column !== 'string') {
+    throw createAppError('COLUMN_INVALID', `非法拆分列: ${column}`, { column });
+  }
   const normalized = column.trim().toUpperCase();
   let result = 0;
   for (let i = 0; i < normalized.length; i += 1) {
     const code = normalized.charCodeAt(i);
-    if (code < 65 || code > 90) throw new Error(`非法拆分列: ${column}`);
+    if (code < 65 || code > 90) {
+      throw createAppError('COLUMN_INVALID', `非法拆分列: ${column}`, { column });
+    }
     result = result * 26 + (code - 64);
   }
   return result;
@@ -41,12 +49,23 @@ function buildGroupedRowsByKey(worksheet, headerRows, splitColumnIndex, skipEmpt
   return groups;
 }
 
+function normalizeError(error) {
+  if (error && error.code && error.message) return error;
+  if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
+    return createAppError('PERMISSION_DENIED', '无权限访问文件或目录', { originalCode: error.code, path: error.path });
+  }
+  if (error && (error.code === 'EBUSY' || error.code === 'ETXTBSY')) {
+    return createAppError('FILE_LOCKED', '文件被占用，请关闭后重试', { originalCode: error.code, path: error.path });
+  }
+  return createAppError('UNKNOWN_ERROR', error?.message || '未知错误', { originalCode: error?.code, stack: error?.stack });
+}
+
 async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
   const logger = createLogger(onLog);
   try {
     const rules = await loadRules(rulesPath);
     const enabledRules = (rules.sheetRules || []).filter((r) => r.enabled);
-    if (enabledRules.length === 0) throw new Error('没有启用的 sheetRules');
+    if (enabledRules.length === 0) throw createAppError('RULES_EMPTY', '没有启用的 sheetRules');
 
     logger.info(`读取源文件: ${sourceFile}`);
     const sourceWb = await readWorkbook(sourceFile);
@@ -58,7 +77,14 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
     for (const rule of enabledRules) {
       const ws = sourceWb.getWorksheet(rule.sheetName);
       if (!ws) {
-        logger.warn(`sheet 缺失: ${rule.sheetName}`);
+        const strategy = rule.sheetMissingStrategy || 'warnAndContinue';
+        if (strategy === 'failFast') {
+          throw createAppError('SHEET_MISSING', `sheet 缺失: ${rule.sheetName}`, {
+            sheetName: rule.sheetName,
+            strategy
+          });
+        }
+        logger.warn(`sheet 缺失: ${rule.sheetName}，已按 warnAndContinue 跳过`);
         continue;
       }
 
@@ -103,9 +129,10 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
     logger.info(`任务结束，共输出 ${fileCount} 个文件`);
     return { success: true, fileCount };
   } catch (error) {
-    logger.error(error.message);
-    return { success: false, error: error.message };
+    const normalized = normalizeError(error);
+    logger.error(`${normalized.code}: ${normalized.message}`);
+    return { success: false, error: normalized };
   }
 }
 
-module.exports = { runSplitTask, sanitizeFileName, columnToIndex };
+module.exports = { runSplitTask, sanitizeFileName, columnToIndex, createAppError, normalizeError };
