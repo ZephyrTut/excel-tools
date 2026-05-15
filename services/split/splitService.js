@@ -3,7 +3,14 @@ const { loadRules } = require('../common/ruleManager');
 const { createLogger } = require('../common/logger');
 const { readWorkbook } = require('./excelReader');
 const { ensureDir, writeWorkbook } = require('./excelWriter');
-const { copyColumnMeta, copyRowStyle, copyMerges } = require('./styleCopier');
+const {
+  copyColumnMeta,
+  copyRowStyle,
+  copyMerges,
+  copyWorksheetMeta,
+  copyDataValidations,
+  copyConditionalFormatting
+} = require('./styleCopier');
 
 function sanitizeFileName(name) {
   return String(name ?? 'EMPTY').replace(/[\\/:*?"<>|]/g, '_').trim() || 'EMPTY';
@@ -39,6 +46,19 @@ function buildGroupedRowsByKey(worksheet, headerRows, splitColumnIndex, skipEmpt
     groups.get(key).push(rowNumber);
   });
   return groups;
+}
+
+
+function logUnsupportedObjects(sourceWb, sourceWs, logger) {
+  const wsName = sourceWs.name;
+  const hasNotes = sourceWs.model?.comments && sourceWs.model.comments.length > 0;
+  if (hasNotes) logger.warn(`sheet ${wsName} 含批注/注释，当前版本不迁移该对象`);
+
+  const tableCount = Array.isArray(sourceWs.model?.tables) ? sourceWs.model.tables.length : 0;
+  if (tableCount > 0) logger.warn(`sheet ${wsName} 含 ${tableCount} 个表格对象(Table)，当前版本不迁移`);
+
+  const hasDrawings = Array.isArray(sourceWb.model?.media) && sourceWb.model.media.length > 0;
+  if (hasDrawings) logger.warn(`工作簿含图表/图片等绘图对象，当前版本不迁移`);
 }
 
 async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
@@ -77,6 +97,7 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
       for (const meta of sheetMetas) {
         const outWs = outWb.addWorksheet(meta.rule.outputSheetName || meta.rule.sheetName);
         copyColumnMeta(meta.worksheet, outWs);
+        copyWorksheetMeta(meta.worksheet, outWs);
 
         for (let i = 1; i <= meta.headerRows; i += 1) {
           const sourceRow = meta.worksheet.getRow(i);
@@ -92,6 +113,9 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
         });
 
         copyMerges(meta.worksheet, outWs);
+        copyDataValidations(meta.worksheet, outWs);
+        copyConditionalFormatting(meta.worksheet, outWs);
+        logUnsupportedObjects(sourceWb, meta.worksheet, logger);
       }
 
       const outputPath = resolveOutputPath(outputDir, key, rules.overwriteIfExists === true);

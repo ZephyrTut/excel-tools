@@ -30,4 +30,40 @@ function copyMerges(sourceWs, targetWs) {
   modelMerges.forEach((range) => targetWs.mergeCells(range));
 }
 
-module.exports = { copyColumnMeta, copyRowStyle, copyMerges };
+function copyWorksheetMeta(sourceWs, targetWs) {
+  targetWs.state = sourceWs.state;
+  targetWs.properties = cloneValue(sourceWs.properties || {});
+  targetWs.pageSetup = cloneValue(sourceWs.pageSetup || {});
+  targetWs.headerFooter = cloneValue(sourceWs.headerFooter || {});
+  targetWs.views = cloneValue(sourceWs.views || []);
+  targetWs.autoFilter = cloneValue(sourceWs.autoFilter || null);
+
+  if (sourceWs.model?.rowBreaks) targetWs.model.rowBreaks = cloneValue(sourceWs.model.rowBreaks);
+  if (sourceWs.model?.colBreaks) targetWs.model.colBreaks = cloneValue(sourceWs.model.colBreaks);
+}
+
+function copyDataValidations(sourceWs, targetWs) {
+  const validations = sourceWs.dataValidations?.model || {};
+  targetWs.dataValidations.model = cloneValue(validations);
+}
+
+function copyConditionalFormatting(sourceWs, targetWs) {
+  const modelCf = sourceWs.model?.conditionalFormattings;
+  if (!Array.isArray(modelCf) || modelCf.length === 0) return;
+
+  modelCf.forEach((cf) => {
+    const cloned = cloneValue(cf);
+    if (cloned?.ref && Array.isArray(cloned?.rules)) {
+      targetWs.addConditionalFormatting(cloned);
+    }
+  });
+}
+
+module.exports = {
+  copyColumnMeta,
+  copyRowStyle,
+  copyMerges,
+  copyWorksheetMeta,
+  copyDataValidations,
+  copyConditionalFormatting
+};
