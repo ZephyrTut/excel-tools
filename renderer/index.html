@@ -9,9 +9,11 @@
       .container { max-width: 980px; margin: 24px auto; background: #fff; padding: 20px; border-radius: 8px; }
       .row { display: flex; gap: 10px; margin: 10px 0; }
       .grow { flex: 1; }
-      input { width: 100%; padding: 8px; }
+      input, progress { width: 100%; padding: 8px; }
       button { padding: 8px 12px; cursor: pointer; }
       .meta { color: #666; font-size: 12px; }
+      .task-panel { margin-top: 10px; border: 1px solid #e2e6ea; border-radius: 6px; padding: 12px; background: #fafbfc; }
+      .status-line { font-weight: bold; margin-bottom: 8px; }
       .logs { margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px; height: 280px; overflow: auto; background: #111; color: #d5ffd5; font-family: monospace; }
     </style>
   </head>
@@ -29,6 +31,12 @@
       </div>
       <div class="row">
         <button id="runBtn">开始拆分</button>
+        <button id="cancelBtn" disabled>取消任务</button>
+      </div>
+      <div class="task-panel">
+        <div id="taskStatus" class="status-line">任务状态：空闲</div>
+        <div id="taskProgressText" class="meta">暂无任务</div>
+        <progress id="taskProgress" max="100" value="0"></progress>
       </div>
       <div id="logs" class="logs"></div>
     </div>
