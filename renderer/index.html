@@ -9,10 +9,13 @@
       .container { max-width: 980px; margin: 24px auto; background: #fff; padding: 20px; border-radius: 8px; }
       .row { display: flex; gap: 10px; margin: 10px 0; }
       .grow { flex: 1; }
-      input { width: 100%; padding: 8px; }
+      input, textarea { width: 100%; padding: 8px; }
+      textarea { min-height: 160px; font-family: monospace; }
       button { padding: 8px 12px; cursor: pointer; }
       .meta { color: #666; font-size: 12px; }
-      .logs { margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px; height: 280px; overflow: auto; background: #111; color: #d5ffd5; font-family: monospace; }
+      .logs { margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px; height: 240px; overflow: auto; background: #111; color: #d5ffd5; font-family: monospace; }
+      .status { margin: 8px 0; font-size: 14px; }
+      .summary { border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fafafa; margin-top: 10px; }
     </style>
   </head>
   <body>
@@ -27,9 +30,19 @@
         <input id="outputDir" class="grow" placeholder="选择输出目录" readonly />
         <button id="pickDirBtn">选择目录</button>
       </div>
+
+      <h3>规则编辑</h3>
+      <textarea id="rulesEditor" placeholder="规则 JSON"></textarea>
+      <div class="row">
+        <button id="loadRulesBtn">加载规则</button>
+        <button id="saveRulesBtn">保存规则</button>
+      </div>
+
       <div class="row">
         <button id="runBtn">开始拆分</button>
       </div>
+      <div id="runStatus" class="status">执行状态：待执行</div>
+      <div id="summary" class="summary">执行后摘要：暂无</div>
       <div id="logs" class="logs"></div>
     </div>
     <script src="./main.js"></script>

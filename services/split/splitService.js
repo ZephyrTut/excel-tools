@@ -54,11 +54,14 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
 
     const sheetMetas = [];
     const globalKeys = new Set();
+    const failedItems = [];
 
     for (const rule of enabledRules) {
       const ws = sourceWb.getWorksheet(rule.sheetName);
       if (!ws) {
-        logger.warn(`sheet 缺失: ${rule.sheetName}`);
+        const message = `sheet 缺失: ${rule.sheetName}`;
+        logger.warn(message);
+        failedItems.push(message);
         continue;
       }
 
@@ -100,11 +103,16 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
       logger.info(`输出完成: ${outputPath}`);
     }
 
-    logger.info(`任务结束，共输出 ${fileCount} 个文件`);
-    return { success: true, fileCount };
+    const summary = {
+      totalKeys: globalKeys.size,
+      outputFileCount: fileCount,
+      failedItems
+    };
+    logger.info(`任务结束，共键数 ${summary.totalKeys}，输出 ${summary.outputFileCount} 个文件，失败项 ${summary.failedItems.length}`);
+    return { success: true, fileCount, summary };
   } catch (error) {
     logger.error(error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, summary: { totalKeys: 0, outputFileCount: 0, failedItems: [error.message] } };
   }
 }
 
