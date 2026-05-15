@@ -1,0 +1,17 @@
+{
+  "name": "excel-tools",
+  "version": "0.1.0",
+  "description": "Electron + Node.js + ExcelJS desktop platform for Excel automation",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

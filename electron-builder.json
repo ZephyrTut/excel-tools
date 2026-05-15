@@ -1,0 +1,14 @@
+{
+  "appId": "com.example.exceltools",
+  "productName": "Excel Tools",
+  "files": [
+    "main/**/*",
+    "renderer/**/*",
+    "services/**/*",
+    "config/**/*",
+    "package.json"
+  ],
+  "directories": {
+    "output": "dist"
+  }
+}
