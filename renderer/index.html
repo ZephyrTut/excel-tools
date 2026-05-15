@@ -13,6 +13,10 @@
       button { padding: 8px 12px; cursor: pointer; }
       .meta { color: #666; font-size: 12px; }
       .logs { margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px; height: 280px; overflow: auto; background: #111; color: #d5ffd5; font-family: monospace; }
+      .rules { margin-top: 16px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
+      .rules h3 { margin: 0 0 8px; }
+      textarea { width: 100%; min-height: 72px; padding: 8px; }
+      label { min-width: 120px; display: inline-block; }
     </style>
   </head>
   <body>
@@ -29,6 +33,21 @@
       </div>
       <div class="row">
         <button id="runBtn">开始拆分</button>
+      </div>
+
+      <div class="rules">
+        <h3>规则配置</h3>
+        <div class="row"><input id="rulesPath" class="grow" placeholder="规则文件路径" readonly /><button id="pickRulesBtn">选择规则文件</button></div>
+        <div class="row"><button id="loadRulesBtn">加载配置</button><button id="saveRulesBtn">保存配置</button><button id="resetRulesBtn">恢复默认</button></div>
+        <div class="row"><label>sheetName</label><input id="sheetName" class="grow" /></div>
+        <div class="row"><label>enabled</label><input id="enabled" type="checkbox" style="width:auto" /></div>
+        <div class="row"><label>headerRows</label><input id="headerRows" type="number" min="0" class="grow" /></div>
+        <div class="row"><label>splitColumn</label><input id="splitColumn" class="grow" /></div>
+        <div class="row"><label>splitBy</label><input id="splitBy" class="grow" /></div>
+        <div class="row"><label>outputSheetName</label><input id="outputSheetName" class="grow" /></div>
+        <div class="row"><label>renameMap(JSON)</label><textarea id="renameMap"></textarea></div>
+        <div class="row"><label>valueTransform(JSON)</label><textarea id="valueTransform"></textarea></div>
+        <div class="row"><label>skipEmpty</label><input id="skipEmpty" type="checkbox" style="width:auto" /></div>
       </div>
       <div id="logs" class="logs"></div>
     </div>
