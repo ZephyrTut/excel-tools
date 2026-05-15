@@ -1,0 +1,22 @@
+{
+  "appName": "Excel Tools",
+  "defaultOutputDir": "./output",
+  "preserveSheetOrder": true,
+  "overwriteIfExists": false,
+  "sheetRules": [
+    {
+      "enabled": true,
+      "sheetName": "日报",
+      "headerRows": 3,
+      "splitColumn": "C",
+      "outputSheetName": "日报"
+    },
+    {
+      "enabled": true,
+      "sheetName": "合格品入库记录",
+      "headerRows": 1,
+      "splitColumn": "C",
+      "outputSheetName": "合格品入库记录"
+    }
+  ]
+}
