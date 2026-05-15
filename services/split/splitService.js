@@ -1,13 +1,11 @@
+const fs = require('fs/promises');
 const path = require('path');
 const { loadRules } = require('../common/ruleManager');
 const { createLogger } = require('../common/logger');
 const { readWorkbook } = require('./excelReader');
 const { ensureDir, writeWorkbook } = require('./excelWriter');
 const { copyColumnMeta, copyRowStyle, copyMerges } = require('./styleCopier');
-
-function sanitizeFileName(name) {
-  return String(name ?? 'EMPTY').replace(/[\\/:*?"<>|]/g, '_').trim() || 'EMPTY';
-}
+const { sanitizeFileName, resolveFilePath } = require('./fileNaming');
 
 function columnToIndex(column) {
   if (!column || typeof column !== 'string') throw new Error(`非法拆分列: ${column}`);
@@ -21,11 +19,29 @@ function columnToIndex(column) {
   return result;
 }
 
-function resolveOutputPath(outputDir, key, overwriteIfExists) {
-  const baseName = sanitizeFileName(key);
-  if (overwriteIfExists) return path.join(outputDir, `${baseName}.xlsx`);
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return path.join(outputDir, `${baseName}-${stamp}.xlsx`);
+async function resolveOutputPathWithPolicy({ outputDir, key, sheetName, namingConfig }) {
+  const candidate = resolveFilePath({
+    outputDir,
+    key,
+    sheetName,
+    fileNameTemplate: namingConfig.fileNameTemplate,
+    conflictPolicy: namingConfig.conflictPolicy
+  });
+
+  if (namingConfig.conflictPolicy !== 'increment') return candidate;
+
+  const parsed = path.parse(candidate);
+  let current = candidate;
+  let index = 1;
+  while (true) {
+    try {
+      await fs.access(current);
+      current = path.join(parsed.dir, `${parsed.name}-${index}${parsed.ext}`);
+      index += 1;
+    } catch {
+      return current;
+    }
+  }
 }
 
 function buildGroupedRowsByKey(worksheet, headerRows, splitColumnIndex, skipEmpty) {
@@ -41,10 +57,14 @@ function buildGroupedRowsByKey(worksheet, headerRows, splitColumnIndex, skipEmpt
   return groups;
 }
 
-async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
+async function runSplitTask({ sourceFile, outputDir, rulesPath, namingConfig, onLog }) {
   const logger = createLogger(onLog);
   try {
     const rules = await loadRules(rulesPath);
+    const activeNamingConfig = {
+      fileNameTemplate: namingConfig?.fileNameTemplate || rules.fileNameTemplate,
+      conflictPolicy: namingConfig?.conflictPolicy || rules.conflictPolicy
+    };
     const enabledRules = (rules.sheetRules || []).filter((r) => r.enabled);
     if (enabledRules.length === 0) throw new Error('没有启用的 sheetRules');
 
@@ -94,7 +114,12 @@ async function runSplitTask({ sourceFile, outputDir, rulesPath, onLog }) {
         copyMerges(meta.worksheet, outWs);
       }
 
-      const outputPath = resolveOutputPath(outputDir, key, rules.overwriteIfExists === true);
+      const outputPath = await resolveOutputPathWithPolicy({
+        outputDir,
+        key,
+        sheetName: sheetMetas[0]?.rule?.sheetName,
+        namingConfig: activeNamingConfig
+      });
       await writeWorkbook(outWb, outputPath);
       fileCount += 1;
       logger.info(`输出完成: ${outputPath}`);

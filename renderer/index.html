@@ -9,7 +9,7 @@
       .container { max-width: 980px; margin: 24px auto; background: #fff; padding: 20px; border-radius: 8px; }
       .row { display: flex; gap: 10px; margin: 10px 0; }
       .grow { flex: 1; }
-      input { width: 100%; padding: 8px; }
+      input, select { width: 100%; padding: 8px; }
       button { padding: 8px 12px; cursor: pointer; }
       .meta { color: #666; font-size: 12px; }
       .logs { margin-top: 16px; border: 1px solid #ddd; border-radius: 6px; padding: 12px; height: 280px; overflow: auto; background: #111; color: #d5ffd5; font-family: monospace; }
@@ -27,6 +27,15 @@
         <input id="outputDir" class="grow" placeholder="选择输出目录" readonly />
         <button id="pickDirBtn">选择目录</button>
       </div>
+      <div class="row">
+        <input id="fileNameTemplate" class="grow" value="{key}" placeholder="命名模板，例如 {key}-{date}" />
+        <select id="conflictPolicy">
+          <option value="overwrite">overwrite</option>
+          <option value="timestamp" selected>timestamp</option>
+          <option value="increment">increment</option>
+        </select>
+      </div>
+      <div id="namingExample" class="meta">示例文件名: demo-2026-01-01-08-00-00.xlsx</div>
       <div class="row">
         <button id="runBtn">开始拆分</button>
       </div>

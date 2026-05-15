@@ -3,6 +3,8 @@
   "defaultOutputDir": "./output",
   "preserveSheetOrder": true,
   "overwriteIfExists": false,
+  "fileNameTemplate": "{key}",
+  "conflictPolicy": "timestamp",
   "sheetRules": [
     {
       "enabled": true,
