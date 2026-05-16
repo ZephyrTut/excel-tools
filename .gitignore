@@ -1,0 +1,32 @@
+node_modules/
+
+# Build artifacts
+dist/
+build/
+release/
+out/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime and temp output
+output/
+comparison-result.txt
+*.tmp
+*.temp
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

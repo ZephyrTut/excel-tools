@@ -1,0 +1,23 @@
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+  background: #f5f7fa;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page-container {
+  padding: 16px;
+}
+
+.panel-card {
+  margin-bottom: 12px;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}

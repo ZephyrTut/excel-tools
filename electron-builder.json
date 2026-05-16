@@ -1,0 +1,28 @@
+{
+  "appId": "com.excel.tools",
+  "productName": "Excel Tools",
+  "directories": {
+    "output": "dist/installers"
+  },
+  "files": [
+    "main/**/*",
+    "services/**/*",
+    "dist/renderer/**/*",
+    "config/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

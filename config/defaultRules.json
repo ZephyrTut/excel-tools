@@ -1,0 +1,63 @@
+{
+  "appName": "Excel Tools",
+  "defaultOutputDir": ".\\output",
+  "preserveSheetOrder": true,
+  "overwriteIfExists": false,
+  "ifExistsStrategy": "timestamp",
+  "fileName": {
+    "source": "splitKey",
+    "sanitizeWindowsName": true,
+    "maxLength": 120
+  },
+  "split": {
+    "skipEmptySplitKey": true,
+    "trimSplitKey": true
+  },
+  "sheetRules": [
+    {
+      "enabled": true,
+      "sheetName": "日报",
+      "headerRows": 3,
+      "splitColumn": "C",
+      "splitBy": "cellValue",
+      "outputSheetName": "日报",
+      "skipEmpty": true
+    },
+    {
+      "enabled": true,
+      "sheetName": "合格品入库记录",
+      "headerRows": 1,
+      "splitColumn": "C",
+      "splitBy": "cellValue",
+      "outputSheetName": "合格品入库记录",
+      "skipEmpty": true
+    },
+    {
+      "enabled": true,
+      "sheetName": "合格品出库记录",
+      "headerRows": 1,
+      "splitColumn": "C",
+      "splitBy": "cellValue",
+      "outputSheetName": "合格品出库记录",
+      "skipEmpty": true
+    },
+    {
+      "enabled": true,
+      "sheetName": "领跑良品退回",
+      "headerRows": 1,
+      "splitColumn": "C",
+      "splitBy": "cellValue",
+      "outputSheetName": "零跑良品退回",
+      "skipEmpty": true
+    },
+    {
+      "enabled": true,
+      "sheetName": "不良品库存",
+      "headerRows": 1,
+      "splitColumn": "C",
+      "splitBy": "cellValue",
+      "outputSheetName": "不良品库存",
+      "skipEmpty": true
+    }
+  ]
+}
