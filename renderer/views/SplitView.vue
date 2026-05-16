@@ -22,6 +22,12 @@
             </template>
           </el-input>
         </el-form-item>
+        <el-form-item label="文件名后缀">
+          <el-input
+            v-model="state.rules.fileName.suffix"
+            placeholder="例如：日报表（会拼接在拆分键后面）"
+          />
+        </el-form-item>
         <el-form-item label="任务状态">
           <el-tag :type="statusType">{{ state.status }}</el-tag>
           <el-progress
@@ -70,6 +76,14 @@ const state = reactive({
     defaultOutputDir: ".\\output",
     overwriteIfExists: false,
     ifExistsStrategy: "timestamp",
+    fileName: {
+      source: "splitKey",
+      prefix: "",
+      suffix: "",
+      customName: "",
+      sanitizeWindowsName: true,
+      maxLength: 120
+    },
     split: {
       skipEmptySplitKey: true,
       trimSplitKey: true
@@ -79,6 +93,7 @@ const state = reactive({
 });
 
 let unsubscribe = null;
+const MAX_LOG_LINES = 1000;
 
 const canRun = computed(
   () =>
@@ -97,6 +112,9 @@ const statusType = computed(() => {
 
 function pushLog(line) {
   state.logs.push(`[${new Date().toLocaleTimeString()}] ${line}`);
+  if (state.logs.length > MAX_LOG_LINES) {
+    state.logs.splice(0, state.logs.length - MAX_LOG_LINES);
+  }
 }
 
 function getApi() {
@@ -205,6 +223,9 @@ function handleTaskEvent(event) {
     state.status = "error";
     state.taskId = "";
     pushLog(`任务失败：${event.error.code} ${event.error.message}`);
+    if (event.error.details?.stack) {
+      pushLog(`堆栈：${event.error.details.stack}`);
+    }
     ElMessage.error(event.error.message);
   } else if (event.type === "cancelled") {
     state.status = "idle";

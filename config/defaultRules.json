@@ -4,8 +4,12 @@
   "preserveSheetOrder": true,
   "overwriteIfExists": false,
   "ifExistsStrategy": "timestamp",
+  "templateFile": "",
   "fileName": {
     "source": "splitKey",
+    "prefix": "",
+    "suffix": "",
+    "customName": "",
     "sanitizeWindowsName": true,
     "maxLength": 120
   },
@@ -47,7 +51,7 @@
       "headerRows": 1,
       "splitColumn": "C",
       "splitBy": "cellValue",
-      "outputSheetName": "零跑良品退回",
+      "outputSheetName": "领跑良品退回",
       "skipEmpty": true
     },
     {

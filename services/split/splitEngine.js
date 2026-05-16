@@ -1,11 +1,10 @@
 const ExcelJS = require("exceljs");
 const { AppError, ErrorCodes } = require("../common/errors");
-const { writeSplitOutputs } = require("./excelWriter");
+const { writeSplitOutput } = require("./excelWriter");
 const {
   copyWorksheetMeta,
   copyHeaderRowsWithMerges,
-  copyRowAndCells,
-  copySingleRowMerges
+  copyRowAndCellsWithOptions
 } = require("./styleCopier");
 
 function normalizeCellValue(cellValue) {
@@ -31,73 +30,175 @@ function resolveSplitKey(rawValue, rule, splitConfig) {
   return value || "EMPTY";
 }
 
-function collectSplitKeys(workbook, rules, splitConfig) {
-  const keySet = new Set();
-  for (const rule of rules) {
-    const sheet = workbook.getWorksheet(rule.sheetName);
-    if (!sheet) {
+function parseCellRef(cellRef) {
+  const match = /^([A-Z]+)(\d+)$/.exec(cellRef);
+  if (!match) return null;
+  return {
+    col: match[1],
+    row: Number(match[2])
+  };
+}
+
+function parseMergeRange(range) {
+  const [start, end] = String(range || "").split(":");
+  const s = parseCellRef(start);
+  const e = parseCellRef(end);
+  if (!s || !e) return null;
+  return {
+    startCol: s.col,
+    startRow: s.row,
+    endCol: e.col,
+    endRow: e.row
+  };
+}
+
+function buildSingleRowMergeMap(sourceSheet) {
+  const mergesBySourceRow = new Map();
+  const merges = sourceSheet.model?.merges || [];
+  for (const range of merges) {
+    const parsed = parseMergeRange(range);
+    if (!parsed) continue;
+    if (parsed.startRow !== parsed.endRow) continue;
+    if (!mergesBySourceRow.has(parsed.startRow)) {
+      mergesBySourceRow.set(parsed.startRow, []);
+    }
+    mergesBySourceRow.get(parsed.startRow).push({
+      startCol: parsed.startCol,
+      endCol: parsed.endCol
+    });
+  }
+  return mergesBySourceRow;
+}
+
+function resolveSequenceColumn(sourceSheet, headerRows) {
+  let seqCol = -1;
+  for (let r = 1; r <= headerRows; r += 1) {
+    const row = sourceSheet.getRow(r);
+    row.eachCell({ includeEmpty: false }, (cell, cn) => {
+      const v = String(cell.value || "").trim();
+      if (v === "序号" && seqCol === -1) seqCol = cn;
+    });
+    if (seqCol > 0) break;
+  }
+  return seqCol;
+}
+
+function buildRuleContexts(workbook, rules) {
+  return buildRuleContextsWithTemplate(workbook, rules, null);
+}
+
+function buildRuleContextsWithTemplate(workbook, rules, templateWorkbook) {
+  return rules.map((rule) => {
+    const sourceSheet = workbook.getWorksheet(rule.sheetName);
+    if (!sourceSheet) {
       throw new AppError(
         ErrorCodes.SHEET_NOT_FOUND,
         `Sheet "${rule.sheetName}" not found.`,
         { sheetName: rule.sheetName }
       );
     }
+    const outputSheetName = rule.outputSheetName || rule.sheetName;
+    const templateSheet = templateWorkbook?.getWorksheet(outputSheetName) || null;
+    const headerSheet = templateSheet || sourceSheet;
+    return {
+      ...rule,
+      sourceSheet,
+      headerSheet,
+      outputSheetName,
+      sequenceColumnIndex: resolveSequenceColumn(sourceSheet, rule.headerRows),
+      singleRowMergesBySourceRow: buildSingleRowMergeMap(sourceSheet),
+      zeroFillColumnIndexes: resolveZeroFillColumns(headerSheet, rule.headerRows)
+    };
+  });
+}
 
-    for (let rowNum = rule.headerRows + 1; rowNum <= sheet.rowCount; rowNum += 1) {
-      const row = sheet.getRow(rowNum);
+function normalizeHeaderText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    if (value.text) return String(value.text);
+    if (value.richText) {
+      return value.richText.map((item) => item.text || "").join("");
+    }
+    if (value.result !== undefined) return String(value.result ?? "");
+  }
+  return String(value);
+}
+
+function resolveZeroFillColumns(headerSheet, headerRows) {
+  const keywords = ["入库", "出库", "领跑良品退回", "零跑退回良品"];
+  const colSet = new Set();
+  for (let r = 1; r <= headerRows; r += 1) {
+    const row = headerSheet.getRow(r);
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const text = normalizeHeaderText(cell.value).replace(/\s+/g, "");
+      if (keywords.some((keyword) => text.includes(keyword))) {
+        colSet.add(colNumber);
+      }
+    });
+  }
+  return colSet;
+}
+
+function collectRowsByKey(ruleContexts, splitConfig) {
+  const rowsByKey = new Map();
+  for (const rule of ruleContexts) {
+    const sourceSheet = rule.sourceSheet;
+    for (let rowNum = rule.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
+      const row = sourceSheet.getRow(rowNum);
       const key = resolveSplitKey(
         row.getCell(rule.splitColumnIndex).value,
         rule,
         splitConfig
       );
-      if (key) keySet.add(key);
-    }
-  }
-  return keySet;
-}
-
-function buildOutputBooks(workbook, rules, keySet) {
-  const map = new Map();
-  for (const key of keySet) {
-    const outputBook = new ExcelJS.Workbook();
-    for (const rule of rules) {
-      const sourceSheet = workbook.getWorksheet(rule.sheetName);
-      const outputSheetName = rule.outputSheetName || rule.sheetName;
-      const targetSheet = outputBook.addWorksheet(outputSheetName);
-      copyWorksheetMeta(sourceSheet, targetSheet);
-      copyHeaderRowsWithMerges(sourceSheet, targetSheet, rule.headerRows);
-    }
-    map.set(key, outputBook);
-  }
-  return map;
-}
-
-function fillOutputBooks(workbook, rules, outputBooks, splitConfig) {
-  for (const rule of rules) {
-    const sourceSheet = workbook.getWorksheet(rule.sheetName);
-    const outputSheetName = rule.outputSheetName || rule.sheetName;
-
-    for (let rowNum = rule.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
-      const sourceRow = sourceSheet.getRow(rowNum);
-      const key = resolveSplitKey(
-        sourceRow.getCell(rule.splitColumnIndex).value,
-        rule,
-        splitConfig
-      );
       if (!key) continue;
-
-      const outputBook = outputBooks.get(key);
-      if (!outputBook) continue;
-      const targetSheet = outputBook.getWorksheet(outputSheetName);
-      const targetRowNum = targetSheet.rowCount + 1;
-      copyRowAndCells(sourceRow, targetSheet, targetRowNum);
-      copySingleRowMerges(sourceSheet, targetSheet, rowNum, targetRowNum);
+      if (!rowsByKey.has(key)) rowsByKey.set(key, new Map());
+      const rowMapBySheet = rowsByKey.get(key);
+      if (!rowMapBySheet.has(rule.outputSheetName)) {
+        rowMapBySheet.set(rule.outputSheetName, []);
+      }
+      rowMapBySheet.get(rule.outputSheetName).push(rowNum);
     }
   }
+  return rowsByKey;
+}
+
+function applySingleRowMerges(ruleContext, sourceRowNum, targetSheet, targetRowNum) {
+  const merges = ruleContext.singleRowMergesBySourceRow.get(sourceRowNum) || [];
+  for (const merge of merges) {
+    targetSheet.mergeCells(
+      `${merge.startCol}${targetRowNum}:${merge.endCol}${targetRowNum}`
+    );
+  }
+}
+
+function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
+  const outputBook = new ExcelJS.Workbook();
+  for (const context of ruleContexts) {
+    const targetSheet = outputBook.addWorksheet(context.outputSheetName);
+    copyWorksheetMeta(context.headerSheet, targetSheet);
+    copyHeaderRowsWithMerges(context.headerSheet, targetSheet, context.headerRows);
+
+    const sourceRows = rowsBySheetForKey.get(context.outputSheetName) || [];
+    let seq = 0;
+    for (const sourceRowNum of sourceRows) {
+      const sourceRow = context.sourceSheet.getRow(sourceRowNum);
+      const targetRowNum = targetSheet.rowCount + 1;
+      copyRowAndCellsWithOptions(sourceRow, targetSheet, targetRowNum, {
+        zeroFillColumns: context.zeroFillColumnIndexes
+      });
+      applySingleRowMerges(context, sourceRowNum, targetSheet, targetRowNum);
+      if (context.sequenceColumnIndex > 0) {
+        seq += 1;
+        targetSheet.getRow(targetRowNum).getCell(context.sequenceColumnIndex).value = seq;
+      }
+    }
+  }
+  return outputBook;
 }
 
 async function runSplitEngine({
   workbook,
+  templateWorkbook,
   rules,
   outputOptions,
   splitConfig,
@@ -105,9 +206,15 @@ async function runSplitEngine({
   reportProgress
 }) {
   const config = splitConfig || {};
-  reportProgress(10, "Collecting split keys");
-  const keySet = collectSplitKeys(workbook, rules, config);
-  if (keySet.size === 0) {
+  const ruleContexts = buildRuleContextsWithTemplate(
+    workbook,
+    rules,
+    templateWorkbook || null
+  );
+
+  reportProgress(10, "Collecting split rows");
+  const rowsByKey = collectRowsByKey(ruleContexts, config);
+  if (rowsByKey.size === 0) {
     throw new AppError(
       ErrorCodes.NO_SPLIT_KEYS,
       "No split keys found in enabled sheets.",
@@ -115,20 +222,24 @@ async function runSplitEngine({
     );
   }
 
-  logger.info("Split keys collected.", { count: keySet.size });
-  reportProgress(30, "Building output workbooks");
-  const outputBooks = buildOutputBooks(workbook, rules, keySet);
-
-  reportProgress(55, "Writing split rows");
-  fillOutputBooks(workbook, rules, outputBooks, config);
-
-  reportProgress(80, "Exporting files");
-  const outputFiles = await writeSplitOutputs(outputBooks, outputOptions, logger);
+  logger.info("Split keys collected.", { count: rowsByKey.size });
+  reportProgress(30, "Building and exporting files");
+  const outputFiles = [];
+  const totalKeys = rowsByKey.size;
+  let index = 0;
+  for (const [key, rowsBySheetForKey] of rowsByKey.entries()) {
+    index += 1;
+    const progress = 30 + Math.floor((index / totalKeys) * 69);
+    reportProgress(progress, `Exporting files (${index}/${totalKeys})`);
+    const outputBook = buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey);
+    const filePath = await writeSplitOutput(key, outputBook, outputOptions, logger);
+    outputFiles.push(filePath);
+  }
   reportProgress(100, "Completed");
 
   return {
     outputFiles,
-    splitKeyCount: keySet.size
+    splitKeyCount: rowsByKey.size
   };
 }
 

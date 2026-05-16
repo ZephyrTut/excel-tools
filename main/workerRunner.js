@@ -2,6 +2,14 @@ const path = require("node:path");
 const { Worker } = require("node:worker_threads");
 const { EventEmitter } = require("node:events");
 
+function resolveWorkerMemoryMb() {
+  const parsed = Number.parseInt(process.env.SPLIT_WORKER_MEMORY_MB || "", 10);
+  if (Number.isFinite(parsed) && parsed >= 512) {
+    return parsed;
+  }
+  return 3072;
+}
+
 class WorkerRunner extends EventEmitter {
   constructor() {
     super();
@@ -9,8 +17,10 @@ class WorkerRunner extends EventEmitter {
   }
 
   startSplitTask(taskId, request) {
+    const memoryMb = resolveWorkerMemoryMb();
     const worker = new Worker(path.join(__dirname, "taskWorker.js"), {
-      workerData: { taskId, request }
+      workerData: { taskId, request },
+      resourceLimits: { maxOldGenerationSizeMb: memoryMb }
     });
 
     this.tasks.set(taskId, worker);
@@ -20,7 +30,11 @@ class WorkerRunner extends EventEmitter {
       this.emit("event", {
         type: "error",
         taskId,
-        error: { code: "WORKER_CRASHED", message: error.message, details: {} }
+        error: {
+          code: "WORKER_CRASHED",
+          message: error.message,
+          details: { stack: error.stack, memoryMb }
+        }
       })
     );
     worker.on("exit", (code) => {

@@ -32,6 +32,15 @@ async function runSplitTask(request, { logger, reportProgress }) {
 
   reportProgress(8, "Reading workbook");
   const workbook = await readWorkbook(request.inputFile);
+  reportProgress(9, "Workbook loaded");
+  let templateWorkbook = null;
+  if (rulesConfig.templateFile) {
+    const templatePath = path.isAbsolute(rulesConfig.templateFile)
+      ? rulesConfig.templateFile
+      : path.resolve(request.projectRoot || process.cwd(), rulesConfig.templateFile);
+    reportProgress(9, "Loading template workbook");
+    templateWorkbook = await readWorkbook(templatePath);
+  }
   let rules = normalizeSheetRules(rulesConfig.sheetRules || []);
 
   if (rulesConfig.preserveSheetOrder) {
@@ -44,11 +53,13 @@ async function runSplitTask(request, { logger, reportProgress }) {
   const outputOptions = {
     outputDir: resolveOutputDir(request, rulesConfig),
     overwriteIfExists: rulesConfig.overwriteIfExists,
-    ifExistsStrategy: rulesConfig.ifExistsStrategy
+    ifExistsStrategy: rulesConfig.ifExistsStrategy,
+    fileName: rulesConfig.fileName || {}
   };
 
   const result = await runSplitEngine({
     workbook,
+    templateWorkbook,
     rules,
     outputOptions,
     splitConfig: rulesConfig.split || {},

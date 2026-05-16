@@ -3,53 +3,138 @@ function copyWorksheetMeta(sourceSheet, targetSheet) {
   targetSheet.pageSetup = { ...sourceSheet.pageSetup };
   targetSheet.views = sourceSheet.views ? [...sourceSheet.views] : [];
   targetSheet.state = sourceSheet.state;
-  targetSheet.columns = sourceSheet.columns.map((column) => ({
+  targetSheet.columns = (sourceSheet.columns || []).map((column) => ({
     key: column.key,
     width: column.width,
     hidden: column.hidden,
     outlineLevel: column.outlineLevel,
-    style: column.style ? { ...column.style } : undefined
+    style: column.style ? { ...column.style } : undefined,
   }));
 }
 
 function cloneCellValue(cell) {
-  const value = cell.value;
-  if (value === null || value === undefined) return value;
-
-  // ExcelJS shared formula clones can fail on write if the original master cell
-  // is not present in the same relative position. Convert to normal formula.
+  // Formula cells: keep cached value only; do not force 0 for blanks.
   if (cell.formula) {
-    return {
-      formula: cell.formula,
-      result: cell.result
-    };
+    const r = cell.result;
+    if (r === undefined) return null;
+    return normalizeCopiedValue(clonePlainValue(r));
   }
 
+  return normalizeCopiedValue(clonePlainValue(cell.value));
+}
+
+function clonePlainValue(value) {
+  if (value === null || value === undefined) return value;
   if (value instanceof Date) return new Date(value.getTime());
   if (Buffer.isBuffer(value)) return Buffer.from(value);
   if (typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((item) => clonePlainValue(item));
+
+  // Common ExcelJS value types (hyperlink/richText/error/formula objects)
+  if (Object.prototype.hasOwnProperty.call(value, "formula")) {
+    return {
+      formula: value.formula,
+      result: clonePlainValue(value.result),
+      ref: value.ref,
+      shareType: value.shareType,
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "sharedFormula")) {
+    return {
+      sharedFormula: value.sharedFormula,
+      result: clonePlainValue(value.result),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "richText")) {
+    return {
+      richText: Array.isArray(value.richText)
+        ? value.richText.map((run) => ({
+            ...run,
+            font: run?.font ? { ...run.font } : undefined,
+          }))
+        : [],
+    };
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(value, "hyperlink") ||
+    Object.prototype.hasOwnProperty.call(value, "text")
+  ) {
+    return {
+      text: value.text,
+      hyperlink: value.hyperlink,
+      tooltip: value.tooltip,
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "error")) {
+    return { error: value.error };
+  }
 
   if (typeof structuredClone === "function") {
     return structuredClone(value);
   }
-  return JSON.parse(JSON.stringify(value));
+  return { ...value };
 }
 
 function copyRowAndCells(sourceRow, targetSheet, targetRowNumber) {
+  const zeroFillColumns = new Set();
+  return copyRowAndCellsWithOptions(sourceRow, targetSheet, targetRowNumber, {
+    zeroFillColumns,
+  });
+}
+
+function copyRowAndCellsWithOptions(
+  sourceRow,
+  targetSheet,
+  targetRowNumber,
+  options = {}
+) {
   const targetRow = targetSheet.getRow(targetRowNumber);
   targetRow.height = sourceRow.height;
+  const zeroFillColumns = options.zeroFillColumns || new Set();
 
   sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
     const targetCell = targetRow.getCell(colNumber);
-    targetCell.value = cloneCellValue(cell);
-    targetCell.style = cell.style ? JSON.parse(JSON.stringify(cell.style)) : {};
-    targetCell.numFmt = cell.numFmt;
+    const copiedValue = cloneCellValue(cell);
+    targetCell.value = shouldForceZero(copiedValue, colNumber, zeroFillColumns)
+      ? 0
+      : copiedValue;
+    targetCell.numFmt = cell.numFmt || undefined;
     targetCell.alignment = cell.alignment ? { ...cell.alignment } : undefined;
     targetCell.font = cell.font ? { ...cell.font } : undefined;
-    targetCell.fill = cell.fill ? { ...cell.fill } : undefined;
-    targetCell.border = cell.border ? { ...cell.border } : undefined;
-    targetCell.protection = cell.protection ? { ...cell.protection } : undefined;
+    targetCell.fill = cloneStyleObject(cell.fill);
+    targetCell.border = cloneStyleObject(cell.border);
+    targetCell.protection = cell.protection
+      ? { ...cell.protection }
+      : undefined;
   });
+}
+
+function shouldForceZero(value, colNumber, zeroFillColumns) {
+  if (!zeroFillColumns || zeroFillColumns.size === 0) return false;
+  if (!zeroFillColumns.has(colNumber)) return false;
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string" && value.trim() === "") return true;
+  return false;
+}
+
+function normalizeCopiedValue(value) {
+  if (typeof value === "string" && value.trim().toUpperCase() === "#N/A") {
+    return 0;
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    Object.prototype.hasOwnProperty.call(value, "error")
+  ) {
+    return value.error === "#N/A" ? 0 : value;
+  }
+  return value;
+}
+
+function cloneStyleObject(styleValue) {
+  if (!styleValue) return undefined;
+  if (typeof structuredClone === "function") return structuredClone(styleValue);
+  return { ...styleValue };
 }
 
 function parseCellRef(cellRef) {
@@ -57,7 +142,7 @@ function parseCellRef(cellRef) {
   if (!match) return null;
   return {
     col: match[1],
-    row: Number(match[2])
+    row: Number(match[2]),
   };
 }
 
@@ -70,7 +155,7 @@ function parseMergeRange(range) {
     startCol: s.col,
     startRow: s.row,
     endCol: e.col,
-    endRow: e.row
+    endRow: e.row,
   };
 }
 
@@ -89,7 +174,12 @@ function copyHeaderRowsWithMerges(sourceSheet, targetSheet, headerRows) {
   }
 }
 
-function copySingleRowMerges(sourceSheet, targetSheet, sourceRowNum, targetRowNum) {
+function copySingleRowMerges(
+  sourceSheet,
+  targetSheet,
+  sourceRowNum,
+  targetRowNum
+) {
   const merges = sourceSheet.model?.merges || [];
   for (const range of merges) {
     const parsed = parseMergeRange(range);
@@ -104,6 +194,7 @@ function copySingleRowMerges(sourceSheet, targetSheet, sourceRowNum, targetRowNu
 module.exports = {
   copyWorksheetMeta,
   copyRowAndCells,
+  copyRowAndCellsWithOptions,
   copyHeaderRowsWithMerges,
-  copySingleRowMerges
+  copySingleRowMerges,
 };

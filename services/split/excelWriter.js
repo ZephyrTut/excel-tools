@@ -25,27 +25,52 @@ async function writeSplitOutputs(workbooksByKey, options, logger) {
   const {
     outputDir,
     overwriteIfExists = false,
-    ifExistsStrategy = "timestamp"
+    ifExistsStrategy = "timestamp",
+    fileName = {}
   } = options;
   await ensureDirectory(outputDir);
 
   const outputs = [];
   for (const [key, workbook] of workbooksByKey.entries()) {
-    const safeKey = sanitizeWindowsFileName(key);
-    const filePath = await pickOutputPath(
-      outputDir,
-      safeKey,
-      ifExistsStrategy,
-      overwriteIfExists
-    );
-    await workbook.xlsx.writeFile(filePath);
+    const filePath = await writeSplitOutput(key, workbook, options, logger);
     outputs.push(filePath);
-    logger.info("Split file written.", { key, filePath });
   }
 
   return outputs;
 }
 
+async function writeSplitOutput(splitKey, workbook, options, logger) {
+  const {
+    outputDir,
+    overwriteIfExists = false,
+    ifExistsStrategy = "timestamp",
+    fileName = {}
+  } = options;
+  await ensureDirectory(outputDir);
+  const baseName = buildFileBaseName(splitKey, fileName);
+  const safeKey = sanitizeWindowsFileName(baseName);
+  const filePath = await pickOutputPath(
+    outputDir,
+    safeKey,
+    ifExistsStrategy,
+    overwriteIfExists
+  );
+  await workbook.xlsx.writeFile(filePath);
+  logger.info("Split file written.", { key: splitKey, filePath });
+  return filePath;
+}
+
+function buildFileBaseName(splitKey, fileNameOptions) {
+  const prefix = String(fileNameOptions.prefix || "");
+  const suffix = String(fileNameOptions.suffix || "");
+  const source = fileNameOptions.source || "splitKey";
+  const customName = String(fileNameOptions.customName || "");
+  const core = source === "customName" ? customName : splitKey;
+  const merged = `${prefix}${core}${suffix}`.trim();
+  return merged || "unknown";
+}
+
 module.exports = {
-  writeSplitOutputs
+  writeSplitOutputs,
+  writeSplitOutput
 };

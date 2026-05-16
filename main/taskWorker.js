@@ -14,7 +14,7 @@ async function run() {
     },
     error(message, context = {}) {
       emit({ type: "log", taskId, level: "error", message, context });
-    }
+    },
   };
 
   const reportProgress = (progress, stage) => {
@@ -31,8 +31,11 @@ async function run() {
       error: {
         message: error.message,
         code: error.code || "UNKNOWN_ERROR",
-        details: error.details || {}
-      }
+        details: {
+          ...(error.details || {}),
+          stack: error.stack,
+        },
+      },
     });
   }
 }
