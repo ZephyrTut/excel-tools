@@ -45,18 +45,21 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 上传构建产物到 GitHub Release
+      # 上传构建产物到 GitHub Release（只传安装包和 blockmap，避免 win-unpacked 进入 assets）
       - uses: softprops/action-gh-release@v2
         with:
           name: Excel Tools ${{ github.ref_name }}
           body: |
             ## Excel Tools ${{ github.ref_name }}
 
-            请从下方 Assets 下载对应平台的安装包。
+            ### Windows
+            - `Excel Tools Setup ${{ github.ref_name }}.exe` — 安装包（推荐）
 
             ---
             自动发布自 GitHub Actions。
-          files: dist/installers/**/*
+          files: |
+            dist/installers/*.exe
+            dist/installers/*.exe.blockmap
           draft: false
           prerelease: false
           generate_release_notes: false
