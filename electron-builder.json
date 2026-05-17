@@ -1,6 +1,7 @@
 {
   "appId": "com.excel.tools",
   "productName": "Excel Tools",
+  "compression": "maximum",
   "directories": {
     "output": "dist/installers"
   },
@@ -23,9 +24,6 @@
   },
   "nsis": {
     "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "compression": "maximum"
-  },
-  "removePackageScripts": true,
-  "removePackageKeywords": true
+    "allowToChangeInstallationDirectory": true
+  }
 }
