@@ -2,11 +2,7 @@
 # GitHub Actions — 自动构建 & 发布到 GitHub Releases
 #
 # 触发方式: 推送形如 v0.1.0、v1.2.3 的 tag 时自动执行
-#
-# 手动触发:
-#   1. git tag v0.2.0
-#   2. git push origin v0.2.0
-#   3. 等待 Actions 运行完毕，Release 自动创建
+# 也可手动触发: Actions 页面 → Release → Run workflow
 # =============================================================================
 
 name: Release
@@ -15,6 +11,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   build-and-release:
@@ -25,63 +22,31 @@ jobs:
       contents: write
 
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 设置 Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: 安装 pnpm
-        uses: pnpm/action-setup@v4
+      # 先安装 pnpm（后续 setup-node cache 需要 pnpm 在 PATH 中）
+      - uses: pnpm/action-setup@v4
         with:
           version: latest
           run_install: false
 
-      - name: 获取 pnpm store 目录
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> "$GITHUB_OUTPUT"
-
-      - name: 缓存 pnpm store
-        uses: actions/cache@v4
+      # 设置 Node.js + 自动缓存 pnpm store（一次搞定，不再重复调用）
+      - uses: actions/setup-node@v4
         with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          node-version: 20
+          cache: 'pnpm'
 
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - name: 构建渲染层 (Vite)
-        run: pnpm build:renderer
+      - run: pnpm build:renderer
 
-      - name: 打包 Electron 应用
-        run: pnpm exec electron-builder --config electron-builder.json
+      - run: pnpm exec electron-builder --config electron-builder.json
         env:
-          # 无代码签名证书时跳过签名
           CSC_LINK: ""
           CSC_KEY_PASSWORD: ""
 
-      - name: 收集构建产物
-        shell: bash
-        id: collect-assets
-        run: |
-          echo "Found installers in dist/installers/:"
-          ls -la dist/installers/ || echo "(empty)"
-          # 生成逗号分隔的 assets 列表供后续 step 使用
-          ASSETS=$(find dist/installers -type f \( \
-            -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o \
-            -name "*.zip" -o -name "*.deb" -o -name "*.rpm" -o \
-            -name "*.pacman" -o -name "*.blockmap" -o -name "*.yml" \
-          \) | tr '\n' ',' | sed 's/,$//')
-          echo "assets=$ASSETS" >> "$GITHUB_OUTPUT"
-
-      - name: 创建 Release 并上传产物
-        uses: softprops/action-gh-release@v2
+      # 上传构建产物到 GitHub Release
+      - uses: softprops/action-gh-release@v2
         with:
           name: Excel Tools ${{ github.ref_name }}
           body: |
@@ -90,10 +55,8 @@ jobs:
             请从下方 Assets 下载对应平台的安装包。
 
             ---
-
             自动发布自 GitHub Actions。
-          files: |
-            dist/installers/**
+          files: dist/installers/**/*
           draft: false
           prerelease: false
           generate_release_notes: false
