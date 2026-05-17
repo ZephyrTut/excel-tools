@@ -78,6 +78,12 @@ function registerIpcHandlers() {
     });
   });
 
+  ipcMain.handle("rules:get-defaults", async () => {
+    const configPath = path.join(getProjectRoot(), "config", "defaultRules.json");
+    const raw = await fs.readFile(configPath, "utf-8");
+    return JSON.parse(raw);
+  });
+
   ipcMain.handle("task:start-split", async (_, payload) => {
     const taskId = crypto.randomUUID();
     const request = {

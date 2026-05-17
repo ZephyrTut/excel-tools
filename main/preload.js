@@ -5,6 +5,7 @@ const api = {
   selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
   selectOutputDir: () => ipcRenderer.invoke("dialog:select-output-dir"),
   loadRules: () => ipcRenderer.invoke("rules:load"),
+  getDefaultRules: () => ipcRenderer.invoke("rules:get-defaults"),
   saveRules: (rules) => ipcRenderer.invoke("rules:save", rules),
   startSplitTask: (payload) => ipcRenderer.invoke("task:start-split", payload),
   cancelTask: (taskId) => ipcRenderer.invoke("task:cancel", taskId),

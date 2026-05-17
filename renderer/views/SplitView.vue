@@ -1,7 +1,14 @@
 <template>
   <div class="split-grid">
     <el-card class="panel-card">
-      <template #header><div>任务配置</div></template>
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span>任务配置</span>
+          <el-button text type="primary" @click="openTemplateDialog">
+            ⚙ 模板
+          </el-button>
+        </div>
+      </template>
       <el-form label-width="100px">
         <el-form-item label="源文件">
           <el-input v-model="state.inputFile" placeholder="请选择 xlsx 文件" readonly>
@@ -19,13 +26,6 @@
           <el-input v-model="state.outputDir" placeholder="请选择输出目录" readonly>
             <template #append>
               <el-button @click="pickOutputDir">选择</el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="模板文件">
-          <el-input v-model="state.rules.templateFile" placeholder="可选，用于样式参考的模板 Excel" readonly>
-            <template #append>
-              <el-button @click="pickTemplateFile">选择</el-button>
             </template>
           </el-input>
         </el-form-item>
@@ -58,6 +58,26 @@
     </el-card>
 
     <LogPanel :lines="state.logs" @clear="state.logs = []" />
+
+    <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="520px" append-to-body>
+      <el-form label-width="100px">
+        <el-form-item label="模板路径">
+          <el-input v-model="state.dialogTemplatePath" placeholder="未设置模板，使用源文件样式" readonly />
+        </el-form-item>
+      </el-form>
+      <p style="font-size: 13px; color: #888; margin: 0 0 0 100px;">
+        模板用于提供列宽、字体、底色等样式参考。不设置则从源文件获取样式。
+      </p>
+      <template #footer>
+        <el-space wrap>
+          <el-button @click="dialogPickTemplate">📂 选择模板</el-button>
+          <el-button @click="dialogClearTemplate">清空</el-button>
+          <el-button @click="dialogResetDefault">恢复默认</el-button>
+          <el-button type="primary" @click="dialogConfirm">确定</el-button>
+          <el-button @click="state.showTemplateDialog = false">取消</el-button>
+        </el-space>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -78,6 +98,9 @@ const state = reactive({
   status: "idle",
   progress: 0,
   logs: [],
+  defaultTemplateFile: "",
+  showTemplateDialog: false,
+  dialogTemplatePath: "",
   rules: {
     appName: "Excel Tools",
     defaultOutputDir: ".\\output",
@@ -156,10 +179,28 @@ async function pickOutputDir() {
   state.outputDir = dir;
 }
 
-async function pickTemplateFile() {
+function openTemplateDialog() {
+  state.dialogTemplatePath = state.rules.templateFile || "";
+  state.showTemplateDialog = true;
+}
+
+async function dialogPickTemplate() {
   const result = await getApi().selectTemplateFile();
   if (!result) return;
-  state.rules.templateFile = result.path;
+  state.dialogTemplatePath = result.path;
+}
+
+function dialogClearTemplate() {
+  state.dialogTemplatePath = "";
+}
+
+function dialogResetDefault() {
+  state.dialogTemplatePath = state.defaultTemplateFile || "";
+}
+
+function dialogConfirm() {
+  state.rules.templateFile = state.dialogTemplatePath;
+  state.showTemplateDialog = false;
 }
 
 async function loadRules() {
@@ -250,6 +291,12 @@ function handleTaskEvent(event) {
 onMounted(async () => {
   try {
     await loadRules();
+    const defaults = await getApi().getDefaultRules();
+    state.defaultTemplateFile = defaults.templateFile || "";
+    // 如果当前没设模板，用默认模板
+    if (!state.rules.templateFile && defaults.templateFile) {
+      state.rules.templateFile = defaults.templateFile;
+    }
     unsubscribe = getApi().onTaskEvent(handleTaskEvent);
   } catch (error) {
     state.status = "error";
