@@ -22,6 +22,13 @@
             </template>
           </el-input>
         </el-form-item>
+        <el-form-item label="模板文件">
+          <el-input v-model="state.rules.templateFile" placeholder="可选，用于样式参考的模板 Excel" readonly>
+            <template #append>
+              <el-button @click="pickTemplateFile">选择</el-button>
+            </template>
+          </el-input>
+        </el-form-item>
         <el-form-item label="文件名后缀">
           <el-input
             v-model="state.rules.fileName.suffix"
@@ -74,6 +81,7 @@ const state = reactive({
   rules: {
     appName: "Excel Tools",
     defaultOutputDir: ".\\output",
+    templateFile: "",
     overwriteIfExists: false,
     ifExistsStrategy: "timestamp",
     fileName: {
@@ -146,6 +154,12 @@ async function pickOutputDir() {
   const dir = await getApi().selectOutputDir();
   if (!dir) return;
   state.outputDir = dir;
+}
+
+async function pickTemplateFile() {
+  const result = await getApi().selectTemplateFile();
+  if (!result) return;
+  state.rules.templateFile = result.path;
 }
 
 async function loadRules() {

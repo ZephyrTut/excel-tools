@@ -39,6 +39,23 @@ function registerIpcHandlers() {
     };
   });
 
+  ipcMain.handle("dialog:select-template-file", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "选择模板 Excel 文件",
+      properties: ["openFile"],
+      filters: [{ name: "Excel", extensions: ["xlsx"] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const filePath = result.filePaths[0];
+    const stat = await fs.stat(filePath);
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      size: stat.size
+    };
+  });
+
   ipcMain.handle("dialog:select-output-dir", async () => {
     const result = await dialog.showOpenDialog({
       title: "选择输出目录",

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const api = {
   selectInputFile: () => ipcRenderer.invoke("dialog:select-input-file"),
+  selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
   selectOutputDir: () => ipcRenderer.invoke("dialog:select-output-dir"),
   loadRules: () => ipcRenderer.invoke("rules:load"),
   saveRules: (rules) => ipcRenderer.invoke("rules:save", rules),
