@@ -98,7 +98,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
-import { ElMessage } from "element-plus";
+
 import RuleTable from "../components/RuleTable.vue";
 import LogPanel from "../components/LogPanel.vue";
 

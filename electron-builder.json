@@ -23,6 +23,9 @@
   },
   "nsis": {
     "oneClick": false,
-    "allowToChangeInstallationDirectory": true
-  }
+    "allowToChangeInstallationDirectory": true,
+    "compression": "maximum"
+  },
+  "removePackageScripts": true,
+  "removePackageKeywords": true
 }
