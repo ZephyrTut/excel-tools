@@ -27,7 +27,7 @@ jobs:
       # 先安装 pnpm（后续 setup-node cache 需要 pnpm 在 PATH 中）
       - uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 9
           run_install: false
 
       # 设置 Node.js + 自动缓存 pnpm store（一次搞定，不再重复调用）
