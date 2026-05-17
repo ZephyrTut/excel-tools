@@ -29,11 +29,11 @@
     },
     {
       "enabled": true,
-      "sheetName": "合格品入库记录",
+      "sheetName": "合格品入货记录",
       "headerRows": 1,
       "splitColumn": "C",
       "splitBy": "cellValue",
-      "outputSheetName": "合格品入库记录",
+      "outputSheetName": "合格品入货记录",
       "skipEmpty": true
     },
     {

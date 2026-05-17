@@ -7,6 +7,7 @@ const {
   loadRules,
   saveRules
 } = require("../services/split/ruleManager");
+const { getSheetNames } = require("../services/split/excelReader");
 
 const runner = new WorkerRunner();
 function getProjectRoot() {
@@ -76,6 +77,10 @@ function registerIpcHandlers() {
     return saveRules(rules, {
       userDataPath: app.getPath("userData")
     });
+  });
+
+  ipcMain.handle("file:get-sheet-names", async (_, filePath) => {
+    return getSheetNames(filePath);
   });
 
   ipcMain.handle("rules:get-defaults", async () => {

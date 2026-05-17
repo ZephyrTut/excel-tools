@@ -54,6 +54,21 @@
 
     <el-card class="panel-card">
       <template #header><div>拆分规则</div></template>
+      <el-alert
+        v-if="state.sheetWarnings.length > 0"
+        :title="`Sheet 名称不匹配（${state.sheetWarnings.length} 项）`"
+        type="warning"
+        show-icon
+        closable
+        @close="state.sheetWarnings = []"
+        style="margin-bottom: 12px"
+      >
+        <template #default>
+          <div v-for="(w, i) in state.sheetWarnings" :key="i" style="font-size: 13px; line-height: 1.8">
+            {{ i + 1 }}. {{ w }}
+          </div>
+        </template>
+      </el-alert>
       <RuleTable :rules="state.rules.sheetRules" @remove="removeRule" />
     </el-card>
 
@@ -82,7 +97,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive } from "vue";
+import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { ElMessage } from "element-plus";
 import RuleTable from "../components/RuleTable.vue";
 import LogPanel from "../components/LogPanel.vue";
@@ -101,6 +116,7 @@ const state = reactive({
   defaultTemplateFile: "",
   showTemplateDialog: false,
   dialogTemplatePath: "",
+  sheetWarnings: [],
   rules: {
     appName: "Excel Tools",
     defaultOutputDir: ".\\output",
@@ -165,12 +181,49 @@ function formatFileSize(size) {
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+async function validateSheetNames(filePath) {
+  try {
+    const actualSheets = await getApi().getSheetNames(filePath);
+    const enabledRules = state.rules.sheetRules.filter(
+      (r) => r.enabled && r.sheetName && r.sheetName.trim()
+    );
+    const ruleSheetNames = enabledRules.map((r) => r.sheetName);
+    const warnings = [];
+
+    // 规则中有但文件中没有
+    for (const rule of enabledRules) {
+      if (!actualSheets.includes(rule.sheetName)) {
+        warnings.push(`规则中的 sheet「${rule.sheetName}」在文件中不存在（文件中有：${actualSheets.join("、")}）`);
+      }
+    }
+
+    // 文件中有但规则没覆盖
+    if (enabledRules.length > 0) {
+      for (const sheet of actualSheets) {
+        if (!ruleSheetNames.includes(sheet)) {
+          warnings.push(`文件中的 sheet「${sheet}」未配置拆分规则`);
+        }
+      }
+    }
+
+    state.sheetWarnings = warnings;
+    if (warnings.length > 0) {
+      warnings.forEach((w) => pushLog(`⚠ ${w}`));
+    } else {
+      pushLog("✓ 文件 sheet 名称与规则全部匹配");
+    }
+  } catch (error) {
+    pushLog(`读取 sheet 名称失败：${error.message}`);
+  }
+}
+
 async function pickInputFile() {
   const result = await getApi().selectInputFile();
   if (!result) return;
   state.inputFile = result.path;
   state.fileInfo.name = result.name;
   state.fileInfo.size = result.size || 0;
+  await validateSheetNames(result.path);
 }
 
 async function pickOutputDir() {
@@ -231,6 +284,20 @@ function addRule() {
 function removeRule(index) {
   state.rules.sheetRules.splice(index, 1);
 }
+
+// 监控规则中 sheet 名称变化，自动重新比对
+watch(
+  () =>
+    state.rules.sheetRules
+      .filter((r) => r.enabled)
+      .map((r) => r.sheetName)
+      .join("|"),
+  () => {
+    if (state.inputFile) {
+      validateSheetNames(state.inputFile);
+    }
+  }
+);
 
 async function startTask() {
   try {
@@ -296,6 +363,10 @@ onMounted(async () => {
     // 如果当前没设模板，用默认模板
     if (!state.rules.templateFile && defaults.templateFile) {
       state.rules.templateFile = defaults.templateFile;
+    }
+    // 如果已加载过文件，验证 sheet 名称
+    if (state.inputFile) {
+      await validateSheetNames(state.inputFile);
     }
     unsubscribe = getApi().onTaskEvent(handleTaskEvent);
   } catch (error) {

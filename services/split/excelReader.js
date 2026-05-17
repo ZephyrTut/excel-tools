@@ -8,6 +8,14 @@ async function readWorkbook(filePath) {
   return workbook;
 }
 
+async function getSheetNames(filePath) {
+  const workbook = await readWorkbook(filePath);
+  return workbook.worksheets
+    .filter((ws) => ws.state === "visible")
+    .map((ws) => ws.name);
+}
+
 module.exports = {
-  readWorkbook
+  readWorkbook,
+  getSheetNames
 };

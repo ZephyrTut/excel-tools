@@ -4,6 +4,7 @@ const api = {
   selectInputFile: () => ipcRenderer.invoke("dialog:select-input-file"),
   selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
   selectOutputDir: () => ipcRenderer.invoke("dialog:select-output-dir"),
+  getSheetNames: (filePath) => ipcRenderer.invoke("file:get-sheet-names", filePath),
   loadRules: () => ipcRenderer.invoke("rules:load"),
   getDefaultRules: () => ipcRenderer.invoke("rules:get-defaults"),
   saveRules: (rules) => ipcRenderer.invoke("rules:save", rules),
