@@ -1,18 +1,46 @@
-function copyWorksheetMeta(sourceSheet, targetSheet) {
+function copyWorksheetMeta(sourceSheet, targetSheet, templateSheet) {
   targetSheet.properties = { ...sourceSheet.properties };
   targetSheet.pageSetup = { ...sourceSheet.pageSetup };
   targetSheet.views = sourceSheet.views ? [...sourceSheet.views] : [];
   targetSheet.state = sourceSheet.state;
   targetSheet.conditionalFormattings = sourceSheet.conditionalFormattings
-    ? JSON.parse(JSON.stringify(sourceSheet.conditionalFormattings))
+    ? JSON.parse(JSON.stringify(sourceSheet.conditionalFormattings)).filter((cf) => {
+        // 移除那些设定"等于 0 时字体为白色"的条件格式规则——这会导致填充的 0 在视觉上消失
+        if (!cf.rules) return true;
+        cf.rules = cf.rules.filter((rule) => {
+          if (
+            rule.type === "cellIs" &&
+            rule.operator === "equal" &&
+            rule.formulae &&
+            rule.formulae[0] === "0" &&
+            rule.style &&
+            rule.style.font &&
+            rule.style.font.color &&
+            rule.style.font.color.argb === "FFFFFFFF"
+          ) {
+            return false;
+          }
+          return true;
+        });
+        return cf.rules.length > 0;
+      })
     : [];
-  targetSheet.columns = (sourceSheet.columns || []).map((column) => ({
-    key: column.key,
-    width: column.width,
-    hidden: column.hidden,
-    outlineLevel: column.outlineLevel,
-    style: column.style ? { ...column.style } : undefined,
-  }));
+
+  // Build column defaults: source first, then template overrides on top
+  const srcCols = sourceSheet.columns || [];
+  const tplCols = templateSheet?.columns || [];
+  const maxCols = Math.max(srcCols.length, tplCols.length);
+  targetSheet.columns = Array.from({ length: maxCols }, (_, i) => {
+    const src = srcCols[i] || {};
+    const tpl = tplCols[i] || {};
+    return {
+      key: tpl.key || src.key,
+      width: tpl.width != null ? tpl.width : src.width,
+      hidden: tpl.hidden != null ? tpl.hidden : src.hidden,
+      outlineLevel: tpl.outlineLevel != null ? tpl.outlineLevel : src.outlineLevel,
+      style: tpl.style ? { ...tpl.style } : (src.style ? { ...src.style } : undefined),
+    };
+  });
 }
 
 function cloneCellValue(cell) {
@@ -97,7 +125,11 @@ function copyRowAndCellsWithOptions(
   const zeroFillColumns = options.zeroFillColumns || new Set();
   const preserveSourceFillColumns = options.preserveSourceFillColumns || new Set();
 
-  sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+  // Ensure all columns are covered: source row cells + zero-fill columns beyond cellCount
+  const _zeroCols = zeroFillColumns;
+  const _maxCol = _zeroCols.size > 0 ? Math.max(sourceRow.cellCount, ..._zeroCols) : sourceRow.cellCount;
+  for (let colNumber = 1; colNumber <= _maxCol; colNumber++) {
+    const cell = sourceRow.getCell(colNumber);
     const targetCell = targetRow.getCell(colNumber);
     const copiedValue = cloneCellValue(cell);
     const styleCell = styleRow.getCell(colNumber);
@@ -109,28 +141,64 @@ function copyRowAndCellsWithOptions(
     )
       ? 0
       : copiedValue;
-    targetCell.numFmt = styleCell.numFmt || cell.numFmt || undefined;
+    // Number format: use source cell's format if defined, else template/column
+    targetCell.numFmt = (typeof cell.numFmt === 'string' && cell.numFmt)
+      ? cell.numFmt
+      : (options.styleRow && typeof styleCell.numFmt === 'string' && styleCell.numFmt)
+        ? styleCell.numFmt
+        : undefined;
+
     targetCell.alignment = styleCell.alignment
       ? { ...styleCell.alignment }
       : cell.alignment
         ? { ...cell.alignment }
         : undefined;
+
     targetCell.font = styleCell.font
       ? { ...styleCell.font }
       : cell.font
         ? { ...cell.font }
         : undefined;
+
+    // Fill: preserve source fill for flagged columns (e.g. 可用结存).
+    // Otherwise prefer template (styleRow) fill when available, falling
+    // back to source fill — consistent with how font/alignment/numFmt work.
     const useSourceFill = preserveSourceFillColumns.has(colNumber);
-    targetCell.fill = cloneStyleObject(
-      useSourceFill ? cell.fill : styleCell.fill || cell.fill
-    );
-    targetCell.border = cloneStyleObject(styleCell.border || cell.border);
+    if (useSourceFill) {
+      targetCell.fill = cloneStyleObject(cell.fill);
+    } else {
+      const tplFill = options.styleRow ? styleCell.fill : null;
+      const hasExplicitTplFill = tplFill && typeof tplFill === 'object' &&
+        tplFill.type === 'pattern' && tplFill.pattern !== 'none';
+      if (hasExplicitTplFill) {
+        targetCell.fill = cloneStyleObject(tplFill);
+      } else {
+        const srcFill = cell.fill;
+        const hasExplicitFill = srcFill && typeof srcFill === 'object' &&
+          srcFill.type === 'pattern' && srcFill.pattern !== 'none';
+        if (hasExplicitFill) {
+          targetCell.fill = cloneStyleObject(srcFill);
+        }
+        // else: inherit column default
+      }
+    }
+
+    // Border: if source cell has explicit borders (non-empty), use them.
+    // If no explicit border and template available, use template's border.
+    const srcBorder = cell.border;
+    const hasExplicitBorder = srcBorder && typeof srcBorder === 'object' && Object.keys(srcBorder).length > 0;
+    if (hasExplicitBorder) {
+      targetCell.border = cloneStyleObject(srcBorder);
+    } else if (options.styleRow) {
+      targetCell.border = cloneStyleObject(styleCell.border);
+    }
+    // else (no template, no explicit border): inherit column default
     targetCell.protection = styleCell.protection
       ? { ...styleCell.protection }
       : cell.protection
       ? { ...cell.protection }
       : undefined;
-  });
+  }
 }
 
 function shouldForceZero(value, templateValue, colNumber, zeroFillColumns) {
@@ -187,9 +255,13 @@ function parseMergeRange(range) {
   };
 }
 
-function copyHeaderRowsWithMerges(sourceSheet, targetSheet, headerRows) {
+function copyHeaderRowsWithMerges(sourceSheet, targetSheet, headerRows, styleSheet) {
   for (let row = 1; row <= headerRows; row += 1) {
-    copyRowAndCells(sourceSheet.getRow(row), targetSheet, row);
+    const styleRow = styleSheet ? styleSheet.getRow(row) : null;
+    copyRowAndCellsWithOptions(sourceSheet.getRow(row), targetSheet, row, {
+      zeroFillColumns: new Set(),
+      styleRow: styleRow
+    });
   }
 
   const merges = sourceSheet.model?.merges || [];

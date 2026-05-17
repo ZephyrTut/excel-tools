@@ -134,17 +134,30 @@ function normalizeHeaderText(value) {
 }
 
 function resolveZeroFillColumns(headerSheet, headerRows) {
-  const keywords = ["入库", "出库", "领跑良品退回", "零跑退回良品"];
   const colSet = new Set();
-  for (let r = 1; r <= headerRows; r += 1) {
+  let snpColumn = -1;
+
+  // 找到 SNP 列的列号（标题行中文本完全等于 "SNP" 的列）
+  for (let r = 1; r <= headerRows && snpColumn === -1; r += 1) {
     const row = headerSheet.getRow(r);
     row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
       const text = normalizeHeaderText(cell.value).replace(/\s+/g, "");
-      if (keywords.some((keyword) => text.includes(keyword))) {
+      if (text === "SNP") {
+        snpColumn = colNumber;
+      }
+    });
+  }
+
+  // 所有有内容的列（除 SNP 列外）都加入零填充集合
+  for (let r = 1; r <= headerRows; r += 1) {
+    const row = headerSheet.getRow(r);
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      if (colNumber !== snpColumn) {
         colSet.add(colNumber);
       }
     });
   }
+
   return colSet;
 }
 
@@ -231,11 +244,12 @@ function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
   const outputBook = new ExcelJS.Workbook();
   for (const context of ruleContexts) {
     const targetSheet = outputBook.addWorksheet(context.outputSheetName);
-    copyWorksheetMeta(context.headerSheet, targetSheet);
-    copyHeaderRowsWithMerges(context.headerSheet, targetSheet, context.headerRows);
+    copyWorksheetMeta(context.headerSheet, targetSheet, context.templateSheet);
+    copyHeaderRowsWithMerges(context.headerSheet, targetSheet, context.headerRows, context.templateSheet);
 
     const sourceRows = rowsBySheetForKey.get(context.outputSheetName) || [];
     let seq = 0;
+    let _debugCount = 0;
     for (const sourceRowNum of sourceRows) {
       const sourceRow = context.sourceSheet.getRow(sourceRowNum);
       const targetRowNum = targetSheet.rowCount + 1;
@@ -244,6 +258,8 @@ function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
         context.templateSheet?.getRow(targetRowNum) ||
         context.templateSheet?.getRow(templateDataStartRow) ||
         null;
+
+
       copyRowAndCellsWithOptions(sourceRow, targetSheet, targetRowNum, {
         zeroFillColumns: context.zeroFillColumnIndexes,
         styleRow: templateStyleRow,
@@ -255,6 +271,7 @@ function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
         targetSheet.getRow(targetRowNum).getCell(context.sequenceColumnIndex).value = seq;
       }
     }
+
   }
   return outputBook;
 }
