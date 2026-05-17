@@ -3,6 +3,9 @@ function copyWorksheetMeta(sourceSheet, targetSheet) {
   targetSheet.pageSetup = { ...sourceSheet.pageSetup };
   targetSheet.views = sourceSheet.views ? [...sourceSheet.views] : [];
   targetSheet.state = sourceSheet.state;
+  targetSheet.conditionalFormattings = sourceSheet.conditionalFormattings
+    ? JSON.parse(JSON.stringify(sourceSheet.conditionalFormattings))
+    : [];
   targetSheet.columns = (sourceSheet.columns || []).map((column) => ({
     key: column.key,
     width: column.width,
@@ -89,29 +92,54 @@ function copyRowAndCellsWithOptions(
   options = {}
 ) {
   const targetRow = targetSheet.getRow(targetRowNumber);
-  targetRow.height = sourceRow.height;
+  const styleRow = options.styleRow || sourceRow;
+  targetRow.height = styleRow.height || sourceRow.height;
   const zeroFillColumns = options.zeroFillColumns || new Set();
+  const preserveSourceFillColumns = options.preserveSourceFillColumns || new Set();
 
   sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
     const targetCell = targetRow.getCell(colNumber);
     const copiedValue = cloneCellValue(cell);
-    targetCell.value = shouldForceZero(copiedValue, colNumber, zeroFillColumns)
+    const styleCell = styleRow.getCell(colNumber);
+    targetCell.value = shouldForceZero(
+      copiedValue,
+      styleCell.value,
+      colNumber,
+      zeroFillColumns
+    )
       ? 0
       : copiedValue;
-    targetCell.numFmt = cell.numFmt || undefined;
-    targetCell.alignment = cell.alignment ? { ...cell.alignment } : undefined;
-    targetCell.font = cell.font ? { ...cell.font } : undefined;
-    targetCell.fill = cloneStyleObject(cell.fill);
-    targetCell.border = cloneStyleObject(cell.border);
-    targetCell.protection = cell.protection
+    targetCell.numFmt = styleCell.numFmt || cell.numFmt || undefined;
+    targetCell.alignment = styleCell.alignment
+      ? { ...styleCell.alignment }
+      : cell.alignment
+        ? { ...cell.alignment }
+        : undefined;
+    targetCell.font = styleCell.font
+      ? { ...styleCell.font }
+      : cell.font
+        ? { ...cell.font }
+        : undefined;
+    const useSourceFill = preserveSourceFillColumns.has(colNumber);
+    targetCell.fill = cloneStyleObject(
+      useSourceFill ? cell.fill : styleCell.fill || cell.fill
+    );
+    targetCell.border = cloneStyleObject(styleCell.border || cell.border);
+    targetCell.protection = styleCell.protection
+      ? { ...styleCell.protection }
+      : cell.protection
       ? { ...cell.protection }
       : undefined;
   });
 }
 
-function shouldForceZero(value, colNumber, zeroFillColumns) {
+function shouldForceZero(value, templateValue, colNumber, zeroFillColumns) {
   if (!zeroFillColumns || zeroFillColumns.size === 0) return false;
   if (!zeroFillColumns.has(colNumber)) return false;
+  if (templateValue === 0 || templateValue === "0") {
+    if (value === null || value === undefined) return true;
+    if (typeof value === "string" && value.trim() === "") return true;
+  }
   if (value === null || value === undefined) return true;
   if (typeof value === "string" && value.trim() === "") return true;
   return false;

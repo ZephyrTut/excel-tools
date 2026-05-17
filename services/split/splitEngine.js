@@ -99,18 +99,27 @@ function buildRuleContextsWithTemplate(workbook, rules, templateWorkbook) {
     }
     const outputSheetName = rule.outputSheetName || rule.sheetName;
     const templateSheet = templateWorkbook?.getWorksheet(outputSheetName) || null;
-    const headerSheet = templateSheet || sourceSheet;
+    const headerSheet = sourceSheet;
     return {
       ...rule,
       sourceSheet,
+      templateSheet,
       headerSheet,
       outputSheetName,
       sequenceColumnIndex: resolveSequenceColumn(sourceSheet, rule.headerRows),
       singleRowMergesBySourceRow: buildSingleRowMergeMap(sourceSheet),
-      zeroFillColumnIndexes: resolveZeroFillColumns(headerSheet, rule.headerRows)
+      zeroFillColumnIndexes: resolveZeroFillColumns(headerSheet, rule.headerRows),
+      preserveSourceFillColumnIndexes: resolvePreserveSourceFillColumns(
+        outputSheetName,
+        sourceSheet,
+        rule.headerRows,
+        templateSheet
+      )
     };
   });
 }
+
+const DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS = [13];
 
 function normalizeHeaderText(value) {
   if (value === null || value === undefined) return "";
@@ -136,6 +145,53 @@ function resolveZeroFillColumns(headerSheet, headerRows) {
       }
     });
   }
+  return colSet;
+}
+
+function resolveColumnByHeaderKeywords(sheet, headerRows, keywords) {
+  if (!sheet) return -1;
+  for (let r = 1; r <= headerRows; r += 1) {
+    const row = sheet.getRow(r);
+    let foundCol = -1;
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const text = normalizeHeaderText(cell.value).replace(/\s+/g, "");
+      if (keywords.some((keyword) => text === keyword)) {
+        foundCol = colNumber;
+      }
+    });
+    if (foundCol > 0) return foundCol;
+  }
+  return -1;
+}
+
+function isDailyReportSheetName(sheetName) {
+  const normalized = String(sheetName || "").replace(/\s+/g, "");
+  return normalized === "日报" || normalized.includes("日报");
+}
+
+function resolvePreserveSourceFillColumns(
+  outputSheetName,
+  sourceSheet,
+  headerRows,
+  templateSheet
+) {
+  const colSet = new Set();
+  if (!isDailyReportSheetName(outputSheetName)) return colSet;
+
+  const keywords = ["可用结存"];
+  const sourceCol = resolveColumnByHeaderKeywords(sourceSheet, headerRows, keywords);
+  if (sourceCol > 0) colSet.add(sourceCol);
+
+  const templateCol = resolveColumnByHeaderKeywords(templateSheet, headerRows, keywords);
+  if (templateCol > 0) colSet.add(templateCol);
+
+  // Hard fallback for daily report available stock column fill copy.
+  if (colSet.size === 0) {
+    for (const fallbackCol of DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS) {
+      colSet.add(fallbackCol);
+    }
+  }
+
   return colSet;
 }
 
@@ -183,8 +239,15 @@ function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
     for (const sourceRowNum of sourceRows) {
       const sourceRow = context.sourceSheet.getRow(sourceRowNum);
       const targetRowNum = targetSheet.rowCount + 1;
+      const templateDataStartRow = context.headerRows + 1;
+      const templateStyleRow =
+        context.templateSheet?.getRow(targetRowNum) ||
+        context.templateSheet?.getRow(templateDataStartRow) ||
+        null;
       copyRowAndCellsWithOptions(sourceRow, targetSheet, targetRowNum, {
-        zeroFillColumns: context.zeroFillColumnIndexes
+        zeroFillColumns: context.zeroFillColumnIndexes,
+        styleRow: templateStyleRow,
+        preserveSourceFillColumns: context.preserveSourceFillColumnIndexes
       });
       applySingleRowMerges(context, sourceRowNum, targetSheet, targetRowNum);
       if (context.sequenceColumnIndex > 0) {

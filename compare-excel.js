@@ -36,6 +36,7 @@ async function main() {
     totals.sheetNameDiffs ||
     totals.valueDiffs ||
     totals.headerStyleDiffs ||
+    totals.dataFillDiffs ||
     totals.columnWidthDiffs ||
     totals.rowHeightDiffs ||
     totals.mergeDiffs;

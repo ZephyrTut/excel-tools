@@ -57,6 +57,21 @@ function resolveZeroFillColumns(sheet, headerRows) {
   return result;
 }
 
+function resolvePreserveFillColumns(sheet, headerRows) {
+  const result = new Set();
+  const sheetName = String(sheet?.name || "").replace(/\s+/g, "");
+  if (!sheetName.includes("日报")) return result;
+  for (let r = 1; r <= headerRows; r += 1) {
+    const row = sheet.getRow(r);
+    row.eachCell({ includeEmpty: false }, (cell, col) => {
+      const text = toText(cell.value).replace(/\s+/g, "");
+      if (text === "可用结存") result.add(col);
+    });
+  }
+  if (result.size === 0) result.add(13);
+  return result;
+}
+
 function columnLabel(col) {
   let colStr = "";
   let c = col;
@@ -109,6 +124,7 @@ async function compareWorkbooks(generatedFile, referenceFile) {
     sheetNameDiffs: 0,
     valueDiffs: 0,
     headerStyleDiffs: 0,
+    dataFillDiffs: 0,
     columnWidthDiffs: 0,
     rowHeightDiffs: 0,
     mergeDiffs: 0
@@ -138,6 +154,7 @@ async function compareWorkbooks(generatedFile, referenceFile) {
 
     const headerRows = inferHeaderRows(rs);
     const zeroFillColumns = resolveZeroFillColumns(rs, headerRows);
+    const preserveFillColumns = resolvePreserveFillColumns(rs, headerRows);
     const gb = usedBounds(gs);
     const rb = usedBounds(rs);
     const maxRow = Math.max(gb.maxRow, rb.maxRow);
@@ -153,6 +170,7 @@ async function compareWorkbooks(generatedFile, referenceFile) {
 
     let sheetValueDiffs = 0;
     let sheetStyleDiffs = 0;
+    let sheetFillDiffs = 0;
     let sheetColDiffs = 0;
     let sheetRowDiffs = 0;
 
@@ -212,16 +230,26 @@ async function compareWorkbooks(generatedFile, referenceFile) {
               lines.push(`  - 表头样式差异 ${cellAddress(row, col)}`);
             }
           }
+        } else if (preserveFillColumns.has(col)) {
+          const gFill = stableStringify(gc.fill || null);
+          const rFill = stableStringify(rc.fill || null);
+          if (gFill !== rFill) {
+            sheetFillDiffs += 1;
+            if (sheetFillDiffs <= 80) {
+              lines.push(`  - 数据底色差异 ${cellAddress(row, col)}`);
+            }
+          }
         }
       }
     }
 
     totals.valueDiffs += sheetValueDiffs;
     totals.headerStyleDiffs += sheetStyleDiffs;
+    totals.dataFillDiffs += sheetFillDiffs;
     totals.columnWidthDiffs += sheetColDiffs;
     totals.rowHeightDiffs += sheetRowDiffs;
     lines.push(
-      `  - 汇总: 值差异=${sheetValueDiffs}, 表头样式差异=${sheetStyleDiffs}, 列宽差异=${sheetColDiffs}, 行高差异=${sheetRowDiffs}`
+      `  - 汇总: 值差异=${sheetValueDiffs}, 表头样式差异=${sheetStyleDiffs}, 数据底色差异=${sheetFillDiffs}, 列宽差异=${sheetColDiffs}, 行高差异=${sheetRowDiffs}`
     );
   }
 
@@ -229,6 +257,7 @@ async function compareWorkbooks(generatedFile, referenceFile) {
   lines.push(`sheet 名称差异: ${totals.sheetNameDiffs}`);
   lines.push(`值差异: ${totals.valueDiffs}`);
   lines.push(`表头样式差异: ${totals.headerStyleDiffs}`);
+  lines.push(`数据底色差异: ${totals.dataFillDiffs}`);
   lines.push(`列宽差异: ${totals.columnWidthDiffs}`);
   lines.push(`行高差异: ${totals.rowHeightDiffs}`);
   lines.push(`合并区域差异: ${totals.mergeDiffs}`);
