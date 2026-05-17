@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "concurrently -k \"vite --config vite.config.mjs\" \"wait-on tcp:5173 && cross-env NODE_ENV=development electron .\"",
     "build:renderer": "vite build --config vite.config.mjs",
-    "build": "npm run build:renderer && electron-builder",
+    "clean": "node scripts/clean.js",
+    "build": "npm run clean && npm run build:renderer && electron-builder",
     "start": "cross-env NODE_ENV=production electron .",
     "split:zhejiang": "node scripts/generate-split.js",
     "compare:zhejiang": "node scripts/compare-with-output.js"

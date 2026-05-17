@@ -15,6 +15,11 @@ npm run dev
 ```bash
 npm run build
 ```
+发布新版本：
+
+```bash
+bash scripts/release.sh
+```
 
 ## 目录结构
 
