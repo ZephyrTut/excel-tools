@@ -1,5 +1,5 @@
 const { parentPort, workerData } = require("node:worker_threads");
-const { runSplitTask } = require("../services/split/splitService");
+const { runSplitTask } = require("../split/splitService");
 
 const emit = (payload) => parentPort.postMessage(payload);
 

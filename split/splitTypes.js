@@ -1,4 +1,4 @@
-const { AppError, ErrorCodes } = require("../common/errors");
+const { AppError, ErrorCodes } = require("./errors");
 
 function colLetterToNumber(letter) {
   const upper = String(letter || "").toUpperCase().trim();
