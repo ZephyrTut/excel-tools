@@ -1,7 +1,6 @@
 {
   "appId": "com.excel.tools",
   "productName": "Excel Tools",
-  "compression": "maximum",
   "directories": {
     "output": "dist/installers"
   },
