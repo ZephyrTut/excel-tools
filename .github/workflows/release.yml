@@ -44,6 +44,8 @@ jobs:
         env:
           CSC_LINK: ""
           CSC_KEY_PASSWORD: ""
+          WIN_CSC_LINK: ""
+          WIN_CSC_KEY_PASSWORD: ""
 
       # 上传构建产物到 GitHub Release
       - uses: softprops/action-gh-release@v2
