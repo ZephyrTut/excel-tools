@@ -72,12 +72,12 @@
 - 样式/单元格复制: [services/split/styleCopier.js](services/split/styleCopier.js)
 - 拆分服务入口: [services/split/splitService.js](services/split/splitService.js)
 - 读写工具: [services/split/excelReader.js](services/split/excelReader.js), [services/split/excelWriter.js](services/split/excelWriter.js)
-- 生成脚本（测试/演示）: [generate-zhejiang-split.js](generate-zhejiang-split.js)
-- 比较/验证工具: [excel-compare-core.js](excel-compare-core.js), [compare-with-output.js](compare-with-output.js)
+- 生成脚本（测试/演示）: [scripts/generate-split.js](scripts/generate-split.js)
+- 比较/验证工具: [scripts/excel-compare-core.js](scripts/excel-compare-core.js), [scripts/compare-with-output.js](scripts/compare-with-output.js)
 
 ## 验证与测试流程
-- 使用 `generate-zhejiang-split.js` 在 `test/` 目录上跑一次拆分并触发内置的"可用结存"填色比较；脚本会在发现颜色差异时抛错以便回归检测。
-- 同时可用 `compare-with-output.js` 对比更多项目（值/合并/样式/填充）。
+- 使用 `scripts/generate-split.js`（或 `pnpm split:zhejiang`）运行拆分并触发内置的"可用结存"填色比较；脚本会在发现颜色差异时抛错以便回归检测。
+- 同时可用 `scripts/compare-with-output.js`（或 `pnpm compare:zhejiang`）对比更多项目（值/合并/样式/填充）。
 
 ## 可配置项与扩展点
 - `DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS`：回退列数组，可按需要调整。

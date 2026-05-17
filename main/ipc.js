@@ -6,7 +6,7 @@ const { WorkerRunner } = require("./workerRunner");
 const {
   loadRules,
   saveRules
-} = require("../split/ruleManager");
+} = require("../services/split/ruleManager");
 
 const runner = new WorkerRunner();
 function getProjectRoot() {

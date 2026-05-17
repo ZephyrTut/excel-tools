@@ -2,7 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { compareWorkbooks } = require("./excel-compare-core");
 
-const OUTPUT_FILE = path.join(__dirname, "comparison-result.txt");
+const PROJECT_ROOT = path.join(__dirname, "..");
+const OUTPUT_FILE = path.join(PROJECT_ROOT, "comparison-result.txt");
 
 function findLatestMatchingFile(directories, matchers) {
   const candidates = [];
@@ -28,7 +29,7 @@ async function main() {
   const referenceArg = process.argv[3];
 
   const generatedDefault = path.join(
-    __dirname,
+    PROJECT_ROOT,
     "output",
     "浙江华锐捷技术有限公司日报表.xlsx"
   );
@@ -37,12 +38,12 @@ async function main() {
     : fs.existsSync(generatedDefault)
     ? generatedDefault
     : findLatestMatchingFile(
-        [path.join(__dirname, "output"), path.join(__dirname, "test")],
+        [path.join(PROJECT_ROOT, "output"), path.join(PROJECT_ROOT, "temp-output")],
         [/浙江华锐捷技术有限公司/, /日报表/, /\.xlsx$/i]
       );
   const referenceFile = referenceArg
     ? path.resolve(referenceArg)
-    : path.join(__dirname, "test", "浙江华锐捷技术有限公司日报表(2).xlsx");
+    : path.join(PROJECT_ROOT, "templates", "浙江华锐捷技术有限公司日报表(2).xlsx");
 
   if (!generatedFile || !fs.existsSync(generatedFile)) {
     console.error("❌ 未找到生成文件。");

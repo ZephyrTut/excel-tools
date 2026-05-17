@@ -10,8 +10,8 @@
     "build:renderer": "vite build --config vite.config.mjs",
     "build": "npm run build:renderer && electron-builder",
     "start": "cross-env NODE_ENV=production electron .",
-    "split:zhejiang": "node split/generate-split.js",
-    "compare:zhejiang": "node compare-with-output.js"
+    "split:zhejiang": "node scripts/generate-split.js",
+    "compare:zhejiang": "node scripts/compare-with-output.js"
   },
   "dependencies": {
     "element-plus": "^2.10.0",

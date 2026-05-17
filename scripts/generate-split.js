@@ -1,6 +1,6 @@
 const path = require("node:path");
 const ExcelJS = require("exceljs");
-const { runSplitTask } = require("./splitService");
+const { runSplitTask } = require("../services/split/splitService");
 
 function cellText(cell) {
   const value = cell?.value;
@@ -102,17 +102,17 @@ async function validateDailyAvailableStockFill(sourceFile, generatedFiles) {
 }
 
 async function main() {
-  const sourceFile = path.join(__dirname, "..", "test", "华锐捷2.xlsx");
+  const sourceFile = path.join(__dirname, "..", "samples", "华锐捷2.xlsx");
   const request = {
     inputFile: sourceFile,
-    outputDir: path.join(__dirname, "..", "test"),
+    outputDir: path.join(__dirname, "..", "output"),
     projectRoot: path.join(__dirname, ".."),
     rules: {
       preserveSheetOrder: true,
       overwriteIfExists: true,
       ifExistsStrategy: "timestamp",
       templateFile: path.join(
-        __dirname, "..", "test",
+        __dirname, "..", "templates",
         "浙江华锐捷技术有限公司日报表(2).xlsx"
       ),
       fileName: {

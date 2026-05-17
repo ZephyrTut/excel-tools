@@ -15,14 +15,17 @@
 |------|------------------|
 | `main/` | Electron main process, IPC bridge, preload, task/worker orchestration |
 | `renderer/` | Vue 3 app — App.vue, views (HomeView, SplitView), components, styles |
-| `services/split/` | Excel split engine — reader, writer, split logic, style copier, types |
-| `services/common/` | Shared contracts, error classes, logger, path utilities, rule manager |
-| `services/merge/` | Merge module (placeholder — `.gitkeep` only) |
+| `services/split/` | Excel split engine — reader, writer, split logic, style copier, errors, types, all utilities |
+| `services/common/` | Shared utilities placeholder (empty, reserved for future extraction) |
+| `services/merge/` | Merge module (placeholder — empty, reserved for future) |
+| `scripts/` | Standalone CLI scripts — generate-split, compare-with-output, excel-compare-core |
+| `samples/` | Sample source `.xlsx` data files for split testing |
+| `templates/` | Style template `.xlsx` files for split output formatting |
 | `config/` | Default split rule templates (`defaultRules.json`) |
-| `docs/` | PRD, architecture, decisions, prompts documentation |
+| `docs/` | PRD, architecture, decisions, prompts, split logic, optimization guide |
 | `output/` | Generated split output files (runtime, gitignored) |
 | `temp-output/` | Temporary test output (runtime, gitignored) |
-| `test/` | Sample `.xlsx` files for testing |
+| `test/` | Test files directory (empty, reserved for actual unit tests) |
 
 ## Commands
 
@@ -31,8 +34,8 @@ pnpm dev            # Start Vite dev server + Electron concurrently
 pnpm build:renderer # Vite build for renderer only
 pnpm build          # Build renderer + package with electron-builder
 pnpm start          # Run production Electron app
-pnpm split:zhejiang # Direct node script — Zhejiang split generator
-pnpm compare:zhejiang # Direct node script — compare with expected output
+pnpm split:zhejiang # Run split on samples/华锐捷2.xlsx → output/ (node scripts/generate-split.js)
+pnpm compare:zhejiang # Compare generated output with source (node scripts/compare-with-output.js)
 ```
 
 ## Key files

@@ -22,11 +22,15 @@ npm run build
 excel-tools/
 ├── main/                  # Electron 主进程与 IPC
 ├── renderer/              # Vue 3 + Element Plus 前端
-├── services/
+├── services/              # 核心业务逻辑
 │   ├── common/            # 日志、规则、错误、路径工具
 │   └── split/             # Excel 拆分核心能力
+├── scripts/               # 独立命令行工具与测试脚本
 ├── config/
 │   └── defaultRules.json  # 默认规则
+├── samples/               # 样本源数据文件 (xlsx)
+├── templates/             # 样式模板文件 (xlsx)
+├── test/                  # 测试文件目录
 ├── docs/                  # 需求/架构/决策文档
 └── output/                # 默认输出目录
 ```
@@ -58,6 +62,7 @@ npm run dev
 - `docs/PRD.md`：产品需求（MVP 范围、验收标准、非功能需求）
 - `docs/ARCHITECTURE.md`：技术架构与模块边界
 - `docs/DECISIONS.md`：项目关键技术决策（用于后续实现对齐）
+- `docs/SPLIT_LOGIC.md`：拆分逻辑实现说明
 - `docs/PROMPTS.md`：AI 协作提示词模板
-- `agent.md`：项目代理身份与执行原则
+- `docs/XLSX_OPTIMIZATION_GUIDE.md`：XLSX 性能与内存优化指南
 - `config/defaultRules.json`：拆分规则默认配置模板

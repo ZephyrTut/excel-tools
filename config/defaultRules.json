@@ -4,7 +4,7 @@
   "preserveSheetOrder": true,
   "overwriteIfExists": true,
   "ifExistsStrategy": "timestamp",
-  "templateFile": "test/浙江华锐捷技术有限公司日报表(2).xlsx",
+  "templateFile": "templates/浙江华锐捷技术有限公司日报表(2).xlsx",
   "fileName": {
     "source": "splitKey",
     "prefix": "",

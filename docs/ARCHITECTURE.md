@@ -17,7 +17,7 @@
 4. **Engine（Excel 引擎层）**：读取、分组、写入、格式复制
 5. **Infrastructure（基础能力）**：日志、配置、路径与文件名处理
 
-## 3. 推荐目录
+## 3. 实际目录
 
 ```text
 excel-tools/
@@ -40,17 +40,20 @@ excel-tools/
 │   │   ├── excelReader.js
 │   │   ├── excelWriter.js
 │   │   ├── styleCopier.js
-│   │   └── splitTypes.js
-│   ├── common/
-│   │   ├── logger.js
+│   │   ├── splitTypes.js
 │   │   ├── ruleManager.js
 │   │   ├── pathUtil.js
 │   │   └── errors.js
-│   └── merge/   (预留)
+│   ├── common/     (预留共享工具)
+│   └── merge/      (预留)
+├── scripts/        (独立命令行/测试脚本)
+├── samples/        (样本源数据文件)
+├── templates/      (样式模板文件)
+├── test/           (测试文件目录)
 ├── config/
 │   └── defaultRules.json
-├── logs/
-└── output/
+├── docs/
+└── output/         (默认输出目录)
 ```
 
 ## 4. 核心模块职责
@@ -61,7 +64,8 @@ excel-tools/
 - `excelWriter`：输出工作簿、sheet 顺序与标题保留
 - `styleCopier`：复制常见样式与合并单元格
 - `ruleManager`：加载/保存/校验规则 JSON
-- `logger`：结构化日志（info/warn/error + 上下文）
+- `pathUtil`：文件名清洗、输出路径解析
+- `errors`：统一错误码与 AppError 类
 
 ## 5. 后台执行策略
 
