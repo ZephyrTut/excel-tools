@@ -34,7 +34,7 @@
         <el-input v-model="row.splitColumn" maxlength="3" />
       </template>
     </el-table-column>
-    <el-table-column label="输出 Sheet 名称" min-width="190">
+    <el-table-column label="对应模板样式 Sheet 名称" min-width="190">
       <template #default="{ row }">
         <el-select
           v-model="row.outputSheetName"

@@ -4,10 +4,7 @@ const fs = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
 const updater = require("./updater");
-const {
-  loadRules,
-  saveRules
-} = require("../services/split/ruleManager");
+const { loadRules, saveRules } = require("../services/split/ruleManager");
 const { getSheetNames } = require("../services/split/excelReader");
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
@@ -45,7 +42,7 @@ function registerIpcHandlers() {
     const result = await dialog.showOpenDialog({
       title: "选择源 Excel 文件",
       properties: ["openFile"],
-      filters: [{ name: "Excel", extensions: ["xlsx"] }]
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
 
@@ -54,7 +51,7 @@ function registerIpcHandlers() {
     return {
       path: filePath,
       name: path.basename(filePath),
-      size: stat.size
+      size: stat.size,
     };
   });
 
@@ -62,7 +59,7 @@ function registerIpcHandlers() {
     const result = await dialog.showOpenDialog({
       title: "选择模板 Excel 文件",
       properties: ["openFile"],
-      filters: [{ name: "Excel", extensions: ["xlsx"] }]
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
 
@@ -71,14 +68,14 @@ function registerIpcHandlers() {
     return {
       path: filePath,
       name: path.basename(filePath),
-      size: stat.size
+      size: stat.size,
     };
   });
 
   ipcMain.handle("dialog:select-output-dir", async () => {
     const result = await dialog.showOpenDialog({
       title: "选择输出目录",
-      properties: ["openDirectory", "createDirectory"]
+      properties: ["openDirectory", "createDirectory"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
@@ -87,7 +84,7 @@ function registerIpcHandlers() {
   ipcMain.handle("rules:load", async () => {
     const rules = await loadRules({
       projectRoot: getProjectRoot(),
-      userDataPath: app.getPath("userData")
+      userDataPath: app.getPath("userData"),
     });
     // Resolve templateFile to an absolute path in userData/templates/
     if (rules.templateFile) {
@@ -98,12 +95,16 @@ function registerIpcHandlers() {
 
   ipcMain.handle("rules:save", async (_, rules) => {
     return saveRules(rules, {
-      userDataPath: app.getPath("userData")
+      userDataPath: app.getPath("userData"),
     });
   });
 
   ipcMain.handle("rules:get-defaults", async () => {
-    const configPath = path.join(getProjectRoot(), "config", "defaultRules.json");
+    const configPath = path.join(
+      getProjectRoot(),
+      "config",
+      "defaultRules.json"
+    );
     const raw = await fs.readFile(configPath, "utf-8");
     return JSON.parse(raw);
   });
@@ -139,7 +140,7 @@ function registerIpcHandlers() {
         path: fullPath,
         isDefault: name === DEFAULT_TEMPLATE_NAME,
         mtime: stat.mtime.toISOString(),
-        size: stat.size
+        size: stat.size,
       });
     }
 
@@ -169,7 +170,7 @@ function registerIpcHandlers() {
     return {
       name: baseName,
       path: destPath,
-      isDefault: false
+      isDefault: false,
     };
   });
 
@@ -188,7 +189,7 @@ function registerIpcHandlers() {
     const request = {
       ...payload,
       projectRoot: getProjectRoot(),
-      userDataPath: app.getPath("userData")
+      userDataPath: app.getPath("userData"),
     };
     runner.startSplitTask(taskId, request);
     return { taskId };
@@ -215,5 +216,5 @@ function registerIpcHandlers() {
 }
 
 module.exports = {
-  registerIpcHandlers
+  registerIpcHandlers,
 };

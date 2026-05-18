@@ -231,28 +231,6 @@ function formatFileSize(size) {
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-/** Debounced auto-save: remembers input file, output dir, and all rules. */
-function scheduleAutoSave() {
-  if (state._loading) return;
-  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(async () => {
-    // Stash current paths into the rules object so they persist
-    state.rules.lastInputFile = state.inputFile;
-    state.rules.lastOutputDir = state.outputDir;
-    if (state.fileInfo.name) {
-      state.rules._lastFileInfo = { name: state.fileInfo.name, size: state.fileInfo.size };
-    } else {
-      delete state.rules._lastFileInfo;
-    }
-    try {
-      await getApi().saveRules(JSON.parse(JSON.stringify(state.rules)));
-    } catch {
-      // silent — auto-save failures are non-critical
-    }
-    _autoSaveTimer = null;
-  }, AUTO_SAVE_DELAY);
-}
-
 async function validateSheetNames(filePath) {
   try {
     const actualSheets = await getApi().getSheetNames(filePath);
@@ -320,14 +298,12 @@ async function pickInputFile() {
   }
 
   await validateSheetNames(result.path);
-  scheduleAutoSave();
 }
 
 async function pickOutputDir() {
   const dir = await getApi().selectOutputDir();
   if (!dir) return;
   state.outputDir = dir;
-  scheduleAutoSave();
 }
 
 async function loadTemplateList() {
@@ -440,16 +416,9 @@ async function loadRules() {
   }
   // Load template sheet names if a template is configured
   await loadTemplateSheetNames();
-  state._loading = false;
 }
 
 async function saveRules() {
-  // Stash current paths before saving
-  state.rules.lastInputFile = state.inputFile;
-  state.rules.lastOutputDir = state.outputDir;
-  if (state.fileInfo.name) {
-    state.rules._lastFileInfo = { name: state.fileInfo.name, size: state.fileInfo.size };
-  }
   await getApi().saveRules(JSON.parse(JSON.stringify(state.rules)));
   ElMessage.success("规则已保存");
 }
@@ -482,25 +451,6 @@ watch(
       validateSheetNames(state.inputFile);
     }
   }
-);
-
-// ── Auto-save memory: persist config on changes ─────────────────────
-
-watch(
-  () => state.inputFile,
-  () => { scheduleAutoSave(); }
-);
-
-watch(
-  () => state.outputDir,
-  () => { scheduleAutoSave(); }
-);
-
-// Deep-watch rules changes (suffix, sheetRules, template, etc.)
-watch(
-  () => state.rules,
-  () => { scheduleAutoSave(); },
-  { deep: true }
 );
 
 async function startTask() {
