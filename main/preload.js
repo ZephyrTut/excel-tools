@@ -10,6 +10,9 @@ const api = {
   saveRules: (rules) => ipcRenderer.invoke("rules:save", rules),
   startSplitTask: (payload) => ipcRenderer.invoke("task:start-split", payload),
   cancelTask: (taskId) => ipcRenderer.invoke("task:cancel", taskId),
+  listTemplates: () => ipcRenderer.invoke("template:list"),
+  importTemplate: (sourcePath) => ipcRenderer.invoke("template:import", sourcePath),
+  deleteTemplate: (name) => ipcRenderer.invoke("template:delete", name),
   onTaskEvent: (handler) => {
     const listener = (_, event) => handler(event);
     ipcRenderer.on("task:event", listener);

@@ -12,6 +12,7 @@
     "package.json"
   ],
   "win": {
+    "icon": "assets/logo.png",
     "target": [
       {
         "target": "nsis",

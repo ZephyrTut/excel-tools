@@ -74,20 +74,60 @@
 
     <LogPanel :lines="state.logs" @clear="state.logs = []" />
 
-    <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="520px" append-to-body>
-      <el-form label-width="100px">
-        <el-form-item label="模板路径">
-          <el-input v-model="state.dialogTemplatePath" placeholder="未设置模板，使用源文件样式" readonly />
-        </el-form-item>
-      </el-form>
-      <p style="font-size: 13px; color: #888; margin: 0 0 0 100px;">
+    <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="560px" append-to-body>
+      <p style="font-size: 13px; color: #888; margin: 0 0 12px 0;">
         模板用于提供列宽、字体、底色等样式参考。不设置则从源文件获取样式。
       </p>
+
+      <!-- Template list -->
+      <el-table :data="state.templateList" style="width: 100%" max-height="320" stripe>
+        <el-table-column label="" width="48">
+          <template #default="{ row }">
+            <el-radio
+              v-model="state.selectedTemplatePath"
+              :value="row.path"
+              :label="row.path"
+              @change="onTemplateSelect(row)"
+            >&nbsp;</el-radio>
+          </template>
+        </el-table-column>
+        <el-table-column label="模板名称" min-width="180">
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <el-tag v-if="row.isDefault" size="small" type="warning" style="margin-left: 6px">默认</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="大小" width="90">
+          <template #default="{ row }">
+            {{ formatFileSize(row.size) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-popconfirm
+              v-if="!row.isDefault"
+              title="确定删除此模板？"
+              confirm-button-text="删除"
+              @confirm="handleDeleteTemplate(row)"
+            >
+              <template #reference>
+                <el-button text type="danger" size="small">删除</el-button>
+              </template>
+            </el-popconfirm>
+            <span v-else style="color: #bbb; font-size: 13px">🔒 不可删除</span>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div v-if="state.templateList.length === 0" style="text-align: center; color: #999; padding: 32px 0">
+        暂无模板，请导入
+      </div>
+
       <template #footer>
         <el-space wrap>
-          <el-button @click="dialogPickTemplate">📂 选择模板</el-button>
-          <el-button @click="dialogClearTemplate">清空</el-button>
-          <el-button @click="dialogResetDefault">恢复默认</el-button>
+          <el-button @click="handleImportTemplate">📂 导入模板</el-button>
+          <el-button @click="handleResetDefault">恢复默认</el-button>
+          <el-button @click="handleClearTemplate">不使用模板</el-button>
           <el-button type="primary" @click="dialogConfirm">确定</el-button>
           <el-button @click="state.showTemplateDialog = false">取消</el-button>
         </el-space>
@@ -113,9 +153,9 @@ const state = reactive({
   status: "idle",
   progress: 0,
   logs: [],
-  defaultTemplateFile: "",
   showTemplateDialog: false,
-  dialogTemplatePath: "",
+  templateList: [],
+  selectedTemplatePath: "",
   sheetWarnings: [],
   rules: {
     appName: "Excel Tools",
@@ -136,10 +176,13 @@ const state = reactive({
       trimSplitKey: true
     },
     sheetRules: []
-  }
+  },
+  _loading: true // suppress auto-save during initial load
 });
 
 let unsubscribe = null;
+let _autoSaveTimer = null;
+const AUTO_SAVE_DELAY = 1500;
 const MAX_LOG_LINES = 1000;
 
 const canRun = computed(
@@ -179,6 +222,28 @@ function formatFileSize(size) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/** Debounced auto-save: remembers input file, output dir, and all rules. */
+function scheduleAutoSave() {
+  if (state._loading) return;
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async () => {
+    // Stash current paths into the rules object so they persist
+    state.rules.lastInputFile = state.inputFile;
+    state.rules.lastOutputDir = state.outputDir;
+    if (state.fileInfo.name) {
+      state.rules._lastFileInfo = { name: state.fileInfo.name, size: state.fileInfo.size };
+    } else {
+      delete state.rules._lastFileInfo;
+    }
+    try {
+      await getApi().saveRules(JSON.parse(JSON.stringify(state.rules)));
+    } catch {
+      // silent — auto-save failures are non-critical
+    }
+    _autoSaveTimer = null;
+  }, AUTO_SAVE_DELAY);
 }
 
 async function validateSheetNames(filePath) {
@@ -224,47 +289,120 @@ async function pickInputFile() {
   state.fileInfo.name = result.name;
   state.fileInfo.size = result.size || 0;
   await validateSheetNames(result.path);
+  scheduleAutoSave();
 }
 
 async function pickOutputDir() {
   const dir = await getApi().selectOutputDir();
   if (!dir) return;
   state.outputDir = dir;
+  scheduleAutoSave();
 }
 
-function openTemplateDialog() {
-  state.dialogTemplatePath = state.rules.templateFile || "";
+async function loadTemplateList() {
+  const list = await getApi().listTemplates();
+  state.templateList = list;
+  // Auto-select the currently configured template if it exists in the list
+  const currentPath = state.rules.templateFile || "";
+  if (currentPath) {
+    const match = list.find((t) => t.path === currentPath);
+    state.selectedTemplatePath = match ? match.path : "";
+  } else if (list.length > 0) {
+    // Default to the first (default) template
+    const defaultTpl = list.find((t) => t.isDefault);
+    state.selectedTemplatePath = defaultTpl ? defaultTpl.path : list[0].path;
+  } else {
+    state.selectedTemplatePath = "";
+  }
+}
+
+async function openTemplateDialog() {
+  await loadTemplateList();
   state.showTemplateDialog = true;
 }
 
-async function dialogPickTemplate() {
+function onTemplateSelect(row) {
+  state.selectedTemplatePath = row.path;
+}
+
+async function handleImportTemplate() {
   const result = await getApi().selectTemplateFile();
   if (!result) return;
-  state.dialogTemplatePath = result.path;
+  try {
+    await getApi().importTemplate(result.path);
+    ElMessage.success(`模板「${result.name}」导入成功`);
+    await loadTemplateList();
+  } catch (err) {
+    ElMessage.error(err.message || "导入失败");
+  }
 }
 
-function dialogClearTemplate() {
-  state.dialogTemplatePath = "";
+async function handleDeleteTemplate(row) {
+  try {
+    await getApi().deleteTemplate(row.name);
+    ElMessage.success(`模板「${row.name}」已删除`);
+    // If the deleted template was selected, clear selection
+    if (state.selectedTemplatePath === row.path) {
+      state.selectedTemplatePath = "";
+    }
+    await loadTemplateList();
+  } catch (err) {
+    ElMessage.error(err.message || "删除失败");
+  }
 }
 
-function dialogResetDefault() {
-  state.dialogTemplatePath = state.defaultTemplateFile || "";
+async function handleResetDefault() {
+  await loadTemplateList();
+  const defaultTpl = state.templateList.find((t) => t.isDefault);
+  if (defaultTpl) {
+    state.selectedTemplatePath = defaultTpl.path;
+  } else {
+    ElMessage.warning("默认模板不存在，请导入");
+  }
+}
+
+function handleClearTemplate() {
+  state.selectedTemplatePath = "";
 }
 
 function dialogConfirm() {
-  state.rules.templateFile = state.dialogTemplatePath;
+  state.rules.templateFile = state.selectedTemplatePath || "";
   state.showTemplateDialog = false;
+  // Auto-save rules so the selection persists
+  saveRules();
 }
 
 async function loadRules() {
   const rules = await getApi().loadRules();
   state.rules = rules;
-  if (!state.outputDir && rules.defaultOutputDir) {
+  // Restore remembered input file and output dir
+  if (rules.lastInputFile) {
+    state.inputFile = rules.lastInputFile;
+    if (rules._lastFileInfo) {
+      state.fileInfo = { ...rules._lastFileInfo };
+    }
+    // Silently try to validate sheet names (file may not exist)
+    try {
+      await validateSheetNames(state.inputFile);
+    } catch {
+      // file might be gone, that's fine
+    }
+  }
+  if (rules.lastOutputDir) {
+    state.outputDir = rules.lastOutputDir;
+  } else if (rules.defaultOutputDir) {
     state.outputDir = rules.defaultOutputDir;
   }
+  state._loading = false;
 }
 
 async function saveRules() {
+  // Stash current paths before saving
+  state.rules.lastInputFile = state.inputFile;
+  state.rules.lastOutputDir = state.outputDir;
+  if (state.fileInfo.name) {
+    state.rules._lastFileInfo = { name: state.fileInfo.name, size: state.fileInfo.size };
+  }
   await getApi().saveRules(JSON.parse(JSON.stringify(state.rules)));
   ElMessage.success("规则已保存");
 }
@@ -297,6 +435,25 @@ watch(
       validateSheetNames(state.inputFile);
     }
   }
+);
+
+// ── Auto-save memory: persist config on changes ─────────────────────
+
+watch(
+  () => state.inputFile,
+  () => { scheduleAutoSave(); }
+);
+
+watch(
+  () => state.outputDir,
+  () => { scheduleAutoSave(); }
+);
+
+// Deep-watch rules changes (suffix, sheetRules, template, etc.)
+watch(
+  () => state.rules,
+  () => { scheduleAutoSave(); },
+  { deep: true }
 );
 
 async function startTask() {
@@ -358,12 +515,6 @@ function handleTaskEvent(event) {
 onMounted(async () => {
   try {
     await loadRules();
-    const defaults = await getApi().getDefaultRules();
-    state.defaultTemplateFile = defaults.templateFile || "";
-    // 如果当前没设模板，用默认模板
-    if (!state.rules.templateFile && defaults.templateFile) {
-      state.rules.templateFile = defaults.templateFile;
-    }
     // 如果已加载过文件，验证 sheet 名称
     if (state.inputFile) {
       await validateSheetNames(state.inputFile);
