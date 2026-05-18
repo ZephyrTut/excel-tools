@@ -108,7 +108,9 @@ function buildRuleContextsWithTemplate(workbook, rules, templateWorkbook) {
       outputSheetName,
       sequenceColumnIndex: resolveSequenceColumn(sourceSheet, rule.headerRows),
       singleRowMergesBySourceRow: buildSingleRowMergeMap(sourceSheet),
-      zeroFillColumnIndexes: resolveZeroFillColumns(headerSheet, rule.headerRows),
+      zeroFillColumnIndexes: isDailyReportSheetName(outputSheetName)
+        ? resolveZeroFillColumns(headerSheet, rule.headerRows)
+        : new Set(),
       preserveSourceFillColumnIndexes: resolvePreserveSourceFillColumns(
         outputSheetName,
         sourceSheet,

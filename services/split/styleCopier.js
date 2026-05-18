@@ -228,6 +228,9 @@ function hasVisibleFill(fill) {
     // Theme colors (0-8) are valid visible fills regardless of argb
     const theme = fill.fgColor.theme;
     if (theme !== undefined && theme !== null) return true;
+    // Indexed colors (Excel palette) — index 64 = "automatic" (not visible)
+    const idx = fill.fgColor.indexed;
+    if (idx !== undefined && idx !== null && idx !== 64) return true;
   }
   return false;
 }
