@@ -13,6 +13,9 @@
     "start": "cross-env NODE_ENV=production electron .",
     "split:zhejiang": "node scripts/generate-split.js",
     "compare:zhejiang": "node scripts/compare-with-output.js",
+    "merge": "node --max-old-space-size=8192 scripts/generate-merge.js",
+    "merge:huzhou": "node scripts/generate-merge.js",
+    "compare:merge": "node scripts/compare-merge-output.js",
     "release": "node scripts/release.js"
   },
   "dependencies": {

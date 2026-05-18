@@ -1,0 +1,353 @@
+const ExcelJS = require("exceljs");
+const { AppError, ErrorCodes } = require("../split/errors");
+const { copyWorksheetMeta, copyHeaderRowsWithMerges } = require("../split/styleCopier");
+const { readWorkbook } = require("../split/excelReader");
+const { normalizeHeaderName } = require("./mergeTypes");
+
+function textValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    if (Object.prototype.hasOwnProperty.call(value, "text")) return String(value.text || "");
+    if (Object.prototype.hasOwnProperty.call(value, "result")) return textValue(value.result);
+    if (Object.prototype.hasOwnProperty.call(value, "richText")) {
+      const parts = Array.isArray(value.richText) ? value.richText : [];
+      return parts.map((item) => item.text || "").join("");
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "error")) return String(value.error || "");
+  }
+  return String(value);
+}
+
+function cloneValue(value) {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Date) return new Date(value.getTime());
+  if (Buffer.isBuffer(value)) return Buffer.from(value);
+  if (Array.isArray(value)) return value.map((item) => cloneValue(item));
+  if (typeof value !== "object") return value;
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return { ...value };
+}
+
+function normalizeCellValue(value) {
+  if (value && typeof value === 'object') {
+    // Strip formula/sharedFormula metadata — only keep the cached result
+    if (Object.prototype.hasOwnProperty.call(value, 'sharedFormula') ||
+        Object.prototype.hasOwnProperty.call(value, 'formula')) {
+      if (Object.prototype.hasOwnProperty.call(value, 'result')) {
+        return cloneValue(value.result);
+      }
+      return null;
+    }
+    // Also strip raw formula objects where the whole value IS a formula
+    const keys = Object.keys(value);
+    if (keys.length === 4 && keys.includes('formula') && keys.includes('result') && keys.includes('ref') && keys.includes('shareType')) {
+      return cloneValue(value.result);
+    }
+  }
+  return cloneValue(value);
+}
+
+function cloneStyle(styleValue) {
+  if (!styleValue) return undefined;
+  if (typeof structuredClone === "function") return structuredClone(styleValue);
+  return { ...styleValue };
+}
+
+function copyCellStyle(styleCell, targetCell) {
+  targetCell.numFmt = styleCell.numFmt || undefined;
+  targetCell.alignment = cloneStyle(styleCell.alignment);
+  targetCell.font = cloneStyle(styleCell.font);
+  targetCell.fill = cloneStyle(styleCell.fill);
+  targetCell.border = cloneStyle(styleCell.border);
+  targetCell.protection = cloneStyle(styleCell.protection);
+}
+
+function resolveHeaderMap(sheet, headerRows) {
+  const map = new Map();
+  const maxCol = Math.max(sheet.columnCount || 1, sheet.getRow(headerRows).cellCount || 1);
+  for (let col = 1; col <= maxCol; col += 1) {
+    let header = "";
+    for (let row = headerRows; row >= 1; row -= 1) {
+      const raw = textValue(sheet.getRow(row).getCell(col).value);
+      const normalized = normalizeHeaderName(raw);
+      if (normalized) {
+        header = normalized;
+        break;
+      }
+    }
+    if (header && !map.has(header)) map.set(header, col);
+  }
+  return map;
+}
+
+function resolveSequenceColumn(templateSheet, headerRows) {
+  for (let rowNum = 1; rowNum <= headerRows; rowNum += 1) {
+    const row = templateSheet.getRow(rowNum);
+    let found = -1;
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      if (normalizeHeaderName(textValue(cell.value)) === "序号") found = colNumber;
+    });
+    if (found > 0) return found;
+  }
+  return -1;
+}
+
+function mapSourceToTargetColumns(rule, sourceSheet, templateSheet) {
+  const sourceHeaders = resolveHeaderMap(sourceSheet, rule.headerRows);
+  const targetHeaders = resolveHeaderMap(templateSheet, rule.headerRows);
+  const colMap = new Map();
+
+  for (const [sourceHeader, sourceCol] of sourceHeaders.entries()) {
+    if (rule.removeHeaderSet.has(sourceHeader)) continue;
+    const mappedHeader = rule.aliasMap.get(sourceHeader) || sourceHeader;
+    const targetCol = targetHeaders.get(mappedHeader);
+    if (!targetCol) continue;
+    colMap.set(sourceCol, targetCol);
+  }
+  return colMap;
+}
+
+function buildOrderList(templateSheet, headerRows, orderColumnIndex) {
+  const order = [];
+  const seen = new Set();
+  for (let rowNum = headerRows + 1; rowNum <= templateSheet.rowCount; rowNum += 1) {
+    const vendor = textValue(templateSheet.getRow(rowNum).getCell(orderColumnIndex).value).trim();
+    if (!vendor || seen.has(vendor)) continue;
+    seen.add(vendor);
+    order.push(vendor);
+  }
+  return order;
+}
+
+function resolveOrderRule(rules, mergeConfig) {
+  const orderSheetName = mergeConfig.orderSheetName || "日报";
+  const target = rules.find((rule) => rule.outputSheetName === orderSheetName || rule.sheetName === orderSheetName);
+  if (!target) {
+    throw new AppError(
+      ErrorCodes.INVALID_RULES,
+      `Order source sheet "${orderSheetName}" is not configured in sheetRules.`
+    );
+  }
+  return target;
+}
+
+async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
+  const sheetRows = new Map();
+
+  for (const context of ruleContexts) {
+    sheetRows.set(context.outputSheetName, {
+      vendorRows: new Map(),
+      unknownOrder: []
+    });
+  }
+
+  for (const filePath of sourceFiles) {
+    logger.info("Reading merge source workbook.", { filePath });
+    const workbook = await readWorkbook(filePath);
+
+    for (const context of ruleContexts) {
+      const sourceSheet = workbook.getWorksheet(context.sheetName);
+      if (!sourceSheet) continue;
+
+      const rowsState = sheetRows.get(context.outputSheetName);
+      const vendorRows = rowsState.vendorRows;
+      const unknownOrder = rowsState.unknownOrder;
+      const seenUnknown = new Set(unknownOrder);
+      const colMap = mapSourceToTargetColumns(context, sourceSheet, context.templateSheet);
+
+      for (let rowNum = context.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
+        const sourceRow = sourceSheet.getRow(rowNum);
+        const vendor = textValue(sourceRow.getCell(context.splitColumnIndex).value).trim();
+        if (!vendor && context.skipEmpty !== false) continue;
+        const vendorKey = vendor || "EMPTY";
+
+        const valuesByCol = new Map();
+        for (const [sourceCol, targetCol] of colMap.entries()) {
+          const value = normalizeCellValue(sourceRow.getCell(sourceCol).value);
+          valuesByCol.set(targetCol, value);
+        }
+
+        if (!vendorRows.has(vendorKey)) vendorRows.set(vendorKey, []);
+        vendorRows.get(vendorKey).push(valuesByCol);
+
+        if (!context.orderSet.has(vendorKey) && !seenUnknown.has(vendorKey)) {
+          unknownOrder.push(vendorKey);
+          seenUnknown.add(vendorKey);
+        }
+      }
+    }
+  }
+
+  return sheetRows;
+}
+
+function orderedVendorsForSheet(vendorRows, orderList, unknownOrder, appendUnknown) {
+  const ordered = [];
+  const rowKeys = new Set(vendorRows.keys());
+  for (const vendor of orderList) {
+    if (rowKeys.has(vendor)) ordered.push(vendor);
+  }
+  if (appendUnknown) {
+    for (const vendor of unknownOrder) {
+      if (rowKeys.has(vendor)) ordered.push(vendor);
+    }
+  }
+  return ordered;
+}
+
+function safeCellValue(sourceCell) {
+  const val = sourceCell.value;
+  if (!val || typeof val !== 'object') return cloneValue(val);
+  if (Object.prototype.hasOwnProperty.call(val, 'sharedFormula') ||
+      Object.prototype.hasOwnProperty.call(val, 'formula')) {
+    if (Object.prototype.hasOwnProperty.call(val, 'result')) {
+      return cloneValue(val.result);
+    }
+    return null;
+  }
+  return cloneValue(val);
+}
+
+/** Copy first N column widths from template, no cell data. */
+function copyColumnWidths(templateSheet, outputSheet) {
+  const MAX_COLS = 20;
+  const cols = (templateSheet.columns || []).slice(0, MAX_COLS).map((col) => ({
+    width: col.width,
+    key: col.key,
+    hidden: col.hidden,
+    outlineLevel: col.outlineLevel
+  }));
+  if (cols.length > 0) outputSheet.columns = cols;
+}
+
+/** Create a non-data sheet: column widths only (no row copying at all). */
+function createPassthroughSheet(templateSheet, outputSheet) {
+  copyColumnWidths(templateSheet, outputSheet);
+  // Intentionally NOT copying header rows or merges to avoid shared formula issues
+}
+
+function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
+  copyWorksheetMeta(context.templateSheet, outputSheet, context.templateSheet);
+  copyHeaderRowsWithMerges(
+    context.templateSheet,
+    outputSheet,
+    context.headerRows,
+    context.templateSheet
+  );
+
+  const orderedVendors = orderedVendorsForSheet(
+    sheetRowsState.vendorRows,
+    context.orderList,
+    sheetRowsState.unknownOrder,
+    mergeConfig.appendUnknownVendorsToEnd !== false
+  );
+
+  let seq = 0;
+  const templateStyleRow =
+    context.templateSheet.getRow(context.headerRows + 1) || context.templateSheet.getRow(context.headerRows);
+  // Compute max column from actual data — template may have 2570 cols but data ~11
+  let dataMaxCol = 0;
+  for (const rows of sheetRowsState.vendorRows.values()) {
+    for (const rowMap of rows) {
+      for (const col of rowMap.keys()) {
+        if (col > dataMaxCol) dataMaxCol = col;
+      }
+    }
+  }
+  const templateMaxCol = Math.max(
+    dataMaxCol,
+    context.sequenceColumnIndex || 0,
+    context.templateSheet.columnCount || 1
+  );
+
+  for (const vendor of orderedVendors) {
+    const rows = sheetRowsState.vendorRows.get(vendor) || [];
+    for (const rowMap of rows) {
+      const outRow = outputSheet.getRow(outputSheet.rowCount + 1);
+      outRow.height = templateStyleRow.height;
+      for (let col = 1; col <= templateMaxCol; col += 1) {
+        const styleCell = templateStyleRow.getCell(col);
+        const outCell = outRow.getCell(col);
+        let value = rowMap.has(col) ? rowMap.get(col) : null;
+        if (context.sequenceColumnIndex === col) {
+          seq += 1;
+          value = seq;
+        }
+        outCell.value = value;
+        copyCellStyle(styleCell, outCell);
+      }
+    }
+  }
+}
+
+async function runMergeEngine({
+  sourceFiles,
+  templateWorkbook,
+  rules,
+  mergeConfig,
+  logger,
+  reportProgress
+}) {
+  const ruleContexts = rules
+    .map((rule) => {
+      const templateSheet = templateWorkbook.getWorksheet(rule.outputSheetName);
+      if (!templateSheet) {
+        throw new AppError(
+          ErrorCodes.SHEET_NOT_FOUND,
+          `Template sheet "${rule.outputSheetName}" not found.`,
+          { sheetName: rule.outputSheetName }
+        );
+      }
+      return {
+        ...rule,
+        templateSheet,
+        sequenceColumnIndex: resolveSequenceColumn(templateSheet, rule.headerRows),
+        orderList: [],
+        orderSet: new Set()
+      };
+    });
+
+  const orderRule = resolveOrderRule(ruleContexts, mergeConfig);
+  const orderColumnIndex = mergeConfig.orderColumnIndex || orderRule.splitColumnIndex;
+  orderRule.orderList = buildOrderList(orderRule.templateSheet, orderRule.headerRows, orderColumnIndex);
+  orderRule.orderSet = new Set(orderRule.orderList);
+  for (const context of ruleContexts) {
+    if (context === orderRule) continue;
+    context.orderList = orderRule.orderList;
+    context.orderSet = orderRule.orderSet;
+  }
+
+  reportProgress(20, "Collecting source rows");
+  const sheetRows = await collectSheetRowsByVendor(sourceFiles, ruleContexts, logger);
+
+  reportProgress(70, "Building merged workbook");
+  const outputBook = new ExcelJS.Workbook();
+  for (const templateSheet of templateWorkbook.worksheets) {
+    const outputSheet = outputBook.addWorksheet(templateSheet.name);
+    const context = ruleContexts.find((rule) => rule.outputSheetName === templateSheet.name);
+    if (!context) {
+      createPassthroughSheet(templateSheet, outputSheet, 1);
+      continue;
+    }
+    writeMergedSheet(outputSheet, context, sheetRows.get(context.outputSheetName), mergeConfig);
+  }
+
+  const totalRows = [...sheetRows.values()].reduce((acc, state) => {
+    let count = 0;
+    for (const rows of state.vendorRows.values()) count += rows.length;
+    return acc + count;
+  }, 0);
+
+  return {
+    workbook: outputBook,
+    stats: {
+      sourceFileCount: sourceFiles.length,
+      mergedRowCount: totalRows,
+      vendorCount: orderRule.orderList.length
+    }
+  };
+}
+
+module.exports = {
+  runMergeEngine
+};

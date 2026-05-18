@@ -9,6 +9,7 @@ const api = {
   getDefaultRules: () => ipcRenderer.invoke("rules:get-defaults"),
   saveRules: (rules) => ipcRenderer.invoke("rules:save", rules),
   startSplitTask: (payload) => ipcRenderer.invoke("task:start-split", payload),
+  startMergeTask: (payload) => ipcRenderer.invoke("task:start-merge", payload),
   cancelTask: (taskId) => ipcRenderer.invoke("task:cancel", taskId),
   listTemplates: () => ipcRenderer.invoke("template:list"),
   importTemplate: (sourcePath) => ipcRenderer.invoke("template:import", sourcePath),

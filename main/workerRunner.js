@@ -16,10 +16,10 @@ class WorkerRunner extends EventEmitter {
     this.tasks = new Map();
   }
 
-  startSplitTask(taskId, request) {
+  startTask(taskId, request, taskType = "split") {
     const memoryMb = resolveWorkerMemoryMb();
     const worker = new Worker(path.join(__dirname, "taskWorker.js"), {
-      workerData: { taskId, request },
+      workerData: { taskId, request, taskType },
       resourceLimits: { maxOldGenerationSizeMb: memoryMb }
     });
 
@@ -51,6 +51,14 @@ class WorkerRunner extends EventEmitter {
         });
       }
     });
+  }
+
+  startSplitTask(taskId, request) {
+    this.startTask(taskId, request, "split");
+  }
+
+  startMergeTask(taskId, request) {
+    this.startTask(taskId, request, "merge");
   }
 
   async cancelTask(taskId) {

@@ -51,7 +51,19 @@ function cloneCellValue(cell) {
     return normalizeCopiedValue(clonePlainValue(r));
   }
 
-  return normalizeCopiedValue(clonePlainValue(cell.value));
+  const raw = cell.value;
+  // Handle cells whose value IS a formula object (sharedFormula clones, etc.)
+  if (raw && typeof raw === "object") {
+    if (Object.prototype.hasOwnProperty.call(raw, "sharedFormula") ||
+        Object.prototype.hasOwnProperty.call(raw, "formula")) {
+      if (Object.prototype.hasOwnProperty.call(raw, "result")) {
+        return normalizeCopiedValue(clonePlainValue(raw.result));
+      }
+      return null;
+    }
+  }
+
+  return normalizeCopiedValue(clonePlainValue(raw));
 }
 
 function clonePlainValue(value) {

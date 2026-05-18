@@ -195,6 +195,17 @@ function registerIpcHandlers() {
     return { taskId };
   });
 
+  ipcMain.handle("task:start-merge", async (_, payload) => {
+    const taskId = crypto.randomUUID();
+    const request = {
+      ...payload,
+      projectRoot: getProjectRoot(),
+      userDataPath: app.getPath("userData"),
+    };
+    runner.startMergeTask(taskId, request);
+    return { taskId };
+  });
+
   ipcMain.handle("task:cancel", async (_, taskId) => {
     const cancelled = await runner.cancelTask(taskId);
     return { cancelled };

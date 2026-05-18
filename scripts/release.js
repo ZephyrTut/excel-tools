@@ -7,7 +7,7 @@ const PACKAGE_PATH = path.join(__dirname, "..", "package.json");
 
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout
+  output: process.stdout,
 });
 
 function ask(question) {
@@ -32,11 +32,25 @@ async function main() {
   console.log(`\n当前版本: v${current}\n`);
   console.log("请选择更新类型:");
   console.log("  1) 小版本 (patch) — 修复bug，不兼容改动无");
-  console.log(`     v${current} → v${formatVersion({ ...v, patch: v.patch + 1 })}`);
+  console.log(
+    `     v${current} → v${formatVersion({ ...v, patch: v.patch + 1 })}`
+  );
   console.log("  2) 中版本 (minor) — 新增功能，向下兼容");
-  console.log(`     v${current} → v${formatVersion({ major: v.major, minor: v.minor + 1, patch: 0 })}`);
+  console.log(
+    `     v${current} → v${formatVersion({
+      major: v.major,
+      minor: v.minor + 1,
+      patch: 0,
+    })}`
+  );
   console.log("  3) 大版本 (major) — 不兼容的重大改动");
-  console.log(`     v${current} → v${formatVersion({ major: v.major + 1, minor: 0, patch: 0 })}`);
+  console.log(
+    `     v${current} → v${formatVersion({
+      major: v.major + 1,
+      minor: 0,
+      patch: 0,
+    })}`
+  );
 
   const choice = await ask("\n输入 1/2/3: ");
 
@@ -80,8 +94,8 @@ async function main() {
     execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
     execSync(`git tag ${tag}`, { stdio: "inherit" });
     console.log(`✓ 本地 tag ${tag} 已创建`);
-    execSync(`git push origin main --tags`, { stdio: "inherit" });
-    console.log(`✓ 已推送到 GitHub，CI 将自动构建`);
+    execSync(`git push origin ${tag}`, { stdio: "inherit" });
+    console.log(`✓ tag ${tag} 已推送，CI 将自动构建`);
   } catch (err) {
     console.error("推送失败:", err.message);
     console.log("请手动执行: git push origin main --tags");

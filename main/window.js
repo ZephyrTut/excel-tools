@@ -6,6 +6,7 @@ function createMainWindow() {
     width: 1280,
     height: 820,
     show: false,
+    icon: path.join(__dirname, "..", "assets", "logo.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

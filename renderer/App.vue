@@ -11,6 +11,12 @@
         <el-tab-pane label="Excel 拆分" name="split">
           <SplitView />
         </el-tab-pane>
+        <el-tab-pane label="合并汇总" name="merge">
+          <MergeView />
+        </el-tab-pane>
+        <el-tab-pane label="合并汇总" name="merge">
+          <MergeView />
+        </el-tab-pane>
       </el-tabs>
     </el-main>
 
@@ -71,6 +77,7 @@ import { ref, reactive, onMounted, onUnmounted } from "vue";
 import { Refresh, Warning, Download, SuccessFilled, CircleClose } from "@element-plus/icons-vue";
 import HomeView from "./views/HomeView.vue";
 import SplitView from "./views/SplitView.vue";
+import MergeView from "./views/MergeView.vue";
 
 const active = ref("split");
 

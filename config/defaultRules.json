@@ -17,6 +17,14 @@
     "skipEmptySplitKey": true,
     "trimSplitKey": true
   },
+  "merge": {
+    "enabled": false,
+    "inputDir": ".\\test",
+    "outputName": "合并汇总.xlsx",
+    "orderSheetName": "日报",
+    "orderColumn": "C",
+    "appendUnknownVendorsToEnd": true
+  },
   "sheetRules": [
     {
       "enabled": true,
@@ -25,7 +33,9 @@
       "splitColumn": "C",
       "splitBy": "cellValue",
       "outputSheetName": "日报",
-      "skipEmpty": true
+      "skipEmpty": true,
+      "removeColumnsByHeader": [],
+      "columnAliasMap": {}
     },
     {
       "enabled": true,
@@ -34,7 +44,9 @@
       "splitColumn": "C",
       "splitBy": "cellValue",
       "outputSheetName": "合格品入库记录",
-      "skipEmpty": true
+      "skipEmpty": true,
+      "removeColumnsByHeader": [],
+      "columnAliasMap": {}
     },
     {
       "enabled": true,
@@ -43,7 +55,9 @@
       "splitColumn": "C",
       "splitBy": "cellValue",
       "outputSheetName": "合格品出库记录",
-      "skipEmpty": true
+      "skipEmpty": true,
+      "removeColumnsByHeader": [],
+      "columnAliasMap": {}
     },
     {
       "enabled": true,
@@ -52,7 +66,9 @@
       "splitColumn": "C",
       "splitBy": "cellValue",
       "outputSheetName": "领跑良品退回",
-      "skipEmpty": true
+      "skipEmpty": true,
+      "removeColumnsByHeader": [],
+      "columnAliasMap": {}
     },
     {
       "enabled": true,
@@ -61,7 +77,9 @@
       "splitColumn": "C",
       "splitBy": "cellValue",
       "outputSheetName": "不良品库存",
-      "skipEmpty": true
+      "skipEmpty": true,
+      "removeColumnsByHeader": [],
+      "columnAliasMap": {}
     }
   ]
 }
