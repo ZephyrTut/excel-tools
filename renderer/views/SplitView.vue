@@ -69,7 +69,12 @@
           </div>
         </template>
       </el-alert>
-      <RuleTable :rules="state.rules.sheetRules" @remove="removeRule" />
+      <RuleTable
+        :rules="state.rules.sheetRules"
+        :source-sheet-names="state.sourceSheetNames"
+        :template-sheet-names="state.templateSheetNames"
+        @remove="removeRule"
+      />
     </el-card>
 
     <LogPanel :lines="state.logs" @clear="state.logs = []" />
@@ -156,6 +161,8 @@ const state = reactive({
   showTemplateDialog: false,
   templateList: [],
   selectedTemplatePath: "",
+  sourceSheetNames: [],
+  templateSheetNames: [],
   sheetWarnings: [],
   rules: {
     appName: "Excel Tools",
@@ -288,6 +295,30 @@ async function pickInputFile() {
   state.inputFile = result.path;
   state.fileInfo.name = result.name;
   state.fileInfo.size = result.size || 0;
+
+  // Get actual sheet names from the source file
+  try {
+    const sheets = await getApi().getSheetNames(result.path);
+    state.sourceSheetNames = sheets;
+
+    // Auto-populate rules on first file pick (no existing sheetRules yet)
+    if (state.rules.sheetRules.length === 0) {
+      for (const sheet of sheets) {
+        state.rules.sheetRules.push({
+          enabled: true,
+          sheetName: sheet,
+          headerRows: 1,
+          splitColumn: "A",
+          splitBy: "cellValue",
+          outputSheetName: state.templateSheetNames.includes(sheet) ? sheet : "",
+          skipEmpty: true
+        });
+      }
+    }
+  } catch {
+    state.sourceSheetNames = [];
+  }
+
   await validateSheetNames(result.path);
   scheduleAutoSave();
 }
@@ -365,9 +396,23 @@ function handleClearTemplate() {
   state.selectedTemplatePath = "";
 }
 
+async function loadTemplateSheetNames() {
+  const tplPath = state.rules.templateFile;
+  if (tplPath) {
+    try {
+      state.templateSheetNames = await getApi().getSheetNames(tplPath);
+    } catch {
+      state.templateSheetNames = [];
+    }
+  } else {
+    state.templateSheetNames = [];
+  }
+}
+
 function dialogConfirm() {
   state.rules.templateFile = state.selectedTemplatePath || "";
   state.showTemplateDialog = false;
+  loadTemplateSheetNames();
   // Auto-save rules so the selection persists
   saveRules();
 }
@@ -393,6 +438,8 @@ async function loadRules() {
   } else if (rules.defaultOutputDir) {
     state.outputDir = rules.defaultOutputDir;
   }
+  // Load template sheet names if a template is configured
+  await loadTemplateSheetNames();
   state._loading = false;
 }
 
