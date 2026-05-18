@@ -236,17 +236,15 @@ function hasVisibleFill(fill) {
 }
 
 function normalizeCopiedValue(value) {
-  // Preserve #N/A instead of converting to 0 — keeps error markers visible
-  // and avoids masking missing data as zero values.
   if (typeof value === "string" && value.trim().toUpperCase() === "#N/A") {
-    return value;
+    return 0;
   }
   if (
     value &&
     typeof value === "object" &&
     Object.prototype.hasOwnProperty.call(value, "error")
   ) {
-    return value.error === "#N/A" ? value : value;
+    return value.error === "#N/A" ? 0 : value;
   }
   return value;
 }

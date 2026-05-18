@@ -61,3 +61,5 @@ pnpm compare:zhejiang # Compare generated output with source (node scripts/compa
 - **`pnpm` required** — `npm install` may produce different lockfile or fail; use `pnpm install`.
 - **Worker memory** defaults to 3072 MB; set `SPLIT_WORKER_MEMORY_MB=4096` for large files.
 - **Vite root** is `renderer/` — run vite commands from the project root, not from `renderer/`.
+- N/A变为0这一功能不要给我删掉啊
+- N/A变为0这一功能不要给我删掉，帮我复原下
