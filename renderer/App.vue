@@ -23,7 +23,11 @@
         </template>
         <template v-else-if="updateState.type === 'update-available'">
           <el-icon style="margin-right: 8px; color: #e6a23c"><Warning /></el-icon>
-          发现新版本 <strong>{{ updateState.version }}</strong>，正在下载…
+          发现新版本 <strong>v{{ updateState.version }}</strong>
+          <el-button size="small" type="primary" style="margin-left: 12px" @click="downloadUpdate">
+            下载更新
+          </el-button>
+          <el-button size="small" @click="dismissUpdate">稍后</el-button>
         </template>
         <template v-else-if="updateState.type === 'download-progress'">
           <el-icon class="is-loading" style="margin-right: 8px"><Download /></el-icon>
@@ -31,6 +35,7 @@
           <el-progress
             :percentage="updateState.percent"
             :stroke-width="8"
+            :status="updateState.percent === 100 ? 'success' : undefined"
             style="width: 180px; margin: 0 12px"
           />
           {{ updateState.percent }}%
@@ -41,6 +46,7 @@
           <el-button size="small" type="primary" style="margin-left: 12px" @click="installUpdate">
             立即重启
           </el-button>
+          <el-button size="small" @click="dismissUpdate">稍后</el-button>
         </template>
         <template v-else-if="updateState.type === 'error'">
           <el-icon style="margin-right: 8px; color: #f56c6c"><CircleClose /></el-icon>
@@ -82,6 +88,10 @@ let unsubUpdate = null;
 
 function dismissUpdate() {
   updateState.visible = false;
+}
+
+function downloadUpdate() {
+  window.excelTools.downloadUpdate();
 }
 
 function installUpdate() {
