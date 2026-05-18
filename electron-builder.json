@@ -4,6 +4,11 @@
   "directories": {
     "output": "dist/installers"
   },
+  "publish": {
+    "provider": "github",
+    "owner": "ZephyrTut",
+    "repo": "excel-tools"
+  },
   "files": [
     "main/**/*",
     "services/**/*",

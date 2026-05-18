@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const { createMainWindow } = require("./window");
 const { registerIpcHandlers } = require("./ipc");
+const updater = require("./updater");
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
 
@@ -40,6 +41,8 @@ async function bootstrap() {
   await ensureDefaultTemplate();
   registerIpcHandlers();
   createMainWindow();
+  // Check for updates after a short delay so the UI is ready
+  setTimeout(() => updater.checkForUpdates(), 3000);
 }
 
 app.whenReady().then(bootstrap);

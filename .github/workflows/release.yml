@@ -60,6 +60,7 @@ jobs:
           files: |
             dist/installers/*.exe
             dist/installers/*.exe.blockmap
+            dist/installers/latest.yml
           draft: false
           prerelease: false
           generate_release_notes: false

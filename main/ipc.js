@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
+const updater = require("./updater");
 const {
   loadRules,
   saveRules
@@ -196,6 +197,20 @@ function registerIpcHandlers() {
   ipcMain.handle("task:cancel", async (_, taskId) => {
     const cancelled = await runner.cancelTask(taskId);
     return { cancelled };
+  });
+
+  // ── Auto-update ──────────────────────────────────────────────────
+
+  ipcMain.handle("update:check", async () => {
+    return updater.checkForUpdates();
+  });
+
+  ipcMain.handle("update:download", () => {
+    updater.downloadUpdate();
+  });
+
+  ipcMain.handle("update:install", () => {
+    updater.installUpdate();
   });
 }
 

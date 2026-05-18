@@ -17,6 +17,14 @@ const api = {
     const listener = (_, event) => handler(event);
     ipcRenderer.on("task:event", listener);
     return () => ipcRenderer.removeListener("task:event", listener);
+  },
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  downloadUpdate: () => ipcRenderer.invoke("update:download"),
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+  onUpdateEvent: (handler) => {
+    const listener = (_, event) => handler(event);
+    ipcRenderer.on("update:event", listener);
+    return () => ipcRenderer.removeListener("update:event", listener);
   }
 };
 
