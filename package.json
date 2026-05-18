@@ -12,7 +12,8 @@
     "build": "npm run clean && npm run build:renderer && npx electron-builder --win",
     "start": "cross-env NODE_ENV=production electron .",
     "split:zhejiang": "node scripts/generate-split.js",
-    "compare:zhejiang": "node scripts/compare-with-output.js"
+    "compare:zhejiang": "node scripts/compare-with-output.js",
+    "release": "node scripts/release.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.3",
