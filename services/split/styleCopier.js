@@ -168,15 +168,11 @@ function copyRowAndCellsWithOptions(
       targetCell.fill = cloneStyleObject(cell.fill);
     } else {
       const tplFill = options.styleRow ? styleCell.fill : null;
-      const hasExplicitTplFill = tplFill && typeof tplFill === 'object' &&
-        tplFill.type === 'pattern' && tplFill.pattern !== 'none';
-      if (hasExplicitTplFill) {
+      if (hasVisibleFill(tplFill)) {
         targetCell.fill = cloneStyleObject(tplFill);
       } else {
         const srcFill = cell.fill;
-        const hasExplicitFill = srcFill && typeof srcFill === 'object' &&
-          srcFill.type === 'pattern' && srcFill.pattern !== 'none';
-        if (hasExplicitFill) {
+        if (hasVisibleFill(srcFill)) {
           targetCell.fill = cloneStyleObject(srcFill);
         }
         // else: inherit column default
@@ -213,16 +209,41 @@ function shouldForceZero(value, templateValue, colNumber, zeroFillColumns) {
   return false;
 }
 
+function hasVisibleFill(fill) {
+  if (!fill || typeof fill !== 'object') return false;
+  // Pattern fill with solid/gray125/etc — pattern !== 'none' means visible
+  if (fill.type === 'pattern' && fill.pattern !== 'none') return true;
+  // Gradient fill is always visible
+  if (fill.type === 'gradient') return true;
+  // Some fills don't have type but have an fgColor with real color
+  if (fill.fgColor) {
+    const argb = fill.fgColor.argb;
+    // Normalize to uppercase for comparison; exclude transparent/auto/no-fill
+    if (argb) {
+      const upper = String(argb).toUpperCase();
+      if (upper !== '0' && upper !== '00000000' && upper !== 'FFFFFFFF') {
+        return true;
+      }
+    }
+    // Theme colors (0-8) are valid visible fills regardless of argb
+    const theme = fill.fgColor.theme;
+    if (theme !== undefined && theme !== null) return true;
+  }
+  return false;
+}
+
 function normalizeCopiedValue(value) {
+  // Preserve #N/A instead of converting to 0 — keeps error markers visible
+  // and avoids masking missing data as zero values.
   if (typeof value === "string" && value.trim().toUpperCase() === "#N/A") {
-    return 0;
+    return value;
   }
   if (
     value &&
     typeof value === "object" &&
     Object.prototype.hasOwnProperty.call(value, "error")
   ) {
-    return value.error === "#N/A" ? 0 : value;
+    return value.error === "#N/A" ? value : value;
   }
   return value;
 }

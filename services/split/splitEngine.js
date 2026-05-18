@@ -119,8 +119,6 @@ function buildRuleContextsWithTemplate(workbook, rules, templateWorkbook) {
   });
 }
 
-const DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS = [13];
-
 function normalizeHeaderText(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") {
@@ -191,17 +189,47 @@ function resolvePreserveSourceFillColumns(
   const colSet = new Set();
   if (!isDailyReportSheetName(outputSheetName)) return colSet;
 
-  const keywords = ["可用结存"];
+  // 1. Try exact match via resolveColumnByHeaderKeywords (handles normal + richText)
+  const keywords = ["可用结存", "可用结余", "结存"];
   const sourceCol = resolveColumnByHeaderKeywords(sourceSheet, headerRows, keywords);
   if (sourceCol > 0) colSet.add(sourceCol);
 
   const templateCol = resolveColumnByHeaderKeywords(templateSheet, headerRows, keywords);
   if (templateCol > 0) colSet.add(templateCol);
 
-  // Hard fallback for daily report available stock column fill copy.
+  // 2. Fallback: scan ALL header cells for any column whose text CONTAINS "可用结存"
+  //    (handles cases where the header has extra whitespace, line breaks, or richText artifacts)
   if (colSet.size === 0) {
-    for (const fallbackCol of DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS) {
-      colSet.add(fallbackCol);
+    for (let r = 1; r <= headerRows; r++) {
+      const row = sourceSheet.getRow(r);
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        if (colSet.has(colNumber)) return;
+        const text = normalizeHeaderText(cell.value).replace(/\s+/g, "");
+        if (text.includes("可用结存") || text.includes("结存")) {
+          colSet.add(colNumber);
+        }
+      });
+    }
+  }
+
+  // 3. If still nothing found, also check the first data row for column continuity
+  if (colSet.size === 0 && headerRows > 0) {
+    const firstDataRow = sourceSheet.getRow(headerRows + 1);
+    if (firstDataRow) {
+      firstDataRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        if (colSet.has(colNumber)) return;
+        // If this column had content in every header row, it's likely a data column
+        let allHeadersHaveContent = true;
+        for (let r = 1; r <= headerRows; r++) {
+          if (!sourceSheet.getRow(r).getCell(colNumber).value) {
+            allHeadersHaveContent = false;
+            break;
+          }
+        }
+        if (allHeadersHaveContent) {
+          colSet.add(colNumber);
+        }
+      });
     }
   }
 
