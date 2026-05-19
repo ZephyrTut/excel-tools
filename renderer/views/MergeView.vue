@@ -4,57 +4,67 @@
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>合并汇总配置</span>
+          <el-button text type="primary" @click="openTemplateDialog">⚙ 模板</el-button>
         </div>
       </template>
+
       <el-form label-width="120px">
-        <el-form-item label="模板文件">
-          <el-input v-model="state.templateFile" placeholder="选择模板 xlsx 文件" readonly>
-            <template #append>
-              <el-button @click="pickTemplate">选择</el-button>
-            </template>
-          </el-input>
-        </el-form-item>
         <el-form-item label="数据目录">
           <el-input v-model="state.inputDir" placeholder="选择包含子表的目录" readonly>
-            <template #append>
-              <el-button @click="pickInputDir">选择</el-button>
-            </template>
+            <template #append><el-button @click="pickInputDir">选择</el-button></template>
           </el-input>
         </el-form-item>
         <el-form-item label="输出目录">
           <el-input v-model="state.outputDir" placeholder="选择输出目录" readonly>
-            <template #append>
-              <el-button @click="pickOutputDir">选择</el-button>
-            </template>
+            <template #append><el-button @click="pickOutputDir">选择</el-button></template>
           </el-input>
+        </el-form-item>
+        <el-form-item label="排序依据 Sheet">
+          <el-select v-model="state.merge.orderSheetName" filterable style="width: 100%">
+            <el-option v-for="name in state.templateSheetNames" :key="name" :label="name" :value="name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="排序列">
+          <el-input v-model="state.merge.orderColumn" maxlength="3" style="width: 84px" />
+        </el-form-item>
+        <el-form-item label="未知供应商">
+          <el-switch v-model="state.merge.appendUnknownVendorsToEnd" />
+          <el-text style="margin-left: 8px; color: #888">追加到末尾</el-text>
+        </el-form-item>
+        <el-form-item label="输出文件名">
+          <el-input v-model="state.merge.outputName" placeholder="默认：合并汇总.xlsx" />
         </el-form-item>
         <el-form-item label="任务状态">
           <el-tag :type="statusType">{{ state.status }}</el-tag>
           <el-progress style="margin-left: 12px; width: 240px" :percentage="state.progress" :stroke-width="14" />
         </el-form-item>
-        <el-form-item>
-          <el-space wrap>
-            <el-button
-              type="info"
-              :disabled="!state.templateFile || !state.inputDir"
-              :loading="state.preloading"
-              @click="preloadAllHeaders"
-            >
-              {{ state.preloadStatus || '🔍 预读取所有标题行' }}
-            </el-button>
-            <el-button
-              type="primary"
-              :disabled="!canRun"
-              @click="startTask"
-            >开始合并</el-button>
-            <el-button
-              type="warning"
-              :disabled="!state.taskId"
-              @click="cancelTask"
-            >取消</el-button>
-          </el-space>
-        </el-form-item>
       </el-form>
+
+      <el-space wrap>
+        <el-button type="primary" @click="saveMergeRules">保存规则</el-button>
+        <el-button @click="addRule">新增规则</el-button>
+        <el-button
+          type="info"
+          :disabled="!state.inputDir || !state.rules.templateFile"
+          :loading="state.preloading"
+          @click="preloadAllHeaders"
+        >
+          {{ state.preloadStatus || '🔍 预读取所有标题行' }}
+        </el-button>
+        <el-button type="success" :disabled="!canRun" @click="startTask">开始合并</el-button>
+        <el-button type="warning" :disabled="!state.taskId" @click="cancelTask">取消任务</el-button>
+      </el-space>
+    </el-card>
+
+    <el-card class="panel-card">
+      <template #header><div>合并规则（按 sheet）</div></template>
+      <MergeRuleTable
+        :rules="state.mergeSheetRules"
+        :source-sheet-names="state.sourceSheetNames"
+        :template-sheet-names="state.templateSheetNames"
+        @remove="removeRule"
+        @select="selectRule"
+      />
     </el-card>
 
     <MergeColumnMappingPanel
@@ -68,34 +78,89 @@
     />
 
     <LogPanel :lines="state.logs" @clear="state.logs = []" />
+
+    <!-- 模板选择对话框 -->
+    <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="560px" append-to-body>
+      <p style="font-size: 13px; color: #888; margin: 0 0 12px 0;">合并模板用于提供样式与排序基准。</p>
+      <el-table :data="state.templateList" style="width: 100%" max-height="320" stripe>
+        <el-table-column label="" width="48">
+          <template #default="{ row }">
+            <el-radio v-model="state.selectedTemplatePath" :value="row.path" :label="row.path"
+              @change="onTemplateSelect(row)">&nbsp;</el-radio>
+          </template>
+        </el-table-column>
+        <el-table-column label="模板名称" min-width="180">
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <el-tag v-if="row.isDefault" size="small" type="warning" style="margin-left: 6px">默认</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="大小" width="90">
+          <template #default="{ row }">{{ formatFileSize(row.size) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-popconfirm v-if="!row.isDefault" title="确定删除此模板？" confirm-button-text="删除"
+              @confirm="handleDeleteTemplate(row)">
+              <template #reference><el-button text type="danger" size="small">删除</el-button></template>
+            </el-popconfirm>
+            <span v-else style="color: #bbb; font-size: 13px">🔒 不可删除</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="state.templateList.length === 0" style="text-align: center; color: #999; padding: 32px 0">暂无模板，请导入</div>
+      <template #footer>
+        <el-space wrap>
+          <el-button @click="handleImportTemplate">📂 导入模板</el-button>
+          <el-button @click="handleResetDefault">恢复默认</el-button>
+          <el-button @click="handleClearTemplate">不使用模板</el-button>
+          <el-button type="primary" @click="dialogConfirm">确定</el-button>
+          <el-button @click="state.showTemplateDialog = false">取消</el-button>
+        </el-space>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive } from "vue";
+import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import LogPanel from "../components/LogPanel.vue";
+import MergeRuleTable from "../components/MergeRuleTable.vue";
 import MergeColumnMappingPanel from "../components/MergeColumnMappingPanel.vue";
 
 const state = reactive({
-  templateFile: "",
   inputDir: "",
   outputDir: "",
   taskId: "",
   status: "idle",
   progress: 0,
   logs: [],
+  showColumnMappingPanel: false,
   preloading: false,
   preloadStatus: "",
-  showColumnMappingPanel: false,
   currentRule: null,
+  showTemplateDialog: false,
+  templateList: [],
+  selectedTemplatePath: "",
+  sourceSheetNames: [],
   templateSheetNames: [],
   mergeSheetRules: [],
+  selectedRuleIndex: -1,
+  rules: {},
+  merge: {
+    orderSheetName: "日报",
+    orderColumn: "C",
+    appendUnknownVendorsToEnd: true,
+    outputName: "合并汇总.xlsx",
+  },
 });
 
 let unsubTask = null;
 const MAX_LOG_LINES = 500;
 
-const canRun = computed(() => !!state.templateFile && !!state.inputDir && !!state.outputDir);
+const canRun = computed(() => {
+  return !!state.inputDir && !!state.outputDir && !!state.rules.templateFile && state.mergeSheetRules.length > 0;
+});
 
 const statusType = computed(() => {
   if (state.status === "running") return "warning";
@@ -115,20 +180,151 @@ function getApi() {
   return api;
 }
 
+function deepClone(v) { return JSON.parse(JSON.stringify(v)); }
+
+function formatFileSize(size) {
+  if (!size) return "0 B";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function normalizeMergeRule(rule = {}) {
+  return {
+    enabled: rule.enabled !== false,
+    sheetName: rule.sheetName || "",
+    headerRows: Number(rule.headerRows || 1),
+    splitColumn: rule.splitColumn || "C",
+    outputSheetName: rule.outputSheetName || rule.sheetName || "",
+    skipEmpty: rule.skipEmpty !== false,
+    removeColumnsByHeader: Array.isArray(rule.removeColumnsByHeader) ? [...rule.removeColumnsByHeader] : [],
+    columnAliasMap: rule.columnAliasMap && typeof rule.columnAliasMap === "object" ? { ...rule.columnAliasMap } : {},
+    sortColumn: rule.sortColumn || "",
+    sortOrder: rule.sortOrder === "desc" ? "desc" : rule.sortOrder === "asc" ? "asc" : "",
+    preloadedHeaders: rule.preloadedHeaders || null,
+  };
+}
+
+function getSheetOptions(rules, templateSheetNames) {
+  const names = new Set(templateSheetNames || []);
+  for (const rule of rules || []) if (rule.sheetName) names.add(rule.sheetName);
+  return [...names];
+}
+
+// ─── 模板管理 ────────────────────────────────────
+
+async function openTemplateDialog() {
+  await loadTemplateList();
+  state.showTemplateDialog = true;
+}
+
+async function loadTemplateList() {
+  const list = await getApi().listTemplates();
+  state.templateList = list;
+  const currentPath = state.rules.templateFile || "";
+  state.selectedTemplatePath = currentPath && list.find((t) => t.path === currentPath) ? currentPath :
+    list.find((t) => t.isDefault)?.path || (list.length > 0 ? list[0].path : "");
+}
+
+function onTemplateSelect(row) { state.selectedTemplatePath = row.path; }
+
+async function handleImportTemplate() {
+  const result = await getApi().selectTemplateFile();
+  if (!result) return;
+  try {
+    await getApi().importTemplate(result.path);
+    ElMessage.success(`模板「${result.name}」导入成功`);
+    await loadTemplateList();
+  } catch (err) { ElMessage.error(err.message || "导入失败"); }
+}
+
+async function handleDeleteTemplate(row) {
+  try {
+    await getApi().deleteTemplate(row.name);
+    ElMessage.success(`模板「${row.name}」已删除`);
+    if (state.selectedTemplatePath === row.path) state.selectedTemplatePath = "";
+    await loadTemplateList();
+  } catch (err) { ElMessage.error(err.message || "删除失败"); }
+}
+
+async function handleResetDefault() {
+  await loadTemplateList();
+  const dft = state.templateList.find((t) => t.isDefault);
+  if (dft) state.selectedTemplatePath = dft.path;
+  else ElMessage.warning("默认模板不存在，请导入");
+}
+
+function handleClearTemplate() { state.selectedTemplatePath = ""; }
+
+function dialogConfirm() {
+  state.rules.templateFile = state.selectedTemplatePath || "";
+  state.showTemplateDialog = false;
+  loadTemplateSheetNames();
+}
+
+async function loadTemplateSheetNames() {
+  const tplPath = state.rules.templateFile;
+  if (!tplPath) { state.templateSheetNames = []; state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, []); return; }
+  try { state.templateSheetNames = await getApi().getSheetNames(tplPath); }
+  catch { state.templateSheetNames = []; }
+  state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, state.templateSheetNames);
+}
+
+// ─── 规则加载/保存 ───────────────────────────────
+
+async function loadRules() {
+  const rules = await getApi().loadRules();
+  state.rules = rules || {};
+  const mc = state.rules.merge || {};
+  state.merge = {
+    orderSheetName: mc.orderSheetName || "日报",
+    orderColumn: mc.orderColumn || "C",
+    appendUnknownVendorsToEnd: mc.appendUnknownVendorsToEnd !== false,
+    outputName: mc.outputName || "合并汇总.xlsx",
+  };
+  state.inputDir = mc.inputDir || state.rules.lastMergeInputDir || "";
+  state.outputDir = state.rules.lastMergeOutputDir || state.rules.defaultOutputDir || "";
+  const seed = state.rules.mergeSheetRules || state.rules.sheetRules || [];
+  state.mergeSheetRules = seed.map((r) => normalizeMergeRule(r));
+  await loadTemplateSheetNames();
+  state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, state.templateSheetNames);
+}
+
+async function saveMergeRules() {
+  const next = deepClone(state.rules || {});
+  next.merge = { ...(next.merge || {}), ...deepClone(state.merge), inputDir: state.inputDir };
+  next.mergeSheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
+  next.lastMergeInputDir = state.inputDir;
+  next.lastMergeOutputDir = state.outputDir;
+  next.templateFile = state.rules.templateFile || "";
+  await getApi().saveRules(next);
+  state.rules = next;
+  ElMessage.success("合并规则已保存");
+}
+
+// ─── 规则管理 ────────────────────────────────────
+
+function addRule() {
+  state.mergeSheetRules.push(normalizeMergeRule({ enabled: true, headerRows: 1, splitColumn: "C", skipEmpty: true }));
+}
+
+function removeRule(index) {
+  state.mergeSheetRules.splice(index, 1);
+  if (state.selectedRuleIndex === index) state.selectedRuleIndex = -1;
+  else if (state.selectedRuleIndex > index) state.selectedRuleIndex -= 1;
+}
+
 // ─── 预读取所有标题行 ────────────────────────────
 
 async function preloadAllHeaders() {
-  if (!state.templateFile || !state.inputDir) {
-    ElMessage.warning("请先选择模板文件和子表目录");
-    return;
-  }
+  if (!state.inputDir || !state.rules.templateFile) { ElMessage.warning("请先选择数据目录和模板文件"); return; }
   state.preloading = true;
   state.preloadStatus = "⏳ 正在读取...";
   state.logs = [];
+  state.progress = 0;
   try {
-    // 从当前 rules 配置读取 sheetRules
     const api = getApi();
-    const rulesConfig = await api.loadRules();
+    const rulesConfig = state.rules;
     const rules = (rulesConfig.mergeSheetRules || rulesConfig.sheetRules || [])
       .filter((r) => r.enabled !== false)
       .map((r) => ({
@@ -141,53 +337,41 @@ async function preloadAllHeaders() {
       }));
 
     if (rules.length === 0) {
-      ElMessage.warning("没有启用的 sheet 规则，请在 defaultRules.json 中配置");
+      ElMessage.warning("没有启用的 sheet 规则");
       state.preloadStatus = "❌ 无规则";
       state.preloading = false;
       return;
     }
 
-    // 调用后端预读取
     const result = await api.preloadMergeHeaders({
       inputDir: state.inputDir,
-      templateFile: state.templateFile,
+      templateFile: state.rules.templateFile,
       rules,
     });
 
     const returnedRules = result.rules || [];
-    if (returnedRules.length === 0) {
-      ElMessage.warning("预读取未返回数据");
-      state.preloadStatus = "❌ 无数据";
-      state.preloading = false;
-      return;
+    if (returnedRules.length === 0) { state.preloadStatus = "❌ 无数据"; state.preloading = false; return; }
+
+    // 更新 mergeSheetRules 中的 preloadedHeaders
+    for (const updated of returnedRules) {
+      const match = state.mergeSheetRules.find(
+        (r) => (r.outputSheetName || r.sheetName) === (updated.outputSheetName || updated.sheetName)
+      );
+      if (match) match.preloadedHeaders = updated.preloadedHeaders;
     }
 
-    // 存到 state
-    state.mergeSheetRules = returnedRules;
-
     // 保存到配置文件
-    const updatedConfig = { ...rulesConfig };
-    updatedConfig.mergeSheetRules = returnedRules.map((r) => ({
-      enabled: true,
-      sheetName: r.sheetName,
-      outputSheetName: r.outputSheetName,
-      headerRows: r.headerRows,
-      removeColumnsByHeader: r.removeColumnsByHeader || [],
-      columnAliasMap: r.columnAliasMap || {},
-      preloadedHeaders: r.preloadedHeaders,
-    }));
-    await api.saveRules(updatedConfig);
+    const saved = deepClone(state.rules || {});
+    saved.mergeSheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
+    await api.saveRules(saved);
+    state.rules = saved;
 
-    const totalCols = returnedRules.reduce((sum, r) => {
-      const ph = r.preloadedHeaders;
-      if (!ph) return sum;
-      return sum + (ph.templateHeaders || []).length;
-    }, 0);
+    const totalCols = returnedRules.reduce((s, r) => s + ((r.preloadedHeaders?.templateHeaders || []).length), 0);
     state.preloadStatus = `✅ 已预读取 (${returnedRules.length} rule, ${totalCols} 列)`;
     ElMessage.success(`预读取完成：${returnedRules.length} 个规则`);
 
-    // 预读完成后立即打开第一个规则的面板供检查
     state.currentRule = returnedRules[0];
+    state.selectedRuleIndex = 0;
     state.showColumnMappingPanel = true;
   } catch (err) {
     state.preloadStatus = "❌ 读取失败";
@@ -200,63 +384,38 @@ async function preloadAllHeaders() {
 
 // ─── 列头映射面板 ────────────────────────────────
 
+async function selectRule(index) {
+  state.selectedRuleIndex = index;
+  const rule = state.mergeSheetRules[index];
+  if (!rule) return;
+  if (!rule.preloadedHeaders) {
+    ElMessage.warning("请先点击「预读取所有标题行」");
+    return;
+  }
+  state.currentRule = rule;
+  state.showColumnMappingPanel = true;
+}
+
 function handleColumnMappingConfirm(data) {
   const rule = state.currentRule;
   if (!rule) return;
   rule.removeColumnsByHeader = data.removeColumnsByHeader || [];
-  rule.columnAliasMap = rule.columnAliasMap || {};
   state.showColumnMappingPanel = false;
   const delCount = (data.removeColumnsByHeader || []).length;
   ElMessage.success(`已保存${delCount > 0 ? `（删除了 ${delCount} 列）` : ''}`);
-
-  // 保存到配置文件
-  saveRulesToConfig();
+  saveMergeRules();
 }
 
 function handleColumnMappingCancel() {
   state.showColumnMappingPanel = false;
 }
 
-async function saveRulesToConfig() {
-  try {
-    const api = getApi();
-    const rulesConfig = await api.loadRules();
-    rulesConfig.mergeSheetRules = (rulesConfig.mergeSheetRules || []).map((oldRule) => {
-      const updated = state.mergeSheetRules.find(
-        (r) => (r.outputSheetName || r.sheetName) === (oldRule.outputSheetName || oldRule.sheetName)
-      );
-      if (updated) {
-        return {
-          ...oldRule,
-          removeColumnsByHeader: updated.removeColumnsByHeader || [],
-          columnAliasMap: updated.columnAliasMap || {},
-          preloadedHeaders: updated.preloadedHeaders,
-        };
-      }
-      return oldRule;
-    });
-    await api.saveRules(rulesConfig);
-  } catch {
-    // 静默
-  }
-}
-
 // ─── 基础操作 ────────────────────────────────────
-
-async function pickTemplate() {
-  const result = await getApi().selectTemplateFile();
-  if (!result) return;
-  state.templateFile = result.path;
-  state.mergeSheetRules = [];
-  state.currentRule = null;
-}
 
 async function pickInputDir() {
   const dir = await getApi().selectOutputDir();
   if (!dir) return;
   state.inputDir = dir;
-  state.mergeSheetRules = [];
-  state.currentRule = null;
 }
 
 async function pickOutputDir() {
@@ -270,63 +429,46 @@ async function startTask() {
     state.status = "running";
     state.progress = 0;
     state.logs = [];
-    // 加载完整配置
-    const rulesConfig = await getApi().loadRules();
+    const requestRules = deepClone(state.rules || {});
+    requestRules.templateFile = state.rules.templateFile || "";
+    requestRules.merge = { ...(requestRules.merge || {}), ...deepClone(state.merge), inputDir: state.inputDir };
+    requestRules.sheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
     const { taskId } = await getApi().startMergeTask({
-      inputDir: state.inputDir,
-      outputDir: state.outputDir,
-      rules: {
-        templateFile: state.templateFile,
-        merge: rulesConfig.merge || {},
-        sheetRules: state.mergeSheetRules.length > 0
-          ? state.mergeSheetRules
-          : (rulesConfig.mergeSheetRules || rulesConfig.sheetRules || []),
-      },
+      inputDir: state.inputDir, outputDir: state.outputDir, rules: requestRules,
     });
     state.taskId = taskId;
     pushLog(`任务启动：${taskId}`);
   } catch (err) {
     state.status = "error";
-    pushLog(`启动失败：${err.message}`);
+    ElMessage.error(err.message || "启动任务失败");
+    pushLog(`启动失败：${err.message || "unknown error"}`);
   }
 }
 
 async function cancelTask() {
   if (!state.taskId) return;
   const { cancelled } = await getApi().cancelTask(state.taskId);
-  if (cancelled) {
-    pushLog("任务已取消");
-    state.status = "idle";
-    state.taskId = "";
-  }
+  if (cancelled) { pushLog("任务已取消"); state.status = "idle"; state.progress = 0; state.taskId = ""; }
 }
 
 function handleEvent(event) {
   if (!state.taskId || event.taskId !== state.taskId) return;
   if (event.type === "log") pushLog(`${event.level.toUpperCase()} ${event.message}`);
-  else if (event.type === "progress") {
-    state.progress = event.progress;
-    pushLog(`进度 ${event.progress}% - ${event.stage}`);
-  } else if (event.type === "done") {
-    state.status = "done";
-    state.taskId = "";
-    pushLog("合并完成");
-    ElMessage.success("合并完成");
-  } else if (event.type === "error") {
-    state.status = "error";
-    state.taskId = "";
-    pushLog(`失败：${event.error.message}`);
-    ElMessage.error(event.error.message);
-  } else if (event.type === "cancelled") {
-    state.status = "idle";
-    state.taskId = "";
-  }
+  else if (event.type === "progress") { state.progress = event.progress; pushLog(`进度 ${event.progress}% - ${event.stage}`); }
+  else if (event.type === "done") { state.status = "done"; state.taskId = ""; pushLog("合并完成"); ElMessage.success("合并完成"); }
+  else if (event.type === "error") { state.status = "error"; state.taskId = ""; pushLog(`失败：${event.error.message}`); ElMessage.error(event.error.message); }
+  else if (event.type === "cancelled") { state.status = "idle"; state.taskId = ""; }
 }
 
-onMounted(() => {
-  unsubTask = getApi().onTaskEvent(handleEvent);
+onMounted(async () => {
+  try {
+    await loadRules();
+    unsubTask = getApi().onTaskEvent(handleEvent);
+  } catch (err) {
+    ElMessage.error(err.message || "初始化失败");
+    pushLog(`初始化失败：${err.message || "unknown error"}`);
+  }
 });
-onUnmounted(() => {
-  if (unsubTask) unsubTask();
-});
+
+onUnmounted(() => { if (unsubTask) unsubTask(); });
 </script>

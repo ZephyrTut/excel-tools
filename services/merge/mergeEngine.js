@@ -62,16 +62,35 @@ function copyCellStyle(styleCell, targetCell) {
   targetCell.protection = cloneStyle(styleCell.protection);
 }
 
+/**
+ * 统一从单元格读取列头：Date→MM-DD，文本→normalizeHeaderName
+ * 与 excelReader.js 的 getHeadersFromWorksheet 保持完全一致
+ */
+function readHeaderFromCell(cell) {
+  const value = cell.value;
+  if (value instanceof Date) {
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${m}-${d}`;
+  }
+  if (value && typeof value === 'object' && value.result instanceof Date) {
+    const dt = value.result;
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${m}-${d}`;
+  }
+  return normalizeHeaderName(textValue(value));
+}
+
 function resolveHeaderMap(sheet, headerRows) {
   const map = new Map();
   const maxCol = Math.max(sheet.columnCount || 1, sheet.getRow(headerRows).cellCount || 1);
   for (let col = 1; col <= maxCol; col += 1) {
     let header = "";
     for (let row = headerRows; row >= 1; row -= 1) {
-      const raw = textValue(sheet.getRow(row).getCell(col).value);
-      const normalized = normalizeHeaderName(raw);
-      if (normalized) {
-        header = normalized;
+      const h = readHeaderFromCell(sheet.getRow(row).getCell(col));
+      if (h) {
+        header = h;
         break;
       }
     }
