@@ -343,7 +343,10 @@ function registerIpcHandlers() {
             const vendors = new Set();
             for (let r = (rule.headerRows || 1) + 1; r <= sheet.rowCount; r++) {
               const cell = sheet.getRow(r).getCell(colIndex);
-              const v = textValue(cell.value).trim();
+              // 跳过公式对象但没有缓存结果的单元格（避免 [object Object]）
+              const cv = cell.value;
+              if (cv && typeof cv === 'object' && !Object.prototype.hasOwnProperty.call(cv, 'result') && !Object.prototype.hasOwnProperty.call(cv, 'text') && !Object.prototype.hasOwnProperty.call(cv, 'richText') && !Object.prototype.hasOwnProperty.call(cv, 'error')) continue;
+              const v = textValue(cv).trim();
               if (v) vendors.add(v);
             }
             if (vendors.size > 0) vendorsBySheet[rule.sheetName] = [...vendors];

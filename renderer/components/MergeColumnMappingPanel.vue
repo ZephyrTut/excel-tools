@@ -98,7 +98,7 @@
 
             <!-- 自动映射到对应总表列 -->
             <button
-              v-if="menuCell.templateHeader && menuCell.header !== menuCell.templateHeader"
+              v-if="menuCell.header && menuCell.templateHeader && menuCell.header !== menuCell.templateHeader"
               :class="['menu-btn', { 'menu-btn-mapped': !!menuCell.mappedTo }]"
               @click="autoMapFromMenu"
             >
@@ -227,8 +227,9 @@ function isMapped(fileId, displayPos) {
 }
 
 function openCellMenu(event, src, col) {
-  const origPos = src.origPosMap[col.pos] ?? col.pos;
-  const rawHeader = origPos < src.rawHeaders.length ? src.rawHeaders[origPos] : null;
+  const origPos = src.origPosMap[col.pos];
+  const rawHeader = origPos !== undefined && origPos < src.rawHeaders.length
+    ? src.rawHeaders[origPos] : null;
   const isDeleted = (perFileRemoved.value.get(src.file) || new Set()).has(origPos);
   const mappedTo = rawHeader ? (aliasMapping.value[rawHeader] || '') : '';
 
