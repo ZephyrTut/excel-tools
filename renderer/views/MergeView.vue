@@ -353,6 +353,8 @@ async function preloadAllHeaders() {
     const result = await api.preloadMergeHeaders({
       inputDir: state.inputDir,
       templateFile: currentTemplatePath.value,
+      orderSheetName: state.merge.orderSheetName,
+      orderColumn: state.merge.orderColumn,
       rules: JSON.parse(JSON.stringify(rules)),
     });
 

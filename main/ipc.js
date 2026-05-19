@@ -276,7 +276,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle("merge:preload-headers", async (_, payload) => {
     try {
-      const { inputDir, templateFile, rules: incoming } = payload || {};
+      const { inputDir, templateFile, orderSheetName, orderColumn, rules: incoming } = payload || {};
       if (!inputDir || !templateFile || !Array.isArray(incoming) || incoming.length === 0) {
         return { rules: [] };
       }
@@ -333,25 +333,27 @@ function registerIpcHandlers() {
           );
           if (!hasData) return null;
 
-          // 读每个 sheet 的供应商列，收集供应商名
+          // 统一用排序依据 Sheet 的排序列取供应商名
           const vendorsBySheet = {};
           const wb = await readWorkbook(filePath);
-          for (const rule of incoming) {
-            const sheet = wb.getWorksheet(rule.sheetName);
-            if (!sheet) continue;
-            const colIndex = (function(l){return[...l.toUpperCase()].reduce((a,c)=>a*26+c.charCodeAt(0)-64,0)})(rule.splitColumn||"C");
+          const orderSheet = wb.getWorksheet(orderSheetName || incoming[0]?.sheetName);
+          if (orderSheet) {
+            const colIndex = (function(l){return[...l.toUpperCase()].reduce((a,c)=>a*26+c.charCodeAt(0)-64,0)})(orderColumn || incoming[0]?.splitColumn || "C");
             const vendors = new Set();
-            for (let r = (rule.headerRows || 1) + 1; r <= sheet.rowCount; r++) {
-              const cell = sheet.getRow(r).getCell(colIndex);
-              // 跳过公式对象但没有缓存结果的单元格（避免 [object Object]）
+            const orderHeaderRows = incoming.find(r => r.sheetName === orderSheetName)?.headerRows || 1;
+            for (let r = orderHeaderRows + 1; r <= orderSheet.rowCount; r++) {
+              const cell = orderSheet.getRow(r).getCell(colIndex);
               const cv = cell.value;
               if (cv && typeof cv === 'object' && !Object.prototype.hasOwnProperty.call(cv, 'result') && !Object.prototype.hasOwnProperty.call(cv, 'text') && !Object.prototype.hasOwnProperty.call(cv, 'richText') && !Object.prototype.hasOwnProperty.call(cv, 'error')) continue;
               const v = textValue(cv).trim();
               if (v) vendors.add(v);
             }
-            if (vendors.size > 0) vendorsBySheet[rule.sheetName] = [...vendors];
+            if (vendors.size > 0) {
+              for (const rule of incoming) {
+                vendorsBySheet[rule.sheetName] = [...vendors];
+              }
+            }
           }
-
           return {
             file: path.basename(filePath),
             headersBySheet: headersMap,
