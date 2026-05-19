@@ -76,7 +76,7 @@
         </div>
       </div>
 
-      <!-- 列操作弹出菜单（居中显示） -->
+      <!-- 列操作弹出菜单 -->
       <div v-if="showMenu && menuCell" class="cell-menu-overlay" @click.self="closeMenu">
         <div class="cell-menu">
           <div class="menu-header">
@@ -140,11 +140,8 @@ const props = defineProps({
 const emit = defineEmits(["confirm", "cancel"]);
 
 // ─── State ────────────────────────────────────────
-// 每个分表独立记录已删除的列（原始位置 0-indexed）→ Map<fileId, Set<原始位置>>
 const perFileRemoved = ref(new Map());
-// 全局别名映射 { 源列头 → 模板列头 }（所有分表共享）
 const aliasMapping = ref({});
-// 弹出菜单
 const showMenu = ref(false);
 const menuCell = ref(null);
 
@@ -153,7 +150,7 @@ const templateHeaders = computed(() => props.preloadedData?.templateHeaders || [
 const sources = computed(() => props.preloadedData?.sources || []);
 
 /**
- * 每个分表独立删除列、左移剩余列，与总表对齐。
+ * 对齐总表和分表：跳过已删除列，左移填充 null
  */
 const alignedSources = computed(() => {
   const tplLen = templateHeaders.value.length;
@@ -183,7 +180,7 @@ const alignedSources = computed(() => {
 });
 
 /**
- * 列定义基于总表列头。
+ * 列定义：基于总表列头，跳过日期列
  */
 const displayColumns = computed(() => {
   const tpl = templateHeaders.value;
@@ -219,7 +216,7 @@ const totalMappedCount = computed(() => {
   return Object.keys(aliasMapping.value).length;
 });
 
-// ─── 菜单辅助 ──────────────────────────────────────
+// ─── 菜单辅助 ──────────────────────────────────
 function isMapped(fileId, displayPos) {
   const src = alignedSources.value.find((s) => s.file === fileId);
   if (!src) return false;
@@ -272,7 +269,6 @@ function deleteFromMenu() {
   if (fileSet.size === 0) next.delete(fileId);
   else next.set(fileId, fileSet);
   perFileRemoved.value = next;
-  // 刷新菜单状态
   menuCell.value = { ...menuCell.value, isDeleted: !isDeleted, mappedTo: isDeleted ? menuCell.value.mappedTo : '' };
 }
 
@@ -280,7 +276,6 @@ function autoMapFromMenu() {
   if (!menuCell.value || !menuCell.value.header || !menuCell.value.templateHeader) return;
   const { header, templateHeader, fileId, origPos, mappedTo } = menuCell.value;
 
-  // 如果已经映射了 → 撤销映射
   if (mappedTo) {
     const next = { ...aliasMapping.value };
     delete next[header];
@@ -289,7 +284,6 @@ function autoMapFromMenu() {
     return;
   }
 
-  // 自动映射到对应总表位置
   const next = { ...aliasMapping.value };
   next[header] = templateHeader;
   aliasMapping.value = next;
@@ -309,14 +303,13 @@ function autoMapFromMenu() {
   menuCell.value = { ...menuCell.value, mappedTo: templateHeader, isDeleted: false };
 }
 
-// ─── 批量操作 ──────────────────────────────────────
+// ─── 批量操作 ──────────────────────────────────
 function resetAll() {
   perFileRemoved.value = new Map();
   aliasMapping.value = {};
 }
 
 function initFromProps() {
-  // 从已有 removeColumnsByHeader → 映射到每个文件的删除位置
   const perFile = new Map();
   const removeSet = new Set(
     (props.initialRemoveColumns || []).map((h) => String(h || "").replace(/\s+/g, "").trim()).filter(Boolean)
@@ -342,7 +335,6 @@ watch(() => props.visible, (show) => {
 });
 
 function confirm() {
-  // 收集所有分表中被删除的列名（按名去重）
   const removedNames = new Set();
   for (const [fileId, positions] of perFileRemoved.value) {
     const src = sources.value.find((s) => s.file === fileId);
@@ -362,7 +354,6 @@ function cancel() {
   emit("cancel");
 }
 
-// ─── Text helper ───────────────────────────────────
 function displayText(val, fallback) {
   if (val === null || val === undefined || val === '') return fallback;
   const str = String(val);
@@ -371,7 +362,6 @@ function displayText(val, fallback) {
 </script>
 
 <style scoped>
-/* ─── Overlay ─── */
 .panel-overlay {
   position: fixed;
   top: 0;
@@ -396,7 +386,6 @@ function displayText(val, fallback) {
   flex-direction: column;
 }
 
-/* ─── Header ─── */
 .panel-header {
   display: flex;
   align-items: center;
@@ -424,7 +413,6 @@ function displayText(val, fallback) {
 }
 .close-btn:hover { background: #f0f0f0; color: #333; }
 
-/* ─── Body ─── */
 .panel-body {
   flex: 1;
   overflow: hidden;
@@ -436,7 +424,6 @@ function displayText(val, fallback) {
 .loading-state { text-align: center; padding: 60px 0; color: #999; font-size: 14px; }
 .panel-main { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
-/* ─── Stats bar ─── */
 .stats-bar {
   display: flex;
   gap: 16px;
@@ -449,7 +436,6 @@ function displayText(val, fallback) {
 .stat-item { color: #555; }
 .stat-hint { color: #d48806; }
 
-/* ─── Table scroll ─── */
 .table-scroll {
   flex: 1;
   overflow: auto;
@@ -493,7 +479,6 @@ function displayText(val, fallback) {
   white-space: nowrap;
 }
 
-/* Cells */
 .cell {
   padding: 5px 6px;
   text-align: center;
@@ -513,7 +498,6 @@ function displayText(val, fallback) {
 .cell-mismatch { background: #fff1f0 !important; color: #cf1322; }
 .cell-mapped { background: #e6f7ff !important; color: #1890ff; }
 
-/* Rows */
 .tpl-row .row-label { background: #f0f2f5; font-weight: 600; color: #333; font-size: 12px; }
 .src-row .row-label { font-size: 11px; color: #666; overflow: hidden; text-overflow: ellipsis; }
 .src-row-dirty .row-label { background: #fffbe6; }
@@ -533,7 +517,6 @@ function displayText(val, fallback) {
 
 .map-arrow { font-size: 11px; margin-right: 2px; }
 
-/* ─── 弹出菜单 ─── */
 .cell-menu-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -634,7 +617,6 @@ function displayText(val, fallback) {
 }
 .menu-close-btn:hover { background: #e8e8e8; }
 
-/* ─── Footer ─── */
 .panel-footer {
   display: flex;
   align-items: center;

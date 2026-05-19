@@ -5,7 +5,7 @@ const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
 const updater = require("./updater");
 const { loadRules, saveRules } = require("../services/split/ruleManager");
-const { getSheetNames, getSheetHeadersWithPosition, readWorkbook } = require("../services/split/excelReader");
+const { getSheetNames, getSheetHeadersWithPosition, getMultipleSheetHeaders, readWorkbook } = require("../services/split/excelReader");
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
 
@@ -272,7 +272,7 @@ function registerIpcHandlers() {
     return { cancelled };
   });
 
-  // ── Merge preload headers (file-by-file + 8路并发) ───────────
+  // ── Merge preload headers ──────
 
   ipcMain.handle("merge:preload-headers", async (_, payload) => {
     try {
@@ -281,29 +281,14 @@ function registerIpcHandlers() {
         return { rules: [] };
       }
 
-      function prog(pct, stage) {
-        try { broadcast({ type: "progress", taskId: "preload-headers", progress: Math.round(pct), stage }); } catch {}
-      }
+      const prog = (pct, stage) => {
+        try { broadcast({ type: "progress", taskId: "preload-headers", progress: pct, stage }); } catch {}
+      };
 
-      prog(5, "扫描源文件目录...");
+      prog(5, "开始预读取...");
 
-      let entries = [];
-      try { entries = await fs.readdir(inputDir, { withFileTypes: true }); } catch { entries = []; }
-      const allFiles = entries
-        .filter((e) => e.isFile())
-        .map((e) => path.join(inputDir, e.name))
-        .filter((fp) => fp.toLowerCase().endsWith(".xlsx"))
-        .filter((fp) => !path.basename(fp).startsWith("~$"))
-        .filter((fp) => path.resolve(fp) !== path.resolve(templateFile));
-
-      if (allFiles.length === 0) {
-        prog(100, "未找到源文件");
-        return { rules: [] };
-      }
-
-      prog(10, `找到 ${allFiles.length} 个源文件，读取模板...`);
-
-      // 1. 一次读取所有规则的模板 headers（只打开模板文件 1 次）
+      // 1. 读模板所有规则的列头（只打开模板 1 次）
+      prog(10, "读取模板列头...");
       const templateConfigs = incoming.map((r) => ({
         sheetName: r.outputSheetName || r.sheetName,
         headerRows: r.headerRows || 1,
@@ -315,11 +300,26 @@ function registerIpcHandlers() {
         templateHeadersBySheet = {};
       }
 
-      prog(15, "模板读取完成，并发读取源文件...");
+      // 2. 扫描数据目录
+      prog(15, "扫描数据目录...");
+      let entries = [];
+      try { entries = await fs.readdir(inputDir, { withFileTypes: true }); } catch { entries = []; }
+      const allFiles = entries
+        .filter((e) => e.isFile())
+        .map((e) => path.join(inputDir, e.name))
+        .filter((fp) => fp.toLowerCase().endsWith(".xlsx"))
+        .filter((fp) => !path.basename(fp).startsWith("~$"))
+        .filter((fp) => path.resolve(fp) !== path.resolve(templateFile));
 
-      // 2. 8路并发读取源文件 —— 每个文件只打开 1 次
+      if (allFiles.length === 0) {
+        prog(100, "未找到源文件");
+        return { rules: incoming.map((r) => ({ sheetName: r.sheetName, outputSheetName: r.outputSheetName, headerRows: r.headerRows, preloadedHeaders: { templateHeaders: templateHeadersBySheet[r.outputSheetName || r.sheetName] || [], sources: [] } })) };
+      }
+
+      // 3. 8个一批并发读每个源文件
       const CONCURRENCY = 8;
       const fileResults = [];
+      let processedCount = 0;
 
       async function processFile(filePath) {
         try {
@@ -341,7 +341,6 @@ function registerIpcHandlers() {
         }
       }
 
-      let processedCount = 0;
       for (let i = 0; i < allFiles.length; i += CONCURRENCY) {
         const chunk = allFiles.slice(i, i + CONCURRENCY);
         const chunkResults = await Promise.all(chunk.map(processFile));
@@ -350,16 +349,14 @@ function registerIpcHandlers() {
         }
         processedCount += chunk.length;
         const pct = 15 + Math.round((processedCount / allFiles.length) * 75);
-        prog(pct, `已读取 ${processedCount}/${allFiles.length} 个文件`);
+        prog(pct, `正在读取 (${processedCount}/${allFiles.length})`);
       }
 
+      // 4. 按规则维度重组
       prog(92, "整理数据...");
-
-      // 3. 按规则维度组织返回数据（结构与之前一致）
       const resultRules = incoming.map((rule) => {
         const key = rule.outputSheetName || rule.sheetName;
         const templateHeaders = templateHeadersBySheet[key] || [];
-
         const sources = [];
         for (const fr of fileResults) {
           const headers = fr.headersBySheet[rule.sheetName];
@@ -370,7 +367,6 @@ function registerIpcHandlers() {
             });
           }
         }
-
         return {
           sheetName: String(rule.sheetName || ""),
           outputSheetName: String(key),
@@ -382,7 +378,7 @@ function registerIpcHandlers() {
         };
       });
 
-      prog(100, `完成 ${resultRules.length} 个规则`);
+      prog(100, "预读取完成");
       return { rules: resultRules };
     } catch (err) {
       console.error("preload-headers error:", err?.message || err);

@@ -76,7 +76,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="操作" width="130" fixed="right">
+    <el-table-column label="操作" width="150" fixed="right">
       <template #default="{ $index }">
         <el-button text type="primary" @click="$emit('select', $index)">列头映射</el-button>
         <el-button text type="danger" @click="$emit('remove', $index)">删除</el-button>

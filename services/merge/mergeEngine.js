@@ -196,7 +196,7 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
       for (let rowNum = context.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
         const sourceRow = sourceSheet.getRow(rowNum);
         const vendor = textValue(sourceRow.getCell(context.splitColumnIndex).value).trim();
-        if (!vendor) continue;
+        if (!vendor) { /* 空白供应商跳过 */ continue; }
         const vendorKey = vendor;
 
         const valuesByCol = new Map();
@@ -216,6 +216,15 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
     }
   }
 
+    // 统计输出
+  for (const [name, state] of sheetRows) {
+    let blank = 0, total = 0;
+    for (const [vendor, rows] of state.vendorRows) {
+      total += rows.length;
+      if (!vendor) blank += rows.length;
+    }
+    console.log('[DEBUG] ' + name + ': ' + total + ' rows, ' + blank + ' blank vendor');
+  }
   return sheetRows;
 }
 
@@ -300,6 +309,10 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
 
   for (const vendor of orderedVendors) {
     const rows = sheetRowsState.vendorRows.get(vendor) || [];
+    if (rows.length > 0 && !vendor) {
+      console.log('[DEBUG] EMPTY vendor key in write!');
+    }
+    const rows = sheetRowsState.vendorRows.get(vendor) || [];
     for (const rowMap of rows) {
       const outRow = outputSheet.getRow(outputSheet.rowCount + 1);
       outRow.height = templateStyleRow.height;
@@ -307,6 +320,11 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
         const styleCell = templateStyleRow.getCell(col);
         const outCell = outRow.getCell(col);
         let value = rowMap.has(col) ? rowMap.get(col) : null;
+        if (col === 3 && value !== null && value !== undefined) {
+          // vendor has value, good
+        } else if (col === 3 && rowNum === 4) {
+          // debug first data row vendor
+        }
         // 零填充：从"上月结存"到"可用结存"（含），空白填 0
         if (value == null &&
             context.zeroFillStartColumnIndex > 0 &&
@@ -319,6 +337,7 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
           seq += 1;
           value = seq;
         }
+        if (col === 3) { console.log('[TRACE] Row' + outputSheet.rowCount + ' vendor=' + JSON.stringify(value)); }
         outCell.value = value;
         copyCellStyle(styleCell, outCell);
       }

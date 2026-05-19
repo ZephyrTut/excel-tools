@@ -45,7 +45,7 @@
         <el-button @click="addRule">新增规则</el-button>
         <el-button
           type="info"
-          :disabled="!state.inputDir || !(state.rules.merge?.templateFile || state.rules.templateFile)"
+          :disabled="!state.inputDir || !currentTemplatePath"
           :loading="state.preloading"
           @click="preloadAllHeaders"
         >
@@ -67,6 +67,8 @@
       />
     </el-card>
 
+    <LogPanel :lines="state.logs" @clear="state.logs = []" />
+
     <MergeColumnMappingPanel
       :visible="state.showColumnMappingPanel"
       :rule="state.currentRule"
@@ -76,8 +78,6 @@
       @confirm="handleColumnMappingConfirm"
       @cancel="handleColumnMappingCancel"
     />
-
-    <LogPanel :lines="state.logs" @clear="state.logs = []" />
 
     <!-- 模板选择对话框 -->
     <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="560px" append-to-body>
@@ -123,7 +123,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive } from "vue";
 import LogPanel from "../components/LogPanel.vue";
 import MergeRuleTable from "../components/MergeRuleTable.vue";
 import MergeColumnMappingPanel from "../components/MergeColumnMappingPanel.vue";
@@ -135,9 +135,9 @@ const state = reactive({
   status: "idle",
   progress: 0,
   logs: [],
-  showColumnMappingPanel: false,
   preloading: false,
   preloadStatus: "",
+  showColumnMappingPanel: false,
   currentRule: null,
   showTemplateDialog: false,
   templateList: [],
@@ -145,7 +145,6 @@ const state = reactive({
   sourceSheetNames: [],
   templateSheetNames: [],
   mergeSheetRules: [],
-  selectedRuleIndex: -1,
   rules: {},
   merge: {
     orderSheetName: "日报",
@@ -158,8 +157,12 @@ const state = reactive({
 let unsubTask = null;
 const MAX_LOG_LINES = 500;
 
+const currentTemplatePath = computed(() => {
+  return state.rules.merge?.templateFile || state.rules.templateFile || "";
+});
+
 const canRun = computed(() => {
-  return !!state.inputDir && !!state.outputDir && !!(state.rules.merge?.templateFile || state.rules.templateFile) && state.mergeSheetRules.length > 0;
+  return !!state.inputDir && !!state.outputDir && !!currentTemplatePath.value && state.mergeSheetRules.length > 0;
 });
 
 const statusType = computed(() => {
@@ -201,14 +204,8 @@ function normalizeMergeRule(rule = {}) {
     columnAliasMap: rule.columnAliasMap && typeof rule.columnAliasMap === "object" ? { ...rule.columnAliasMap } : {},
     sortColumn: rule.sortColumn || "",
     sortOrder: rule.sortOrder === "desc" ? "desc" : rule.sortOrder === "asc" ? "asc" : "",
-    preloadedHeaders: rule.preloadedHeaders || null,
+    preloadedHeaders: null,
   };
-}
-
-function getSheetOptions(rules, templateSheetNames) {
-  const names = new Set(templateSheetNames || []);
-  for (const rule of rules || []) if (rule.sheetName) names.add(rule.sheetName);
-  return [...names];
 }
 
 // ─── 模板管理 ────────────────────────────────────
@@ -221,7 +218,7 @@ async function openTemplateDialog() {
 async function loadTemplateList() {
   const list = await getApi().listTemplates();
   state.templateList = list;
-  const currentPath = state.rules.merge?.templateFile || state.rules.templateFile || "";
+  const currentPath = currentTemplatePath.value;
   state.selectedTemplatePath = currentPath && list.find((t) => t.path === currentPath) ? currentPath :
     list.find((t) => t.isDefault)?.path || (list.length > 0 ? list[0].path : "");
 }
@@ -265,11 +262,17 @@ function dialogConfirm() {
 }
 
 async function loadTemplateSheetNames() {
-  const tplPath = state.rules.merge?.templateFile || state.rules.templateFile;
+  const tplPath = currentTemplatePath.value;
   if (!tplPath) { state.templateSheetNames = []; state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, []); return; }
   try { state.templateSheetNames = await getApi().getSheetNames(tplPath); }
   catch { state.templateSheetNames = []; }
   state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, state.templateSheetNames);
+}
+
+function getSheetOptions(rules, templateSheetNames) {
+  const names = new Set(templateSheetNames || []);
+  for (const rule of rules || []) if (rule.sheetName) names.add(rule.sheetName);
+  return [...names];
 }
 
 // ─── 规则加载/保存 ───────────────────────────────
@@ -299,7 +302,7 @@ async function saveMergeRules() {
   next.lastMergeInputDir = state.inputDir;
   next.lastMergeOutputDir = state.outputDir;
   if (!next.merge) next.merge = {};
-  next.merge.templateFile = state.rules.merge?.templateFile || state.rules.templateFile || "";
+  next.merge.templateFile = currentTemplatePath.value;
   await getApi().saveRules(next);
   state.rules = next;
   ElMessage.success("合并规则已保存");
@@ -313,23 +316,23 @@ function addRule() {
 
 function removeRule(index) {
   state.mergeSheetRules.splice(index, 1);
-  if (state.selectedRuleIndex === index) state.selectedRuleIndex = -1;
-  else if (state.selectedRuleIndex > index) state.selectedRuleIndex -= 1;
 }
 
 // ─── 预读取所有标题行 ────────────────────────────
 
 async function preloadAllHeaders() {
-  if (!state.inputDir || !(state.rules.merge?.templateFile || state.rules.templateFile)) { ElMessage.warning("请先选择数据目录和模板文件"); return; }
+  if (!state.inputDir || !currentTemplatePath.value) {
+    ElMessage.warning("请先选择数据目录和模板文件");
+    return;
+  }
   state.preloading = true;
   state.preloadStatus = "⏳ 正在读取...";
   state.logs = [];
   state.progress = 0;
-  state.taskId = 'preload-headers'; // 让进度事件被 handleEvent 接收
+  state.taskId = 'preload-headers';
   try {
     const api = getApi();
-    const rulesConfig = state.rules;
-    const rules = (rulesConfig.mergeSheetRules || rulesConfig.sheetRules || [])
+    const rules = state.mergeSheetRules
       .filter((r) => r.enabled !== false)
       .map((r) => ({
         sheetName: r.sheetName,
@@ -347,16 +350,19 @@ async function preloadAllHeaders() {
       return;
     }
 
-    // deep clone 确保没有 Vue reactive 代理污染
     const result = await api.preloadMergeHeaders({
       inputDir: state.inputDir,
-      templateFile: state.rules.merge?.templateFile || state.rules.templateFile,
+      templateFile: currentTemplatePath.value,
       rules: JSON.parse(JSON.stringify(rules)),
     });
 
     if (result._error) { throw new Error(result._error); }
     const returnedRules = result.rules || [];
-    if (returnedRules.length === 0) { state.preloadStatus = "❌ 无数据"; state.preloading = false; return; }
+    if (returnedRules.length === 0) {
+      state.preloadStatus = "❌ 无数据";
+      state.preloading = false;
+      return;
+    }
 
     // 更新 mergeSheetRules 中的 preloadedHeaders
     for (const updated of returnedRules) {
@@ -377,9 +383,13 @@ async function preloadAllHeaders() {
     state.preloadStatus = `✅ 已预读取 (${returnedRules.length} rule, ${totalCols} 列)`;
     ElMessage.success(`预读取完成：${returnedRules.length} 个规则`);
 
-    state.currentRule = returnedRules[0];
-    state.selectedRuleIndex = 0;
-    state.showColumnMappingPanel = true;
+    // 打开列头映射面板（选中第一条规则）
+    if (returnedRules.length > 0) {
+      state.currentRule = state.mergeSheetRules.find(
+        (r) => (r.outputSheetName || r.sheetName) === returnedRules[0].outputSheetName
+      ) || state.mergeSheetRules[0];
+      state.showColumnMappingPanel = true;
+    }
   } catch (err) {
     state.preloadStatus = "❌ 读取失败";
     ElMessage.error(err.message || "预读取失败");
@@ -392,8 +402,7 @@ async function preloadAllHeaders() {
 
 // ─── 列头映射面板 ────────────────────────────────
 
-async function selectRule(index) {
-  state.selectedRuleIndex = index;
+function selectRule(index) {
   const rule = state.mergeSheetRules[index];
   if (!rule) return;
   if (!rule.preloadedHeaders) {
@@ -409,8 +418,6 @@ function handleColumnMappingConfirm(data) {
   if (!rule) return;
   rule.removeColumnsByHeader = data.removeColumnsByHeader || [];
   state.showColumnMappingPanel = false;
-  const delCount = (data.removeColumnsByHeader || []).length;
-  ElMessage.success(`已保存${delCount > 0 ? `（删除了 ${delCount} 列）` : ''}`);
   saveMergeRules();
 }
 
@@ -438,7 +445,7 @@ async function startTask() {
     state.progress = 0;
     state.logs = [];
     const requestRules = deepClone(state.rules || {});
-    requestRules.templateFile = state.rules.merge?.templateFile || state.rules.templateFile || "";
+    requestRules.templateFile = currentTemplatePath.value;
     requestRules.merge = { ...(requestRules.merge || {}), ...deepClone(state.merge), inputDir: state.inputDir };
     requestRules.sheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
     const { taskId } = await getApi().startMergeTask({
