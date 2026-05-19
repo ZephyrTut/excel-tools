@@ -30,7 +30,7 @@ function cloneValue(value) {
 
 function normalizeCellValue(value) {
   if (value && typeof value === 'object') {
-    // Strip formula/sharedFormula metadata — only keep the cached result
+    // Strip formula/sharedFormula metadata �?only keep the cached result
     if (Object.prototype.hasOwnProperty.call(value, 'sharedFormula') ||
         Object.prototype.hasOwnProperty.call(value, 'formula')) {
       if (Object.prototype.hasOwnProperty.call(value, 'result')) {
@@ -64,7 +64,7 @@ function copyCellStyle(styleCell, targetCell) {
 
 /**
  * 统一从单元格读取列头：Date→MM-DD，文本→normalizeHeaderName
- * 与 excelReader.js 的 getHeadersFromWorksheet 保持完全一致
+ * �?excelReader.js �?getHeadersFromWorksheet 保持完全一�?
  */
 function readHeaderFromCell(cell) {
   const value = cell.value;
@@ -100,7 +100,7 @@ function resolveHeaderMap(sheet, headerRows) {
 }
 
 /**
- * 找零填充范围：从"上月结存"所在列到"可用结存"列（含），空白填 0
+ * 找零填充范围：从"上月结存"所在列�?可用结存"列（含），空白填 0
  */
 function resolveZeroFillRange(templateSheet, headerRows) {
   const headerMap = resolveHeaderMap(templateSheet, headerRows);
@@ -196,7 +196,7 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
       for (let rowNum = context.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
         const sourceRow = sourceSheet.getRow(rowNum);
         const vendor = textValue(sourceRow.getCell(context.splitColumnIndex).value).trim();
-        if (!vendor) { /* 空白供应商跳过 */ continue; }
+        if (!vendor) { /* 空白供应商跳�?*/ continue; }
         const vendorKey = vendor;
 
         const valuesByCol = new Map();
@@ -292,7 +292,7 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
   let seq = 0;
   const templateStyleRow =
     context.templateSheet.getRow(context.headerRows + 1) || context.templateSheet.getRow(context.headerRows);
-  // Compute max column from actual data — template may have 2570 cols but data ~11
+  // Compute max column from actual data �?template may have 2570 cols but data ~11
   let dataMaxCol = 0;
   for (const rows of sheetRowsState.vendorRows.values()) {
     for (const rowMap of rows) {
@@ -309,10 +309,6 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
 
   for (const vendor of orderedVendors) {
     const rows = sheetRowsState.vendorRows.get(vendor) || [];
-    if (rows.length > 0 && !vendor) {
-      console.log('[DEBUG] EMPTY vendor key in write!');
-    }
-    const rows = sheetRowsState.vendorRows.get(vendor) || [];
     for (const rowMap of rows) {
       const outRow = outputSheet.getRow(outputSheet.rowCount + 1);
       outRow.height = templateStyleRow.height;
@@ -320,12 +316,8 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
         const styleCell = templateStyleRow.getCell(col);
         const outCell = outRow.getCell(col);
         let value = rowMap.has(col) ? rowMap.get(col) : null;
-        if (col === 3 && value !== null && value !== undefined) {
-          // vendor has value, good
-        } else if (col === 3 && rowNum === 4) {
-          // debug first data row vendor
-        }
-        // 零填充：从"上月结存"到"可用结存"（含），空白填 0
+        
+        // 零填充：�?上月结存"�?可用结存"（含），空白�?0
         if (value == null &&
             context.zeroFillStartColumnIndex > 0 &&
             col >= context.zeroFillStartColumnIndex &&
@@ -397,7 +389,7 @@ async function runMergeEngine({
   reportProgress(70, "Building merged workbook");
   const outputBook = new ExcelJS.Workbook();
   for (const templateSheet of templateWorkbook.worksheets) {
-    // 隐藏 sheet 不加入合并
+    // 隐藏 sheet 不加入合�?
     if (templateSheet.state === 'hidden') continue;
 
     const outputSheet = outputBook.addWorksheet(templateSheet.name);
@@ -423,7 +415,7 @@ async function runMergeEngine({
 
 module.exports = {
   runMergeEngine,
-  // 以下为测试用的内部函数导出
+  // 以下为测试用的内部函数导�?
   normalizeCellValue,
   cloneValue,
   cloneStyle,

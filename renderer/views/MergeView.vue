@@ -383,13 +383,7 @@ async function preloadAllHeaders() {
     state.preloadStatus = `✅ 已预读取 (${returnedRules.length} rule, ${totalCols} 列)`;
     ElMessage.success(`预读取完成：${returnedRules.length} 个规则`);
 
-    // 打开列头映射面板（选中第一条规则）
-    if (returnedRules.length > 0) {
-      state.currentRule = state.mergeSheetRules.find(
-        (r) => (r.outputSheetName || r.sheetName) === returnedRules[0].outputSheetName
-      ) || state.mergeSheetRules[0];
-      state.showColumnMappingPanel = true;
-    }
+    // 预读取完成，用户可手动点击"列头映射"按钮打开面板
   } catch (err) {
     state.preloadStatus = "❌ 读取失败";
     ElMessage.error(err.message || "预读取失败");

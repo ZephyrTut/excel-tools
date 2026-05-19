@@ -5,7 +5,7 @@ const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
 const updater = require("./updater");
 const { loadRules, saveRules } = require("../services/split/ruleManager");
-const { getSheetNames, getSheetHeadersWithPosition, getMultipleSheetHeaders, readWorkbook } = require("../services/split/excelReader");
+const { getSheetNames, getSheetHeadersWithPosition, getMultipleSheetHeaders, readWorkbook, textValue } = require("../services/split/excelReader");
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
 
@@ -316,7 +316,7 @@ function registerIpcHandlers() {
         return { rules: incoming.map((r) => ({ sheetName: r.sheetName, outputSheetName: r.outputSheetName, headerRows: r.headerRows, preloadedHeaders: { templateHeaders: templateHeadersBySheet[r.outputSheetName || r.sheetName] || [], sources: [] } })) };
       }
 
-      // 3. 8个一批并发读每个源文件
+      // 3. 8个一批并发读每个源文件——读列头+读供应商数据
       const CONCURRENCY = 8;
       const fileResults = [];
       let processedCount = 0;
@@ -332,9 +332,27 @@ function registerIpcHandlers() {
             (arr) => arr.length > 0 && arr.some((h) => h !== null)
           );
           if (!hasData) return null;
+
+          // 读每个 sheet 的供应商列，收集供应商名
+          const vendorsBySheet = {};
+          const wb = await readWorkbook(filePath);
+          for (const rule of incoming) {
+            const sheet = wb.getWorksheet(rule.sheetName);
+            if (!sheet) continue;
+            const colIndex = (function(l){return[...l.toUpperCase()].reduce((a,c)=>a*26+c.charCodeAt(0)-64,0)})(rule.splitColumn||"C");
+            const vendors = new Set();
+            for (let r = (rule.headerRows || 1) + 1; r <= sheet.rowCount; r++) {
+              const cell = sheet.getRow(r).getCell(colIndex);
+              const v = textValue(cell.value).trim();
+              if (v) vendors.add(v);
+            }
+            if (vendors.size > 0) vendorsBySheet[rule.sheetName] = [...vendors];
+          }
+
           return {
             file: path.basename(filePath),
             headersBySheet: headersMap,
+            vendorsBySheet,
           };
         } catch {
           return null;
@@ -352,7 +370,7 @@ function registerIpcHandlers() {
         prog(pct, `正在读取 (${processedCount}/${allFiles.length})`);
       }
 
-      // 4. 按规则维度重组
+      // 4. 按规则维度重组——每个供应商一行
       prog(92, "整理数据...");
       const resultRules = incoming.map((rule) => {
         const key = rule.outputSheetName || rule.sheetName;
@@ -360,11 +378,22 @@ function registerIpcHandlers() {
         const sources = [];
         for (const fr of fileResults) {
           const headers = fr.headersBySheet[rule.sheetName];
-          if (headers && headers.length > 0 && headers.some((h) => h !== null)) {
+          if (!headers || headers.length === 0) continue;
+          const vendors = fr.vendorsBySheet?.[rule.sheetName] || [];
+          if (vendors.length === 0) {
+            // 没有供应商数据，用文件名
             sources.push({
               file: fr.file,
               headers: headers.map((h) => (h === null || h === undefined ? null : String(h))),
             });
+          } else {
+            // 每个供应商一行
+            for (const vendor of vendors) {
+              sources.push({
+                file: vendor,
+                headers: headers.map((h) => (h === null || h === undefined ? null : String(h))),
+              });
+            }
           }
         }
         return {
