@@ -112,6 +112,12 @@ function getHeadersFromWorksheet(worksheet, headerRows = 1) {
   let lastIndex = headers.length - 1;
   while (lastIndex >= 0 && headers[lastIndex] === null) lastIndex -= 1;
   headers.length = lastIndex + 1;
+  // 确保每个值都是 string | null，杜绝不可 clone 的对象
+  for (let i = 0; i < headers.length; i++) {
+    if (headers[i] !== null && typeof headers[i] !== 'string') {
+      headers[i] = String(headers[i]);
+    }
+  }
   return headers;
 }
 

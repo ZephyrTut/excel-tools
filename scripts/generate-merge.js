@@ -2,20 +2,21 @@ const path = require("node:path");
 const { runMergeTask } = require("../services/merge/mergeService");
 
 async function main() {
-  const inputDir = path.join(__dirname, "..", "test");
+  const testDir = path.join(__dirname, "..", "test");
+  const inputDir = path.join(testDir, "subExcel");
 
   const request = {
     inputDir,
     outputDir: path.join(__dirname, "..", "output"),
     projectRoot: path.join(__dirname, ".."),
     rules: {
-      templateFile: path.join(inputDir, "湖州仓26年5月13日进销存报表.xlsx"),
+      templateFile: path.join(testDir, "湖州仓26年5月13日进销存报表.xlsx"),
       overwriteIfExists: false,
       ifExistsStrategy: "timestamp",
       merge: {
         orderSheetName: "日报",
         orderColumn: "C",
-        inputDir,
+        inputDir,  // subExcel 目录
         outputName: "合并汇总"
       },
       sheetRules: [

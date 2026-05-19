@@ -99,6 +99,25 @@ function resolveHeaderMap(sheet, headerRows) {
   return map;
 }
 
+/**
+ * 找零填充范围：从"上月结存"所在列到"可用结存"列（含），空白填 0
+ */
+function resolveZeroFillRange(templateSheet, headerRows) {
+  const headerMap = resolveHeaderMap(templateSheet, headerRows);
+  const availableBalanceCol = headerMap.get("可用结存") || headerMap.get("可用结余") || -1;
+  if (availableBalanceCol < 1) return { zeroFillStartColumnIndex: -1, availableBalanceColumnIndex: -1 };
+
+  let startCol = -1;
+  for (const [name, col] of headerMap.entries()) {
+    if (col >= availableBalanceCol) continue;
+    if (name.includes("上月结存")) {
+      if (startCol === -1 || col < startCol) startCol = col;
+    }
+  }
+
+  return { zeroFillStartColumnIndex: startCol, availableBalanceColumnIndex: availableBalanceCol };
+}
+
 function resolveSequenceColumn(templateSheet, headerRows) {
   for (let rowNum = 1; rowNum <= headerRows; rowNum += 1) {
     const row = templateSheet.getRow(rowNum);
@@ -177,8 +196,8 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
       for (let rowNum = context.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
         const sourceRow = sourceSheet.getRow(rowNum);
         const vendor = textValue(sourceRow.getCell(context.splitColumnIndex).value).trim();
-        if (!vendor && context.skipEmpty !== false) continue;
-        const vendorKey = vendor || "EMPTY";
+        if (!vendor) continue;
+        const vendorKey = vendor;
 
         const valuesByCol = new Map();
         for (const [sourceCol, targetCol] of colMap.entries()) {
@@ -288,6 +307,14 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
         const styleCell = templateStyleRow.getCell(col);
         const outCell = outRow.getCell(col);
         let value = rowMap.has(col) ? rowMap.get(col) : null;
+        // 零填充：从"上月结存"到"可用结存"（含），空白填 0
+        if (value == null &&
+            context.zeroFillStartColumnIndex > 0 &&
+            col >= context.zeroFillStartColumnIndex &&
+            col <= context.availableBalanceColumnIndex) {
+          value = 0;
+        }
+
         if (context.sequenceColumnIndex === col) {
           seq += 1;
           value = seq;
@@ -317,10 +344,13 @@ async function runMergeEngine({
           { sheetName: rule.outputSheetName }
         );
       }
+      const { zeroFillStartColumnIndex, availableBalanceColumnIndex } = resolveZeroFillRange(templateSheet, rule.headerRows);
       return {
         ...rule,
         templateSheet,
         sequenceColumnIndex: resolveSequenceColumn(templateSheet, rule.headerRows),
+        zeroFillStartColumnIndex,
+        availableBalanceColumnIndex,
         orderList: [],
         orderSet: new Set()
       };
@@ -339,9 +369,18 @@ async function runMergeEngine({
   reportProgress(20, "Collecting source rows");
   const sheetRows = await collectSheetRowsByVendor(sourceFiles, ruleContexts, logger);
 
+  const totalRows = [...sheetRows.values()].reduce((acc, state) => {
+    let count = 0;
+    for (const rows of state.vendorRows.values()) count += rows.length;
+    return acc + count;
+  }, 0);
+
   reportProgress(70, "Building merged workbook");
   const outputBook = new ExcelJS.Workbook();
   for (const templateSheet of templateWorkbook.worksheets) {
+    // 隐藏 sheet 不加入合并
+    if (templateSheet.state === 'hidden') continue;
+
     const outputSheet = outputBook.addWorksheet(templateSheet.name);
     const context = ruleContexts.find((rule) => rule.outputSheetName === templateSheet.name);
     if (!context) {
@@ -351,11 +390,7 @@ async function runMergeEngine({
     writeMergedSheet(outputSheet, context, sheetRows.get(context.outputSheetName), mergeConfig);
   }
 
-  const totalRows = [...sheetRows.values()].reduce((acc, state) => {
-    let count = 0;
-    for (const rows of state.vendorRows.values()) count += rows.length;
-    return acc + count;
-  }, 0);
+  reportProgress(100, "Completed");
 
   return {
     workbook: outputBook,
@@ -368,5 +403,18 @@ async function runMergeEngine({
 }
 
 module.exports = {
-  runMergeEngine
+  runMergeEngine,
+  // 以下为测试用的内部函数导出
+  normalizeCellValue,
+  cloneValue,
+  cloneStyle,
+  copyCellStyle,
+  readHeaderFromCell,
+  resolveHeaderMap,
+  resolveSequenceColumn,
+  mapSourceToTargetColumns,
+  buildOrderList,
+  resolveOrderRule,
+  orderedVendorsForSheet,
+  textValue,
 };

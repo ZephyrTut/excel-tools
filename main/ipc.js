@@ -5,9 +5,30 @@ const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
 const updater = require("./updater");
 const { loadRules, saveRules } = require("../services/split/ruleManager");
-const { getSheetNames, getSheetHeadersWithPosition } = require("../services/split/excelReader");
+const { getSheetNames, getSheetHeadersWithPosition, readWorkbook } = require("../services/split/excelReader");
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
+
+/**
+ * 递归净化数据，移除所有不可 structuredClone 的值
+ */
+function deepCloneable(obj, seen = new WeakSet()) {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') return obj;
+  if (typeof obj === 'bigint') return Number(obj);
+  if (typeof obj === 'function' || typeof obj === 'symbol') return null;
+  if (seen.has(obj)) return '[Circular]';
+  seen.add(obj);
+  if (Array.isArray(obj)) return obj.map(v => deepCloneable(v, seen));
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj instanceof Map) return Object.fromEntries(obj);
+  if (obj instanceof Set) return [...obj];
+  const result = {};
+  for (const key of Object.keys(obj)) {
+    result[key] = deepCloneable(obj[key], seen);
+  }
+  return result;
+}
 
 // ── Sheet name cache (避免重复读取整份 Excel) ──────────────────
 const sheetNameCache = new Map();
@@ -251,58 +272,123 @@ function registerIpcHandlers() {
     return { cancelled };
   });
 
-  // ── Merge preload headers (一次性预读取所有标题行) ────────────
+  // ── Merge preload headers (file-by-file + 8路并发) ───────────
 
   ipcMain.handle("merge:preload-headers", async (_, payload) => {
-    const { inputDir, templateFile, rules } = payload || {};
-    if (!inputDir || !templateFile || !Array.isArray(rules) || rules.length === 0) {
-      return { rules: [] };
-    }
-
-    // 逐 rule 处理：读模板列头 + 读所有子表该 sheet 的列头
-    for (const rule of rules) {
-      const key = rule.outputSheetName || rule.sheetName;
-      if (!key) continue;
-
-      // 读模板列头
-      let templateHeaders = [];
-      try {
-        templateHeaders = await getSheetHeadersWithPosition(templateFile, key, rule.headerRows || 1);
-      } catch {
-        templateHeaders = [];
+    try {
+      const { inputDir, templateFile, rules: incoming } = payload || {};
+      if (!inputDir || !templateFile || !Array.isArray(incoming) || incoming.length === 0) {
+        return { rules: [] };
       }
 
-      // 子表目录
+      function prog(pct, stage) {
+        try { broadcast({ type: "progress", taskId: "preload-headers", progress: Math.round(pct), stage }); } catch {}
+      }
+
+      prog(5, "扫描源文件目录...");
+
       let entries = [];
-      try {
-        entries = await fs.readdir(inputDir, { withFileTypes: true });
-      } catch {
-        entries = [];
-      }
-      const files = entries
-        .filter((entry) => entry.isFile())
-        .map((entry) => path.join(inputDir, entry.name))
+      try { entries = await fs.readdir(inputDir, { withFileTypes: true }); } catch { entries = []; }
+      const allFiles = entries
+        .filter((e) => e.isFile())
+        .map((e) => path.join(inputDir, e.name))
         .filter((fp) => fp.toLowerCase().endsWith(".xlsx"))
         .filter((fp) => !path.basename(fp).startsWith("~$"))
         .filter((fp) => path.resolve(fp) !== path.resolve(templateFile));
 
-      // 读每个子表该 sheet 的列头
-      const sources = [];
-      for (const filePath of files) {
+      if (allFiles.length === 0) {
+        prog(100, "未找到源文件");
+        return { rules: [] };
+      }
+
+      prog(10, `找到 ${allFiles.length} 个源文件，读取模板...`);
+
+      // 1. 一次读取所有规则的模板 headers（只打开模板文件 1 次）
+      const templateConfigs = incoming.map((r) => ({
+        sheetName: r.outputSheetName || r.sheetName,
+        headerRows: r.headerRows || 1,
+      }));
+      let templateHeadersBySheet = {};
+      try {
+        templateHeadersBySheet = await getMultipleSheetHeaders(templateFile, templateConfigs);
+      } catch {
+        templateHeadersBySheet = {};
+      }
+
+      prog(15, "模板读取完成，并发读取源文件...");
+
+      // 2. 8路并发读取源文件 —— 每个文件只打开 1 次
+      const CONCURRENCY = 8;
+      const fileResults = [];
+
+      async function processFile(filePath) {
         try {
-          const headers = await getSheetHeadersWithPosition(filePath, rule.sheetName, rule.headerRows || 1);
-          if (headers.some((h) => h !== null)) {
-            sources.push({ file: path.basename(filePath), headers });
-          }
+          const configs = incoming.map((r) => ({
+            sheetName: r.sheetName,
+            headerRows: r.headerRows || 1,
+          }));
+          const headersMap = await getMultipleSheetHeaders(filePath, configs);
+          const hasData = Object.values(headersMap).some(
+            (arr) => arr.length > 0 && arr.some((h) => h !== null)
+          );
+          if (!hasData) return null;
+          return {
+            file: path.basename(filePath),
+            headersBySheet: headersMap,
+          };
         } catch {
-          // 跳过无法读取的文件
+          return null;
         }
       }
 
-      rule.preloadedHeaders = { templateHeaders, sources };
-    }
+      let processedCount = 0;
+      for (let i = 0; i < allFiles.length; i += CONCURRENCY) {
+        const chunk = allFiles.slice(i, i + CONCURRENCY);
+        const chunkResults = await Promise.all(chunk.map(processFile));
+        for (const result of chunkResults) {
+          if (result) fileResults.push(result);
+        }
+        processedCount += chunk.length;
+        const pct = 15 + Math.round((processedCount / allFiles.length) * 75);
+        prog(pct, `已读取 ${processedCount}/${allFiles.length} 个文件`);
+      }
 
-    return { rules };
+      prog(92, "整理数据...");
+
+      // 3. 按规则维度组织返回数据（结构与之前一致）
+      const resultRules = incoming.map((rule) => {
+        const key = rule.outputSheetName || rule.sheetName;
+        const templateHeaders = templateHeadersBySheet[key] || [];
+
+        const sources = [];
+        for (const fr of fileResults) {
+          const headers = fr.headersBySheet[rule.sheetName];
+          if (headers && headers.length > 0 && headers.some((h) => h !== null)) {
+            sources.push({
+              file: fr.file,
+              headers: headers.map((h) => (h === null || h === undefined ? null : String(h))),
+            });
+          }
+        }
+
+        return {
+          sheetName: String(rule.sheetName || ""),
+          outputSheetName: String(key),
+          headerRows: Number(rule.headerRows || 1),
+          preloadedHeaders: {
+            templateHeaders: (templateHeaders || []).map((h) => (h === null || h === undefined ? null : String(h))),
+            sources,
+          },
+        };
+      });
+
+      prog(100, `完成 ${resultRules.length} 个规则`);
+      return { rules: resultRules };
+    } catch (err) {
+      console.error("preload-headers error:", err?.message || err);
+      try { broadcast({ type: "progress", taskId: "preload-headers", progress: 100, stage: "读取失败" }); } catch {}
+      return { rules: [] };
+    }
   });
 
   // ── Auto-update ──────────────────────────────────────────────────

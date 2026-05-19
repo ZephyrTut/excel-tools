@@ -45,7 +45,7 @@
         <el-button @click="addRule">新增规则</el-button>
         <el-button
           type="info"
-          :disabled="!state.inputDir || !state.rules.templateFile"
+          :disabled="!state.inputDir || !(state.rules.merge?.templateFile || state.rules.templateFile)"
           :loading="state.preloading"
           @click="preloadAllHeaders"
         >
@@ -159,7 +159,7 @@ let unsubTask = null;
 const MAX_LOG_LINES = 500;
 
 const canRun = computed(() => {
-  return !!state.inputDir && !!state.outputDir && !!state.rules.templateFile && state.mergeSheetRules.length > 0;
+  return !!state.inputDir && !!state.outputDir && !!(state.rules.merge?.templateFile || state.rules.templateFile) && state.mergeSheetRules.length > 0;
 });
 
 const statusType = computed(() => {
@@ -221,7 +221,7 @@ async function openTemplateDialog() {
 async function loadTemplateList() {
   const list = await getApi().listTemplates();
   state.templateList = list;
-  const currentPath = state.rules.templateFile || "";
+  const currentPath = state.rules.merge?.templateFile || state.rules.templateFile || "";
   state.selectedTemplatePath = currentPath && list.find((t) => t.path === currentPath) ? currentPath :
     list.find((t) => t.isDefault)?.path || (list.length > 0 ? list[0].path : "");
 }
@@ -257,13 +257,15 @@ async function handleResetDefault() {
 function handleClearTemplate() { state.selectedTemplatePath = ""; }
 
 function dialogConfirm() {
-  state.rules.templateFile = state.selectedTemplatePath || "";
+  if (!state.rules.merge) state.rules.merge = {};
+  state.rules.merge.templateFile = state.selectedTemplatePath || "";
   state.showTemplateDialog = false;
   loadTemplateSheetNames();
+  saveMergeRules();
 }
 
 async function loadTemplateSheetNames() {
-  const tplPath = state.rules.templateFile;
+  const tplPath = state.rules.merge?.templateFile || state.rules.templateFile;
   if (!tplPath) { state.templateSheetNames = []; state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, []); return; }
   try { state.templateSheetNames = await getApi().getSheetNames(tplPath); }
   catch { state.templateSheetNames = []; }
@@ -296,7 +298,8 @@ async function saveMergeRules() {
   next.mergeSheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
   next.lastMergeInputDir = state.inputDir;
   next.lastMergeOutputDir = state.outputDir;
-  next.templateFile = state.rules.templateFile || "";
+  if (!next.merge) next.merge = {};
+  next.merge.templateFile = state.rules.merge?.templateFile || state.rules.templateFile || "";
   await getApi().saveRules(next);
   state.rules = next;
   ElMessage.success("合并规则已保存");
@@ -317,11 +320,12 @@ function removeRule(index) {
 // ─── 预读取所有标题行 ────────────────────────────
 
 async function preloadAllHeaders() {
-  if (!state.inputDir || !state.rules.templateFile) { ElMessage.warning("请先选择数据目录和模板文件"); return; }
+  if (!state.inputDir || !(state.rules.merge?.templateFile || state.rules.templateFile)) { ElMessage.warning("请先选择数据目录和模板文件"); return; }
   state.preloading = true;
   state.preloadStatus = "⏳ 正在读取...";
   state.logs = [];
   state.progress = 0;
+  state.taskId = 'preload-headers'; // 让进度事件被 handleEvent 接收
   try {
     const api = getApi();
     const rulesConfig = state.rules;
@@ -343,12 +347,14 @@ async function preloadAllHeaders() {
       return;
     }
 
+    // deep clone 确保没有 Vue reactive 代理污染
     const result = await api.preloadMergeHeaders({
       inputDir: state.inputDir,
-      templateFile: state.rules.templateFile,
-      rules,
+      templateFile: state.rules.merge?.templateFile || state.rules.templateFile,
+      rules: JSON.parse(JSON.stringify(rules)),
     });
 
+    if (result._error) { throw new Error(result._error); }
     const returnedRules = result.rules || [];
     if (returnedRules.length === 0) { state.preloadStatus = "❌ 无数据"; state.preloading = false; return; }
 
@@ -367,6 +373,7 @@ async function preloadAllHeaders() {
     state.rules = saved;
 
     const totalCols = returnedRules.reduce((s, r) => s + ((r.preloadedHeaders?.templateHeaders || []).length), 0);
+    state.progress = 100;
     state.preloadStatus = `✅ 已预读取 (${returnedRules.length} rule, ${totalCols} 列)`;
     ElMessage.success(`预读取完成：${returnedRules.length} 个规则`);
 
@@ -378,6 +385,7 @@ async function preloadAllHeaders() {
     ElMessage.error(err.message || "预读取失败");
     pushLog(`预读取失败：${err.message || "unknown error"}`);
   } finally {
+    state.taskId = '';
     state.preloading = false;
   }
 }
@@ -430,7 +438,7 @@ async function startTask() {
     state.progress = 0;
     state.logs = [];
     const requestRules = deepClone(state.rules || {});
-    requestRules.templateFile = state.rules.templateFile || "";
+    requestRules.templateFile = state.rules.merge?.templateFile || state.rules.templateFile || "";
     requestRules.merge = { ...(requestRules.merge || {}), ...deepClone(state.merge), inputDir: state.inputDir };
     requestRules.sheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
     const { taskId } = await getApi().startMergeTask({
