@@ -5,9 +5,32 @@ const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
 const updater = require("./updater");
 const { loadRules, saveRules } = require("../services/split/ruleManager");
-const { getSheetNames } = require("../services/split/excelReader");
+const { getSheetNames, getSheetHeadersWithPosition } = require("../services/split/excelReader");
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
+
+// ── Sheet name cache (避免重复读取整份 Excel) ──────────────────
+const sheetNameCache = new Map();
+const CACHE_TTL_MS = 30_000; // 30 秒
+
+function getCachedSheetNames(filePath) {
+  const entry = sheetNameCache.get(filePath);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+    return entry.names;
+  }
+  return null;
+}
+
+function setCachedSheetNames(filePath, names) {
+  sheetNameCache.set(filePath, { names, timestamp: Date.now() });
+  // 清理过期缓存，避免内存泄漏
+  if (sheetNameCache.size > 50) {
+    const now = Date.now();
+    for (const [key, val] of sheetNameCache) {
+      if (now - val.timestamp > CACHE_TTL_MS) sheetNameCache.delete(key);
+    }
+  }
+}
 
 const runner = new WorkerRunner();
 function getProjectRoot() {
@@ -112,7 +135,24 @@ function registerIpcHandlers() {
   // ── Template management ──────────────────────────────────────────
 
   ipcMain.handle("file:get-sheet-names", async (_, filePath) => {
-    return getSheetNames(filePath);
+    // 缓存命中 → 不进 ExcelJS，不阻塞主进程
+    const cached = getCachedSheetNames(filePath);
+    if (cached) return cached;
+
+    // 使用 setImmediate 让事件循环先处理 UI 渲染，再开始 Excel 读取
+    const names = await new Promise((resolve, reject) => {
+      setImmediate(async () => {
+        try {
+          const result = await getSheetNames(filePath);
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    setCachedSheetNames(filePath, names);
+    return names;
   });
 
   /** List all templates in userData/templates/. */
@@ -209,6 +249,60 @@ function registerIpcHandlers() {
   ipcMain.handle("task:cancel", async (_, taskId) => {
     const cancelled = await runner.cancelTask(taskId);
     return { cancelled };
+  });
+
+  // ── Merge preload headers (一次性预读取所有标题行) ────────────
+
+  ipcMain.handle("merge:preload-headers", async (_, payload) => {
+    const { inputDir, templateFile, rules } = payload || {};
+    if (!inputDir || !templateFile || !Array.isArray(rules) || rules.length === 0) {
+      return { rules: [] };
+    }
+
+    // 逐 rule 处理：读模板列头 + 读所有子表该 sheet 的列头
+    for (const rule of rules) {
+      const key = rule.outputSheetName || rule.sheetName;
+      if (!key) continue;
+
+      // 读模板列头
+      let templateHeaders = [];
+      try {
+        templateHeaders = await getSheetHeadersWithPosition(templateFile, key, rule.headerRows || 1);
+      } catch {
+        templateHeaders = [];
+      }
+
+      // 子表目录
+      let entries = [];
+      try {
+        entries = await fs.readdir(inputDir, { withFileTypes: true });
+      } catch {
+        entries = [];
+      }
+      const files = entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => path.join(inputDir, entry.name))
+        .filter((fp) => fp.toLowerCase().endsWith(".xlsx"))
+        .filter((fp) => !path.basename(fp).startsWith("~$"))
+        .filter((fp) => path.resolve(fp) !== path.resolve(templateFile));
+
+      // 读每个子表该 sheet 的列头
+      const sources = [];
+      for (const filePath of files) {
+        try {
+          const headers = await getSheetHeadersWithPosition(filePath, rule.sheetName, rule.headerRows || 1);
+          if (headers.some((h) => h !== null)) {
+            sources.push({ file: path.basename(filePath), headers });
+          }
+        } catch {
+          // 跳过无法读取的文件
+        }
+      }
+
+      rule.preloadedHeaders = { templateHeaders, sources };
+    }
+
+    return { rules };
   });
 
   // ── Auto-update ──────────────────────────────────────────────────

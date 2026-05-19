@@ -14,9 +14,6 @@
         <el-tab-pane label="合并汇总" name="merge">
           <MergeView />
         </el-tab-pane>
-        <el-tab-pane label="合并汇总" name="merge">
-          <MergeView />
-        </el-tab-pane>
       </el-tabs>
     </el-main>
 

@@ -133,7 +133,9 @@
           <el-button @click="handleImportTemplate">📂 导入模板</el-button>
           <el-button @click="handleResetDefault">恢复默认</el-button>
           <el-button @click="handleClearTemplate">不使用模板</el-button>
-          <el-button type="primary" @click="dialogConfirm">确定</el-button>
+          <el-button type="primary" :loading="state.templateLoading" :disabled="state.templateLoading" @click="dialogConfirm">
+            {{ state.templateLoading ? '加载 Sheet 名称中...' : '确定' }}
+          </el-button>
           <el-button @click="state.showTemplateDialog = false">取消</el-button>
         </el-space>
       </template>
@@ -159,6 +161,7 @@ const state = reactive({
   progress: 0,
   logs: [],
   showTemplateDialog: false,
+  templateLoading: false, // 模板 sheet 名加载中（防连点 + 显示加载态）
   templateList: [],
   selectedTemplatePath: "",
   sourceSheetNames: [],
@@ -372,25 +375,41 @@ function handleClearTemplate() {
   state.selectedTemplatePath = "";
 }
 
+let _loadingSheetNames = false; // 并发调用守卫
+
 async function loadTemplateSheetNames() {
-  const tplPath = state.rules.templateFile;
-  if (tplPath) {
-    try {
-      state.templateSheetNames = await getApi().getSheetNames(tplPath);
-    } catch {
+  if (_loadingSheetNames) return; // 已有加载中的请求，跳过防竞态
+  _loadingSheetNames = true;
+  try {
+    const tplPath = state.rules.templateFile;
+    if (tplPath) {
+      try {
+        state.templateSheetNames = await getApi().getSheetNames(tplPath);
+      } catch {
+        state.templateSheetNames = [];
+      }
+    } else {
       state.templateSheetNames = [];
     }
-  } else {
-    state.templateSheetNames = [];
+  } finally {
+    _loadingSheetNames = false;
   }
 }
 
-function dialogConfirm() {
-  state.rules.templateFile = state.selectedTemplatePath || "";
-  state.showTemplateDialog = false;
-  loadTemplateSheetNames();
-  // Auto-save rules so the selection persists
-  saveRules();
+async function dialogConfirm() {
+  if (state.templateLoading) return; // 已有操作进行中，防连点
+  state.templateLoading = true;
+  try {
+    state.rules.templateFile = state.selectedTemplatePath || "";
+    // 先保存规则（轻操作），再异步加载 sheet 名
+    await saveRules();
+    await loadTemplateSheetNames();
+    state.showTemplateDialog = false;
+  } catch (err) {
+    ElMessage.error(err.message || "模板切换失败");
+  } finally {
+    state.templateLoading = false;
+  }
 }
 
 async function loadRules() {
