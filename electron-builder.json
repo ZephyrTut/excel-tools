@@ -18,6 +18,7 @@
   ],
   "win": {
     "icon": "assets/logo.png",
+    "artifactName": "Excel-Tools-Setup-${version}.${ext}",
     "target": [
       {
         "target": "nsis",
