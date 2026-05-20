@@ -2,9 +2,9 @@
   <div class="split-grid">
     <el-card class="panel-card">
       <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center">
+        <div class="card-header-row">
           <span>任务配置</span>
-          <el-button text type="primary" @click="openTemplateDialog">
+          <el-button text type="primary" size="small" @click="openTemplateDialog">
             ⚙ 模板
           </el-button>
         </div>
@@ -56,16 +56,17 @@
           />
         </el-form-item>
       </el-form>
-      <el-space>
+      <div class="divider"></div>
+      <div class="action-bar">
         <el-button type="primary" @click="saveRules">保存规则</el-button>
         <el-button @click="addRule">新增规则</el-button>
         <el-button type="success" :disabled="!canRun" @click="startTask">开始拆分</el-button>
         <el-button type="warning" :disabled="!state.taskId" @click="cancelTask">取消任务</el-button>
-      </el-space>
+      </div>
     </el-card>
 
     <el-card class="panel-card">
-      <template #header><div>拆分规则</div></template>
+      <template #header><span>拆分规则</span></template>
       <el-alert
         v-if="state.sheetWarnings.length > 0"
         :title="`Sheet 名称不匹配（${state.sheetWarnings.length} 项）`"
@@ -76,7 +77,7 @@
         style="margin-bottom: 12px"
       >
         <template #default>
-          <div v-for="(w, i) in state.sheetWarnings" :key="i" style="font-size: 13px; line-height: 1.8">
+          <div v-for="(w, i) in state.sheetWarnings" :key="i" class="warning-line">
             {{ i + 1 }}. {{ w }}
           </div>
         </template>
@@ -92,7 +93,7 @@
     <LogPanel :lines="state.logs" @clear="state.logs = []" />
 
     <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="560px" append-to-body>
-      <p style="font-size: 13px; color: #888; margin: 0 0 12px 0;">
+      <p class="dialog-hint">
         模板用于提供列宽、字体、底色等样式参考。不设置则从源文件获取样式。
       </p>
 
@@ -136,7 +137,7 @@
         </el-table-column>
       </el-table>
 
-      <div v-if="state.templateList.length === 0" style="text-align: center; color: #999; padding: 32px 0">
+      <div v-if="state.templateList.length === 0" class="empty-state">
         暂无模板，请导入
       </div>
 
@@ -588,14 +589,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.drop-zone {
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   width: 100%;
-  border: 2px dashed transparent;
-  border-radius: var(--el-border-radius-base);
-  transition: all 0.2s ease;
 }
-.drop-zone--active {
-  border-color: var(--el-color-primary);
-  background: rgba(64, 158, 255, 0.05);
+.divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 8px 0 16px;
+}
+.action-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.warning-line {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.dialog-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 32px 0;
 }
 </style>

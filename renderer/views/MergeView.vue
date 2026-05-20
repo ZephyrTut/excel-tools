@@ -2,9 +2,9 @@
   <div class="merge-grid">
     <el-card class="panel-card">
       <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center">
+        <div class="card-header-row">
           <span>合并汇总配置</span>
-          <el-button text type="primary" @click="openTemplateDialog">⚙ 模板</el-button>
+          <el-button text type="primary" size="small" @click="openTemplateDialog">⚙ 模板</el-button>
         </div>
       </template>
 
@@ -52,7 +52,8 @@
         </el-form-item>
       </el-form>
 
-      <el-space wrap>
+      <div class="divider"></div>
+      <div class="action-bar">
         <el-button type="primary" @click="saveMergeRules">保存规则</el-button>
         <el-button @click="addRule">新增规则</el-button>
         <el-button
@@ -65,11 +66,11 @@
         </el-button>
         <el-button type="success" :disabled="!canRun" @click="startTask">开始合并</el-button>
         <el-button type="warning" :disabled="!state.taskId" @click="cancelTask">取消任务</el-button>
-      </el-space>
+      </div>
     </el-card>
 
     <el-card class="panel-card">
-      <template #header><div>合并规则（按 sheet）</div></template>
+      <template #header><span>合并规则（按 sheet）</span></template>
       <MergeRuleTable
         :rules="state.mergeSheetRules"
         :source-sheet-names="state.sourceSheetNames"
@@ -93,7 +94,7 @@
 
     <!-- 模板选择对话框 -->
     <el-dialog v-model="state.showTemplateDialog" title="模板文件设置" width="560px" append-to-body>
-      <p style="font-size: 13px; color: #888; margin: 0 0 12px 0;">合并模板用于提供样式与排序基准。</p>
+      <p class="dialog-hint">合并模板用于提供样式与排序基准。</p>
       <el-table :data="state.templateList" style="width: 100%" max-height="320" stripe>
         <el-table-column label="" width="48">
           <template #default="{ row }">
@@ -120,7 +121,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="state.templateList.length === 0" style="text-align: center; color: #999; padding: 32px 0">暂无模板，请导入</div>
+      <div v-if="state.templateList.length === 0" class="empty-state">暂无模板，请导入</div>
       <template #footer>
         <el-space wrap>
           <el-button @click="handleImportTemplate">📂 导入模板</el-button>
@@ -513,14 +514,30 @@ onUnmounted(() => { if (unsubTask) unsubTask(); });
 </script>
 
 <style scoped>
-.drop-zone {
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   width: 100%;
-  border: 2px dashed transparent;
-  border-radius: var(--el-border-radius-base);
-  transition: all 0.2s ease;
 }
-.drop-zone--active {
-  border-color: var(--el-color-primary);
-  background: rgba(64, 158, 255, 0.05);
+.divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 8px 0 16px;
+}
+.action-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dialog-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 32px 0;
 }
 </style>
