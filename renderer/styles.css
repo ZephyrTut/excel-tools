@@ -143,20 +143,24 @@ body {
 /* ---- Drop Zone 通用 ---- */
 .drop-zone {
   width: 100%;
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
+  cursor: default;
+  position: relative;
   padding: 4px;
-  transition: all 0.2s ease;
+  border: 1px solid var(--border-light);
   background: var(--bg-surface);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 .drop-zone:hover {
-  border-color: var(--primary-light);
-  background: var(--primary-bg);
+  border-color: var(--border);
+  background: rgba(8, 145, 178, 0.03);
 }
 .drop-zone--active {
+  border-style: dashed !important;
   border-color: var(--primary) !important;
-  background: var(--primary-bg) !important;
-  box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+  border-width: 2px !important;
+  background: rgba(8, 145, 178, 0.05) !important;
+  border-radius: var(--radius-md);
 }
 
 /* ---- 布局网格 ---- */

@@ -1,5 +1,20 @@
 <template>
-  <div class="merge-grid">
+  <!-- 骨架屏：首次加载时显示 -->
+  <div v-if="pageLoading" class="merge-skeleton">
+    <div class="skeleton-card">
+      <div class="skeleton-line w-40 h-6 mb-16"></div>
+      <div class="skeleton-line w-full h-10 mb-12"></div>
+      <div class="skeleton-line w-full h-10 mb-12"></div>
+      <div class="skeleton-line w-60 h-10 mb-12"></div>
+      <div class="skeleton-line w-40 h-10"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-line w-32 h-6 mb-16"></div>
+      <div class="skeleton-line w-full h-32"></div>
+    </div>
+  </div>
+
+  <div v-else class="merge-grid">
     <el-card class="panel-card">
       <template #header>
         <div class="card-header-row">
@@ -15,7 +30,7 @@
                @dragenter="inputDrop.onDragEnter"
                @dragleave="inputDrop.onDragLeave"
                @drop="onInputDirDrop">
-            <el-input v-model="state.inputDir" placeholder="选择包含子表的目录" readonly>
+            <el-input v-model="state.inputDir" placeholder="选择或输入数据目录路径">
               <template #append><el-button @click="pickInputDir">选择</el-button></template>
             </el-input>
           </div>
@@ -26,7 +41,7 @@
                @dragenter="outputDrop.onDragEnter"
                @dragleave="outputDrop.onDragLeave"
                @drop="onOutputDirDrop">
-            <el-input v-model="state.outputDir" placeholder="选择输出目录" readonly>
+            <el-input v-model="state.outputDir" placeholder="选择或输入输出目录">
               <template #append><el-button @click="pickOutputDir">选择</el-button></template>
             </el-input>
           </div>
@@ -136,7 +151,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive } from "vue";
 import { useDropZone } from "../composables/useDropZone";
 import LogPanel from "../components/LogPanel.vue";
 import MergeRuleTable from "../components/MergeRuleTable.vue";
@@ -500,6 +515,9 @@ function handleEvent(event) {
   else if (event.type === "cancelled") { state.status = "idle"; state.taskId = ""; }
 }
 
+const pageLoading = ref(true);
+const emit = defineEmits(['ready']);
+
 onMounted(async () => {
   try {
     await loadRules();
@@ -507,6 +525,9 @@ onMounted(async () => {
   } catch (err) {
     ElMessage.error(err.message || "初始化失败");
     pushLog(`初始化失败：${err.message || "unknown error"}`);
+  } finally {
+    pageLoading.value = false;
+    emit('ready');
   }
 });
 
@@ -514,6 +535,39 @@ onUnmounted(() => { if (unsubTask) unsubTask(); });
 </script>
 
 <style scoped>
+/* ---- 骨架屏 ---- */
+.merge-skeleton {
+  display: grid;
+  gap: 16px;
+}
+.skeleton-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 24px 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+}
+.skeleton-line {
+  background: linear-gradient(90deg, var(--border-light) 25%, #e8ecf0 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+.w-40 { width: 40%; }
+.w-60 { width: 60%; }
+.w-32 { width: 32%; }
+.w-full { width: 100%; }
+.h-6 { height: 6px; }
+.h-10 { height: 10px; }
+.h-32 { height: 32px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-12 { margin-bottom: 12px; }
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .card-header-row {
   display: flex;
   justify-content: space-between;

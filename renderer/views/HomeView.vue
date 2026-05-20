@@ -25,7 +25,7 @@
         <h3 class="feature-title">Excel 拆分</h3>
         <p class="feature-desc">按规则对多个 sheet 执行分组拆分，支持模板样式保留、文件后缀自定义、空值过滤。</p>
         <div class="feature-actions">
-          <el-button type="primary" size="small" round @click="$parent.active = 'split'">
+          <el-button type="primary" size="small" round @click="emit('navigate', 'split')">
             开始拆分 →
           </el-button>
         </div>
@@ -40,7 +40,7 @@
         <h3 class="feature-title">合并汇总</h3>
         <p class="feature-desc">多文件多 sheet 智能合并，供应商排序、列映射、透传、头部行对齐。</p>
         <div class="feature-actions">
-          <el-button type="success" size="small" round @click="$parent.active = 'merge'">
+          <el-button type="success" size="small" round @click="emit('navigate', 'merge')">
             开始合并 →
           </el-button>
         </div>
@@ -55,7 +55,7 @@
         <h3 class="feature-title">模板优化</h3>
         <p class="feature-desc">XLSX ZIP 级别深度压缩——清理空单元格、冗余 XML、隐藏元数据，显著减小文件体积。</p>
         <div class="feature-actions">
-          <el-button type="warning" size="small" round @click="$parent.active = 'optimize'">
+          <el-button type="warning" size="small" round @click="emit('navigate', 'optimize')">
             开始优化 →
           </el-button>
         </div>
@@ -235,3 +235,7 @@
   }
 }
 </style>
+
+<script setup>
+const emit = defineEmits(['navigate']);
+</script>

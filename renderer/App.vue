@@ -23,11 +23,15 @@
 
     <!-- 主内容 -->
     <main class="app-main">
-      <div class="app-container stagger-children" :key="active">
-        <HomeView v-if="active === 'home'" />
-        <SplitView v-else-if="active === 'split'" />
-        <MergeView v-else-if="active === 'merge'" />
-        <OptimizeView v-else-if="active === 'optimize'" />
+      <div class="app-container">
+        <KeepAlive>
+          <component
+            :is="currentView"
+            :key="active"
+            @navigate="active = $event"
+
+          />
+        </KeepAlive>
       </div>
     </main>
 
@@ -82,14 +86,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { Refresh, Warning, Download, SuccessFilled, CircleClose } from "@element-plus/icons-vue";
 import HomeView from "./views/HomeView.vue";
 import SplitView from "./views/SplitView.vue";
 import MergeView from "./views/MergeView.vue";
 import OptimizeView from "./views/OptimizeView.vue";
 
-const active = ref("split");
+const active = ref("home");
 
 const tabs = [
   { name: "home",   label: "首页" },
@@ -97,6 +101,17 @@ const tabs = [
   { name: "merge",  label: "合并汇总" },
   { name: "optimize", label: "模板优化" },
 ];
+
+const viewMap = {
+  home: HomeView,
+  split: SplitView,
+  merge: MergeView,
+  optimize: OptimizeView,
+};
+
+const currentView = computed(() => viewMap[active.value]);
+
+// ─── 更新管理 ─────────────────────────────
 
 const updateState = reactive({
   visible: false,
@@ -245,14 +260,17 @@ onUnmounted(() => {
   background: var(--primary);
   font-weight: 600;
 }
-.nav-pill-label {
-  position: relative;
-}
 
 /* ---- 主内容 ---- */
 .app-main {
   flex: 1;
   padding: 24px 0 48px;
+  position: relative;
+}
+.app-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
 }
 
 /* ---- 浮动 Snackbar ---- */
@@ -291,7 +309,6 @@ onUnmounted(() => {
 }
 .snackbar-close:hover { opacity: 1; }
 
-/* Snackbar type variants */
 .snackbar--checking,
 .snackbar--update-available,
 .snackbar--download-progress {
@@ -310,7 +327,6 @@ onUnmounted(() => {
   border: 1px solid #fecaca;
 }
 
-/* Snackbar transition */
 .snackbar-enter-active {
   transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -325,4 +341,6 @@ onUnmounted(() => {
   opacity: 0;
   transform: translateX(-50%) translateY(16px);
 }
+
+
 </style>
