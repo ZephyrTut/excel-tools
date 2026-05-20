@@ -4,6 +4,9 @@
   "directories": {
     "output": "dist/installers"
   },
+  "asarUnpack": [
+    "node_modules/exceljs/**"
+  ],
   "publish": {
     "provider": "github",
     "owner": "ZephyrTut",

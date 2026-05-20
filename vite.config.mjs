@@ -28,8 +28,7 @@ export default defineConfig({
         // 代码分割：将 Vue、Element Plus 等 vendor 拆到独立 chunk
         manualChunks: {
           "vendor-vue": ["vue"],
-          "vendor-element-plus": ["element-plus"],
-          "vendor-exceljs": ["exceljs"]
+          "vendor-element-plus": ["element-plus"]
         }
       }
     }

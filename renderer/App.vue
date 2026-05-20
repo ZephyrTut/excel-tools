@@ -14,6 +14,9 @@
         <el-tab-pane label="合并汇总" name="merge">
           <MergeView />
         </el-tab-pane>
+        <el-tab-pane label="模板优化" name="optimize">
+          <OptimizeView />
+        </el-tab-pane>
       </el-tabs>
     </el-main>
 
@@ -75,6 +78,7 @@ import { Refresh, Warning, Download, SuccessFilled, CircleClose } from "@element
 import HomeView from "./views/HomeView.vue";
 import SplitView from "./views/SplitView.vue";
 import MergeView from "./views/MergeView.vue";
+import OptimizeView from "./views/OptimizeView.vue";
 
 const active = ref("split");
 

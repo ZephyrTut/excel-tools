@@ -1,11 +1,15 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
+const os = require("node:os");
 const crypto = require("node:crypto");
 const { WorkerRunner } = require("./workerRunner");
 const updater = require("./updater");
 const { loadRules, saveRules } = require("../services/split/ruleManager");
-const { getSheetNames, getSheetHeadersWithPosition, getMultipleSheetHeaders, readWorkbook, textValue } = require("../services/split/excelReader");
+
+/** Lazy getters — these modules are heavy and only needed on first IPC call. */
+function excelReader() { return require("../services/split/excelReader"); }
+function templateOptimizer() { return require("../services/optimize/templateOptimizer"); }
 
 const DEFAULT_TEMPLATE_NAME = "_default.xlsx";
 
@@ -164,7 +168,7 @@ function registerIpcHandlers() {
     const names = await new Promise((resolve, reject) => {
       setImmediate(async () => {
         try {
-          const result = await getSheetNames(filePath);
+          const result = await excelReader().getSheetNames(filePath);
           resolve(result);
         } catch (err) {
           reject(err);
@@ -295,7 +299,7 @@ function registerIpcHandlers() {
       }));
       let templateHeadersBySheet = {};
       try {
-        templateHeadersBySheet = await getMultipleSheetHeaders(templateFile, templateConfigs);
+        templateHeadersBySheet = await excelReader().getMultipleSheetHeaders(templateFile, templateConfigs);
       } catch {
         templateHeadersBySheet = {};
       }
@@ -327,7 +331,7 @@ function registerIpcHandlers() {
             sheetName: r.sheetName,
             headerRows: r.headerRows || 1,
           }));
-          const headersMap = await getMultipleSheetHeaders(filePath, configs);
+          const headersMap = await excelReader().getMultipleSheetHeaders(filePath, configs);
           const hasData = Object.values(headersMap).some(
             (arr) => arr.length > 0 && arr.some((h) => h !== null)
           );
@@ -335,7 +339,7 @@ function registerIpcHandlers() {
 
           // 统一用排序依据 Sheet 的排序列取供应商名
           const vendorsBySheet = {};
-          const wb = await readWorkbook(filePath);
+          const wb = await excelReader().readWorkbook(filePath);
           const orderSheet = wb.getWorksheet(orderSheetName || incoming[0]?.sheetName);
           if (orderSheet) {
             const colIndex = (function(l){return[...l.toUpperCase()].reduce((a,c)=>a*26+c.charCodeAt(0)-64,0)})(orderColumn || incoming[0]?.splitColumn || "C");
@@ -345,7 +349,7 @@ function registerIpcHandlers() {
               const cell = orderSheet.getRow(r).getCell(colIndex);
               const cv = cell.value;
               if (cv && typeof cv === 'object' && !Object.prototype.hasOwnProperty.call(cv, 'result') && !Object.prototype.hasOwnProperty.call(cv, 'text') && !Object.prototype.hasOwnProperty.call(cv, 'richText') && !Object.prototype.hasOwnProperty.call(cv, 'error')) continue;
-              const v = textValue(cv).trim();
+              const v = excelReader().textValue(cv).trim();
               if (v) vendors.add(v);
             }
             if (vendors.size > 0) {
@@ -433,6 +437,72 @@ function registerIpcHandlers() {
 
   ipcMain.handle("update:install", () => {
     updater.installUpdate();
+  });
+
+  // ── Template optimizer ────────────────────────────────────────────
+
+  ipcMain.handle("dialog:select-optimize-file", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "选择要优化的 Excel 文件",
+      properties: ["openFile"],
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const stat = await fs.stat(filePath);
+    return { path: filePath, name: path.basename(filePath), size: stat.size };
+  });
+
+  ipcMain.handle("optimize:run", async (_, filePath) => {
+    const tmpPath = path.join(os.tmpdir(), `template_opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.xlsx`);
+    const result = await templateOptimizer().optimizeTemplate(filePath, tmpPath);
+
+    // Read sheet-level stats from the optimized file
+    const AdmZip = require("adm-zip");
+    const origZip = new AdmZip(filePath);
+    const optZip = new AdmZip(tmpPath);
+
+    const origSheets = {};
+    const optSheets = {};
+    for (const e of origZip.getEntries()) {
+      if (e.entryName.startsWith("xl/worksheets/sheet") && e.entryName.endsWith(".xml")) {
+        origSheets[e.entryName] = e.getData().length;
+      }
+    }
+    for (const e of optZip.getEntries()) {
+      if (e.entryName.startsWith("xl/worksheets/sheet") && e.entryName.endsWith(".xml")) {
+        optSheets[e.entryName] = e.getData().length;
+      }
+    }
+
+    const sheetNames = [...new Set([...Object.keys(origSheets), ...Object.keys(optSheets)])].sort();
+    const sheets = sheetNames.map((name) => {
+      const shortName = name.replace("xl/worksheets/", "").replace(".xml", "");
+      return {
+        name: shortName,
+        originalSize: origSheets[name] || 0,
+        optimizedSize: optSheets[name] || 0,
+      };
+    });
+
+    return {
+      originalSize: result.originalSize,
+      optimizedSize: result.optimizedSize,
+      savingsPercent: result.savingsPercent,
+      sheets,
+      tempPath: tmpPath,
+    };
+  });
+
+  ipcMain.handle("optimize:save", async (_, tempPath) => {
+    const result = await dialog.showSaveDialog({
+      title: "保存优化后的文件",
+      defaultPath: "optimized_template.xlsx",
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    await fs.copyFile(tempPath, result.filePath);
+    return result.filePath;
   });
 }
 

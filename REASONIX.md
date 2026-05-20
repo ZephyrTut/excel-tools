@@ -1,4 +1,4 @@
-# Excel Tools — Reasonix Reference
+# Excel Tools — Quick Reference
 
 ## Stack
 
@@ -7,59 +7,61 @@
 - **UI:** Vue 3 + Element Plus, built with Vite 5
 - **Excel:** exceljs for reading, writing, style preservation
 - **Package manager:** pnpm (see `pnpm-lock.yaml`)
-- **Worker:** background threads via Node.js `Worker` for non-blocking split tasks
+- **Worker:** background threads via Node.js `Worker` for non-blocking split/merge tasks
 
 ## Layout
 
 | Path | What lives there |
 |------|------------------|
 | `main/` | Electron main process, IPC bridge, preload, task/worker orchestration |
-| `renderer/` | Vue 3 app — App.vue, views (HomeView, SplitView), components, styles |
-| `services/split/` | Excel split engine — reader, writer, split logic, style copier, errors, types, all utilities |
-| `services/common/` | Shared utilities placeholder (empty, reserved for future extraction) |
-| `services/merge/` | Merge module (placeholder — empty, reserved for future) |
-| `scripts/` | Standalone CLI scripts — generate-split, compare-with-output, excel-compare-core |
-| `samples/` | Sample source `.xlsx` data files for split testing |
-| `templates/` | Style template `.xlsx` files for split output formatting |
+| `renderer/` | Vue 3 app — App.vue, 4 views (Home, Split, Merge, Optimize), components |
+| `services/split/` | Excel split engine — reader, writer, split logic, style copier, rules |
+| `services/merge/` | Excel merge engine — column mapping, vendor ordering, passthrough |
+| `services/optimize/` | XLSX optimizer — ZIP-level template compression |
+| `scripts/` | Standalone CLI scripts for split/merge generation & comparison |
+| `samples/` | Sample source `.xlsx` data files |
+| `templates/` | Style template `.xlsx` files |
 | `config/` | Default split rule templates (`defaultRules.json`) |
-| `docs/` | PRD, architecture, decisions, prompts, split logic, optimization guide |
-| `output/` | Generated split output files (runtime, gitignored) |
-| `temp-output/` | Temporary test output (runtime, gitignored) |
-| `test/` | Test files directory (empty, reserved for actual unit tests) |
+| `docs/` | PRD, architecture, decisions, logic guides, optimization guide |
+| `test/` | Test files directory (reserved for unit tests) |
 
 ## Commands
 
 ```bash
-pnpm dev            # Start Vite dev server + Electron concurrently
-pnpm build:renderer # Vite build for renderer only
-pnpm build          # Build renderer + package with electron-builder
-pnpm start          # Run production Electron app
-pnpm split:zhejiang # Run split on samples/华锐捷2.xlsx → output/ (node scripts/generate-split.js)
-pnpm compare:zhejiang # Compare generated output with source (node scripts/compare-with-output.js)
+pnpm dev              # Start Vite dev server + Electron concurrently
+pnpm build:renderer   # Vite build for renderer only
+pnpm build            # Clean + build renderer + electron-builder --win
+pnpm start            # Run production Electron app
+pnpm test             # Vitest run
+pnpm test:watch       # Vitest watch mode
+pnpm clean            # Clean build artifacts
+pnpm split:zhejiang   # Run split on samples/  (scripts/generate-split.js)
+pnpm compare:zhejiang # Compare split output with source
+pnpm merge            # Run merge (node --max-old-space-size=8192 scripts/generate-merge.js)
+pnpm compare:merge    # Compare merge output with source
+pnpm release          # Release new version (scripts/release.js)
 ```
 
 ## Key files
 
-- `package.json` — entry point `main/main.js`, all scripts & deps
+- `CLAUDE.md` — Project navigation index (auto-loaded by Claude Code)
+- `package.json` — Entry point `main/main.js`, all scripts & deps
 - `vite.config.mjs` — Vite root set to `renderer/`, output to `dist/renderer/`
 - `electron-builder.json` — Electron packaging config
-- `pnpm-workspace.yaml` — workspace config, allows `electron` & `esbuild` builds
+- `pnpm-workspace.yaml` — workspace config
 
 ## Conventions
 
 - **CommonJS** everywhere (`require` / `module.exports`), not ESM
 - **kebab-case** for service/utility filenames (`splitEngine.js`, `pathUtil.js`)
 - **PascalCase** for Vue component files (`SplitView.vue`, `LogPanel.vue`)
-- **Functional helpers** over classes — factory functions (`createLogger`) and plain objects
-- **Error enums** as frozen objects (`TaskEventType`, `ErrorCodes` via `errors.js`)
-- **Worker isolation** — heavy Excel processing runs in a background `Worker`; IPC relays logs & progress
-- **No test runner or lint/formatter** configured
+- **Functional helpers** over classes — factory functions and plain objects
+- **Worker isolation** — heavy Excel processing (split/merge) runs in background Worker; IPC relays logs & progress
+- **Light ops** (optimize, file dialog, rule save) run directly in main process
 
 ## Watch out for
 
-- **`output/` and `temp-output/` are runtime directories** — files in them are generated, deleted by `.gitignore`.
-- **`pnpm` required** — `npm install` may produce different lockfile or fail; use `pnpm install`.
-- **Worker memory** defaults to 3072 MB; set `SPLIT_WORKER_MEMORY_MB=4096` for large files.
-- **Vite root** is `renderer/` — run vite commands from the project root, not from `renderer/`.
-- N/A变为0这一功能不要给我删掉啊
-- N/A变为0这一功能不要给我删掉，帮我复原下
+- **`pnpm` required** — `npm install` may produce different lockfile or fail
+- **Worker memory** defaults to 3072 MB; set `SPLIT_WORKER_MEMORY_MB=4096` for large files
+- **Vite root** is `renderer/` — run vite commands from project root
+- **N/A → 0** conversion in split engine must be preserved (用户要求不可删)

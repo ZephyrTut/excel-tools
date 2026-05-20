@@ -1,3 +1,14 @@
+function trimTrailingEmptyCols(cols) {
+  if (!cols || cols.length === 0) return cols;
+  let last = cols.length - 1;
+  while (last >= 0) {
+    const c = cols[last];
+    if (c && (c.width != null || c.key != null || c.hidden != null)) break;
+    last -= 1;
+  }
+  return cols.slice(0, last + 1);
+}
+
 function copyWorksheetMeta(sourceSheet, targetSheet, templateSheet) {
   targetSheet.properties = { ...sourceSheet.properties };
   targetSheet.pageSetup = { ...sourceSheet.pageSetup };
@@ -27,10 +38,13 @@ function copyWorksheetMeta(sourceSheet, targetSheet, templateSheet) {
     : [];
 
   // Build column defaults: source first, then template overrides on top
-  const srcCols = sourceSheet.columns || [];
-  const tplCols = templateSheet?.columns || [];
+  // Trim trailing placeholder columns to avoid blowing up XML with 2570 empty col definitions
+  const srcCols = trimTrailingEmptyCols(sourceSheet.columns || []);
+  const tplCols = trimTrailingEmptyCols(templateSheet?.columns || []);
   const maxCols = Math.max(srcCols.length, tplCols.length);
-  targetSheet.columns = Array.from({ length: maxCols }, (_, i) => {
+  const MAX_REASONABLE_COLS = 100;
+  const actualCols = Math.min(maxCols, MAX_REASONABLE_COLS);
+  targetSheet.columns = Array.from({ length: actualCols }, (_, i) => {
     const src = srcCols[i] || {};
     const tpl = tplCols[i] || {};
     return {

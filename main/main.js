@@ -38,10 +38,10 @@ async function ensureDefaultTemplate() {
 }
 
 async function bootstrap() {
-  await ensureDefaultTemplate();
   registerIpcHandlers();
   createMainWindow();
-  // Check for updates after a short delay so the UI is ready
+  // Background init after window appears — don't block UI
+  ensureDefaultTemplate().catch(() => {});
   setTimeout(() => updater.checkForUpdates(), 3000);
 }
 
