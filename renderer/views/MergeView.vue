@@ -10,14 +10,26 @@
 
       <el-form label-width="120px">
         <el-form-item label="数据目录">
-          <el-input v-model="state.inputDir" placeholder="选择包含子表的目录" readonly>
-            <template #append><el-button @click="pickInputDir">选择</el-button></template>
-          </el-input>
+          <div class="drop-zone" :class="{ 'drop-zone--active': inputDrop.isDragOver }"
+               @dragover.prevent="inputDrop.onDragOver"
+               @dragenter="inputDrop.onDragEnter"
+               @dragleave="inputDrop.onDragLeave"
+               @drop="onInputDirDrop">
+            <el-input v-model="state.inputDir" placeholder="选择包含子表的目录" readonly>
+              <template #append><el-button @click="pickInputDir">选择</el-button></template>
+            </el-input>
+          </div>
         </el-form-item>
         <el-form-item label="输出目录">
-          <el-input v-model="state.outputDir" placeholder="选择输出目录" readonly>
-            <template #append><el-button @click="pickOutputDir">选择</el-button></template>
-          </el-input>
+          <div class="drop-zone" :class="{ 'drop-zone--active': outputDrop.isDragOver }"
+               @dragover.prevent="outputDrop.onDragOver"
+               @dragenter="outputDrop.onDragEnter"
+               @dragleave="outputDrop.onDragLeave"
+               @drop="onOutputDirDrop">
+            <el-input v-model="state.outputDir" placeholder="选择输出目录" readonly>
+              <template #append><el-button @click="pickOutputDir">选择</el-button></template>
+            </el-input>
+          </div>
         </el-form-item>
         <el-form-item label="排序依据 Sheet">
           <el-select v-model="state.merge.orderSheetName" filterable style="width: 100%">
@@ -124,6 +136,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive } from "vue";
+import { useDropZone } from "../composables/useDropZone";
 import LogPanel from "../components/LogPanel.vue";
 import MergeRuleTable from "../components/MergeRuleTable.vue";
 import MergeColumnMappingPanel from "../components/MergeColumnMappingPanel.vue";
@@ -153,6 +166,9 @@ const state = reactive({
     outputName: "合并汇总.xlsx",
   },
 });
+
+const inputDrop = reactive(useDropZone());
+const outputDrop = reactive(useDropZone());
 
 let unsubTask = null;
 const MAX_LOG_LINES = 500;
@@ -435,6 +451,18 @@ async function pickOutputDir() {
   state.outputDir = dir;
 }
 
+function onInputDirDrop(e) {
+  const dirPath = inputDrop.onDrop(e);
+  if (!dirPath) return;
+  state.inputDir = dirPath;
+}
+
+function onOutputDirDrop(e) {
+  const dirPath = outputDrop.onDrop(e);
+  if (!dirPath) return;
+  state.outputDir = dirPath;
+}
+
 async function startTask() {
   try {
     state.status = "running";
@@ -483,3 +511,16 @@ onMounted(async () => {
 
 onUnmounted(() => { if (unsubTask) unsubTask(); });
 </script>
+
+<style scoped>
+.drop-zone {
+  width: 100%;
+  border: 2px dashed transparent;
+  border-radius: var(--el-border-radius-base);
+  transition: all 0.2s ease;
+}
+.drop-zone--active {
+  border-color: var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.05);
+}
+</style>

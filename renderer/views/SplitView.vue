@@ -11,11 +11,17 @@
       </template>
       <el-form label-width="100px">
         <el-form-item label="源文件">
-          <el-input v-model="state.inputFile" placeholder="请选择 xlsx 文件" readonly>
-            <template #append>
-              <el-button @click="pickInputFile">选择</el-button>
-            </template>
-          </el-input>
+          <div class="drop-zone" :class="{ 'drop-zone--active': sourceDrop.isDragOver }"
+               @dragover.prevent="sourceDrop.onDragOver"
+               @dragenter="sourceDrop.onDragEnter"
+               @dragleave="sourceDrop.onDragLeave"
+               @drop="onSourceFileDrop">
+            <el-input v-model="state.inputFile" placeholder="请选择 xlsx 文件" readonly>
+              <template #append>
+                <el-button @click="pickInputFile">选择</el-button>
+              </template>
+            </el-input>
+          </div>
         </el-form-item>
         <el-form-item v-if="state.fileInfo.name" label="文件信息">
           <el-text>
@@ -23,11 +29,17 @@
           </el-text>
         </el-form-item>
         <el-form-item label="输出目录">
-          <el-input v-model="state.outputDir" placeholder="请选择输出目录" readonly>
-            <template #append>
-              <el-button @click="pickOutputDir">选择</el-button>
-            </template>
-          </el-input>
+          <div class="drop-zone" :class="{ 'drop-zone--active': outputDrop.isDragOver }"
+               @dragover.prevent="outputDrop.onDragOver"
+               @dragenter="outputDrop.onDragEnter"
+               @dragleave="outputDrop.onDragLeave"
+               @drop="onOutputDirDrop">
+            <el-input v-model="state.outputDir" placeholder="请选择输出目录" readonly>
+              <template #append>
+                <el-button @click="pickOutputDir">选择</el-button>
+              </template>
+            </el-input>
+          </div>
         </el-form-item>
         <el-form-item label="文件名后缀">
           <el-input
@@ -145,6 +157,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, watch } from "vue";
+import { useDropZone } from "../composables/useDropZone";
 
 import RuleTable from "../components/RuleTable.vue";
 import LogPanel from "../components/LogPanel.vue";
@@ -189,6 +202,9 @@ const state = reactive({
   },
   _loading: true // suppress auto-save during initial load
 });
+
+const sourceDrop = reactive(useDropZone());
+const outputDrop = reactive(useDropZone());
 
 let unsubscribe = null;
 let _autoSaveTimer = null;
@@ -273,16 +289,18 @@ async function validateSheetNames(filePath) {
 async function pickInputFile() {
   const result = await getApi().selectInputFile();
   if (!result) return;
-  state.inputFile = result.path;
-  state.fileInfo.name = result.name;
-  state.fileInfo.size = result.size || 0;
+  await applyInputFile(result.path, result.name, result.size || 0);
+}
 
-  // Get actual sheet names from the source file
+async function applyInputFile(path, name, size) {
+  state.inputFile = path;
+  state.fileInfo.name = name;
+  state.fileInfo.size = size;
+
   try {
-    const sheets = await getApi().getSheetNames(result.path);
+    const sheets = await getApi().getSheetNames(path);
     state.sourceSheetNames = sheets;
 
-    // Auto-populate rules on first file pick (no existing sheetRules yet)
     if (state.rules.sheetRules.length === 0) {
       for (const sheet of sheets) {
         state.rules.sheetRules.push({
@@ -300,13 +318,34 @@ async function pickInputFile() {
     state.sourceSheetNames = [];
   }
 
-  await validateSheetNames(result.path);
+  await validateSheetNames(path);
+}
+
+async function onSourceFileDrop(e) {
+  const filePath = sourceDrop.onDrop(e);
+  if (!filePath) return;
+  if (!filePath.toLowerCase().endsWith('.xlsx')) {
+    ElMessage.warning('请拖入 .xlsx 格式的文件');
+    return;
+  }
+  try {
+    const info = await getApi().getFileInfo(filePath);
+    await applyInputFile(info.path, info.name, info.size || 0);
+  } catch (err) {
+    ElMessage.error(err.message);
+  }
 }
 
 async function pickOutputDir() {
   const dir = await getApi().selectOutputDir();
   if (!dir) return;
   state.outputDir = dir;
+}
+
+function onOutputDirDrop(e) {
+  const dirPath = outputDrop.onDrop(e);
+  if (!dirPath) return;
+  state.outputDir = dirPath;
 }
 
 async function loadTemplateList() {
@@ -547,3 +586,16 @@ onUnmounted(() => {
   if (unsubscribe) unsubscribe();
 });
 </script>
+
+<style scoped>
+.drop-zone {
+  width: 100%;
+  border: 2px dashed transparent;
+  border-radius: var(--el-border-radius-base);
+  transition: all 0.2s ease;
+}
+.drop-zone--active {
+  border-color: var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.05);
+}
+</style>

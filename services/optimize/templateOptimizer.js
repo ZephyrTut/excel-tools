@@ -182,16 +182,20 @@ function isWorksheet(fileName) {
  * @param {string} [outputPath] - Output path (defaults to overwriting input)
  * @returns {Promise<{originalSize: number, optimizedSize: number, savingsPercent: string}>}
  */
-async function optimizeTemplate(inputPath, outputPath) {
+async function optimizeTemplate(inputPath, outputPath, onProgress) {
   const fs = require("fs");
   const stat = await fs.promises.stat(inputPath);
   const originalSize = stat.size;
 
   const entries = await readXlsxEntries(inputPath);
   const optimized = new Map();
+  let processed = 0;
+  const total = entries.length;
 
   for (const [fileName, data] of entries) {
     if (shouldRemovePath(fileName)) continue;
+    processed++;
+    if (onProgress) onProgress(processed / total);
     if (isWorksheet(fileName) && typeof data === "string") {
       optimized.set(fileName, optimizeWorksheetXml(data));
     } else {

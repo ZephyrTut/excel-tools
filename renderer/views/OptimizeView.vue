@@ -7,12 +7,18 @@
       </template>
       <el-form label-width="100px">
         <el-form-item label="源文件">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input v-model="state.fileInfo.name" placeholder="未选择文件" readonly>
-              <template #append>
-                <el-button @click="pickFile">选择</el-button>
-              </template>
-            </el-input>
+          <div class="drop-zone" :class="{ 'drop-zone--active': sourceDrop.isDragOver }"
+               @dragover.prevent="sourceDrop.onDragOver"
+               @dragenter="sourceDrop.onDragEnter"
+               @dragleave="sourceDrop.onDragLeave"
+               @drop="onSourceFileDrop">
+            <div style="display: flex; gap: 8px; width: 100%">
+              <el-input v-model="state.fileInfo.name" placeholder="未选择文件" readonly>
+                <template #append>
+                  <el-button @click="pickFile">选择</el-button>
+                </template>
+              </el-input>
+            </div>
           </div>
         </el-form-item>
         <el-form-item label="文件大小">
@@ -26,9 +32,11 @@
       <template #header>
         <span>执行优化</span>
       </template>
-      <el-space>
+      <div style="display: flex; align-items: center; gap: 16px">
         <el-button
           type="primary"
+          size="large"
+          style="min-width: 140px"
           :disabled="!state.fileInfo.path || state.optimizing"
           :loading="state.optimizing"
           @click="runOptimize"
@@ -36,14 +44,17 @@
           {{ state.optimizing ? '优化中...' : '开始优化' }}
         </el-button>
         <el-progress
-          v-if="state.optimizing"
+          v-if="state.optimizing || state.result"
           :percentage="state.progress"
-          :stroke-width="14"
-          style="width: 240px"
+          :stroke-width="16"
+          style="flex: 1; min-width: 200px"
           :status="state.progress === 100 ? 'success' : undefined"
         />
-      </el-space>
+      </div>
     </el-card>
+
+    <!-- 运行日志 -->
+    <LogPanel :lines="state.logs" @clear="state.logs = []" />
 
     <!-- 优化结果 -->
     <el-card v-if="state.result" class="panel-card">
@@ -86,7 +97,7 @@
       </el-table>
 
       <div style="margin-top: 16px">
-        <el-button type="success" @click="saveFile">
+        <el-button type="success" size="large" style="min-width: 160px" @click="saveFile">
           保存优化后的文件
         </el-button>
         <el-text v-if="state.savedPath" type="success" style="margin-left: 12px">
@@ -98,8 +109,12 @@
 </template>
 
 <script setup>
-import { ref, reactive } from "vue";
+import { onMounted, onUnmounted, reactive } from "vue";
 import { ElMessage } from "element-plus";
+import LogPanel from "../components/LogPanel.vue";
+import { useDropZone } from "../composables/useDropZone";
+
+const sourceDrop = reactive(useDropZone());
 
 const state = reactive({
   fileInfo: { path: "", name: "", size: 0 },
@@ -107,7 +122,18 @@ const state = reactive({
   progress: 0,
   result: null,
   savedPath: "",
+  logs: [],
 });
+
+let unsubTask = null;
+const MAX_LOG_LINES = 500;
+
+function pushLog(line) {
+  state.logs.push(`[${new Date().toLocaleTimeString()}] ${line}`);
+  if (state.logs.length > MAX_LOG_LINES) {
+    state.logs.splice(0, state.logs.length - MAX_LOG_LINES);
+  }
+}
 
 function getApi() {
   const api = window.excelTools;
@@ -121,10 +147,30 @@ async function pickFile() {
   try {
     const info = await getApi().selectOptimizeFile();
     if (info) {
-      state.fileInfo = info;
-      state.result = null;
-      state.savedPath = "";
+      applyFile(info);
     }
+  } catch (err) {
+    ElMessage.error(err.message);
+  }
+}
+
+function applyFile(info) {
+  state.fileInfo = info;
+  state.result = null;
+  state.savedPath = "";
+  state.logs = [];
+}
+
+async function onSourceFileDrop(e) {
+  const filePath = sourceDrop.onDrop(e);
+  if (!filePath) return;
+  if (!filePath.toLowerCase().endsWith('.xlsx')) {
+    ElMessage.warning('请拖入 .xlsx 格式的文件');
+    return;
+  }
+  try {
+    const info = await getApi().getFileInfo(filePath);
+    applyFile(info);
   } catch (err) {
     ElMessage.error(err.message);
   }
@@ -136,19 +182,12 @@ async function runOptimize() {
   state.progress = 0;
   state.result = null;
   state.savedPath = "";
+  state.logs = [];
 
   try {
-    // Simulate progress animation (optimize runs in main process)
-    const progressTimer = setInterval(() => {
-      state.progress = Math.min(state.progress + 10, 90);
-    }, 300);
-
     const result = await getApi().runOptimize(state.fileInfo.path);
-
-    clearInterval(progressTimer);
     state.progress = 100;
     state.result = result;
-
     ElMessage.success(`优化完成！压缩率 ${result.savingsPercent}%`);
   } catch (err) {
     state.progress = 0;
@@ -171,12 +210,32 @@ async function saveFile() {
   }
 }
 
+function handleTaskEvent(event) {
+  if (!state.optimizing) return;
+  if (event.type === "log") {
+    pushLog(`${event.level.toUpperCase()} ${event.message}`);
+  } else if (event.type === "progress") {
+    state.progress = event.progress;
+    pushLog(`进度 ${event.progress}% - ${event.stage}`);
+  } else if (event.type === "error") {
+    pushLog(`失败：${event.message}`);
+  }
+}
+
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 2 : 0) + " " + units[i];
 }
+
+onMounted(() => {
+  unsubTask = getApi().onTaskEvent(handleTaskEvent);
+});
+
+onUnmounted(() => {
+  if (unsubTask) unsubTask();
+});
 </script>
 
 <style scoped>
@@ -214,5 +273,15 @@ function formatSize(bytes) {
 .text-success {
   color: #67c23a;
   font-weight: 600;
+}
+.drop-zone {
+  width: 100%;
+  border: 2px dashed transparent;
+  border-radius: var(--el-border-radius-base);
+  transition: all 0.2s ease;
+}
+.drop-zone--active {
+  border-color: var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.05);
 }
 </style>

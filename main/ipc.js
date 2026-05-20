@@ -180,6 +180,11 @@ function registerIpcHandlers() {
     return names;
   });
 
+  ipcMain.handle("file:get-info", async (_, filePath) => {
+    const stat = await fs.stat(filePath);
+    return { path: filePath, name: path.basename(filePath), size: stat.size };
+  });
+
   /** List all templates in userData/templates/. */
   ipcMain.handle("template:list", async () => {
     const templatesDir = getTemplatesDir();
@@ -454,8 +459,17 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("optimize:run", async (_, filePath) => {
+    const taskId = crypto.randomUUID();
     const tmpPath = path.join(os.tmpdir(), `template_opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.xlsx`);
-    const result = await templateOptimizer().optimizeTemplate(filePath, tmpPath);
+
+    broadcast({ type: "log", taskId, level: "info", message: "开始优化文件..." });
+    broadcast({ type: "progress", taskId, progress: 5, stage: "正在分析文件结构..." });
+
+    const optResult = await templateOptimizer().optimizeTemplate(filePath, tmpPath, (pct) => {
+      broadcast({ type: "progress", taskId, progress: 5 + Math.round(pct * 85), stage: "正在优化..." });
+    });
+
+    broadcast({ type: "progress", taskId, progress: 90, stage: "正在计算统计信息..." });
 
     // Read sheet-level stats from the optimized file
     const AdmZip = require("adm-zip");
@@ -485,10 +499,13 @@ function registerIpcHandlers() {
       };
     });
 
+    broadcast({ type: "log", taskId, level: "info", message: `优化完成，压缩率 ${optResult.savingsPercent}%` });
+    broadcast({ type: "progress", taskId, progress: 100, stage: "优化完成" });
+
     return {
-      originalSize: result.originalSize,
-      optimizedSize: result.optimizedSize,
-      savingsPercent: result.savingsPercent,
+      originalSize: optResult.originalSize,
+      optimizedSize: optResult.optimizedSize,
+      savingsPercent: optResult.savingsPercent,
       sheets,
       tempPath: tmpPath,
     };
