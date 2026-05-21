@@ -20,6 +20,9 @@ comparison-result.txt
 *.tmp
 *.temp
 
+# Sandbox / test artifacts
+sandbox/
+
 # Environment files
 .env
 .env.*
