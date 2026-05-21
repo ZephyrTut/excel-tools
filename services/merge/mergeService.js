@@ -1,11 +1,13 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const os = require("node:os");
 const { AppError, ErrorCodes } = require("../split/errors");
 const { readWorkbook } = require("../split/excelReader");
 const { loadRules } = require("../split/ruleManager");
 const { ensureDirectory, sanitizeWindowsFileName } = require("../split/pathUtil");
 const { runMergeEngine } = require("./mergeEngine");
 const { colLetterToNumber, normalizeSheetRules, validateMergeRequest } = require("./mergeTypes");
+const { optimizeTemplate } = require("../optimize/templateOptimizer");
 
 async function resolveRules(request) {
   if (request.rules) return request.rules;
@@ -16,7 +18,8 @@ async function resolveRules(request) {
 }
 
 function resolveTemplatePath(request, rulesConfig) {
-  const templateFile = rulesConfig.templateFile;
+  // 优先使用请求中传来的模板路径（UI 传入的合并模板），fallback 到配置
+  const templateFile = request.templateFile || request.rules?.templateFile || rulesConfig.templateFile;
   if (!templateFile) {
     throw new AppError(ErrorCodes.INVALID_RULES, "templateFile is required for merge.");
   }
@@ -81,7 +84,31 @@ async function runMergeTask(request, { logger, reportProgress }) {
   });
 
   reportProgress(10, "Loading template workbook");
-  const templateWorkbook = await readWorkbook(templatePath);
+
+  // 对模板做 ZIP 级优化：清理空白行列定义、外部链接等，减少 ExcelJS 加载内存
+  let templatePathToLoad = templatePath;
+  let needCleanup = false;
+  try {
+    const stat = await fs.stat(templatePath);
+    if (stat.size > 100 * 1024) {
+      logger.info("Template is large, optimizing before loading.", { sizeMB: (stat.size / 1024 / 1024).toFixed(1) });
+      const tmpPath = path.join(os.tmpdir(), `template_opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.xlsx`);
+      const optResult = await optimizeTemplate(templatePath, tmpPath);
+      logger.info("Template optimized.", { savingsPercent: optResult.savingsPercent });
+      templatePathToLoad = tmpPath;
+      needCleanup = true;
+    }
+  } catch (optErr) {
+    // 优化失败不阻塞流程，回退使用原始模板
+    logger.warn("Template optimization failed, using original.", { error: optErr.message });
+  }
+
+  const templateWorkbook = await readWorkbook(templatePathToLoad);
+
+  // 清理临时优化文件
+  if (needCleanup) {
+    fs.unlink(templatePathToLoad).catch(() => {});
+  }
   const rules = normalizeSheetRules(rulesConfig.sheetRules || []);
   if (rules.length === 0) {
     throw new AppError(ErrorCodes.INVALID_RULES, "No enabled sheetRules found for merge.");

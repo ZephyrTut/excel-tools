@@ -7,7 +7,7 @@ function resolveWorkerMemoryMb() {
   if (Number.isFinite(parsed) && parsed >= 512) {
     return parsed;
   }
-  return 3072;
+  return 8192;
 }
 
 class WorkerRunner extends EventEmitter {
@@ -18,10 +18,25 @@ class WorkerRunner extends EventEmitter {
 
   startTask(taskId, request, taskType = "split") {
     const memoryMb = resolveWorkerMemoryMb();
-    const worker = new Worker(path.join(__dirname, "taskWorker.js"), {
-      workerData: { taskId, request, taskType },
-      resourceLimits: { maxOldGenerationSizeMb: memoryMb }
-    });
+    let worker;
+    try {
+      worker = new Worker(path.join(__dirname, "taskWorker.js"), {
+        workerData: { taskId, request, taskType },
+        resourceLimits: { maxOldGenerationSizeMb: memoryMb },
+        env: { ...process.env, NODE_OPTIONS: `--max-old-space-size=${memoryMb}` }
+      });
+    } catch (err) {
+      this.emit("event", {
+        type: "error",
+        taskId,
+        error: {
+          code: "WORKER_CREATION_FAILED",
+          message: err.message,
+          details: { stack: err.stack, memoryMb }
+        }
+      });
+      return;
+    }
 
     this.tasks.set(taskId, worker);
 
