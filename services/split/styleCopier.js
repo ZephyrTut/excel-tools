@@ -1,14 +1,3 @@
-function trimTrailingEmptyCols(cols) {
-  if (!cols || cols.length === 0) return cols;
-  let last = cols.length - 1;
-  while (last >= 0) {
-    const c = cols[last];
-    if (c && (c.width != null || c.key != null || c.hidden != null)) break;
-    last -= 1;
-  }
-  return cols.slice(0, last + 1);
-}
-
 function copyWorksheetMeta(sourceSheet, targetSheet, templateSheet) {
   targetSheet.properties = { ...sourceSheet.properties };
   targetSheet.pageSetup = { ...sourceSheet.pageSetup };
@@ -38,13 +27,10 @@ function copyWorksheetMeta(sourceSheet, targetSheet, templateSheet) {
     : [];
 
   // Build column defaults: source first, then template overrides on top
-  // Trim trailing placeholder columns to avoid blowing up XML with 2570 empty col definitions
-  const srcCols = trimTrailingEmptyCols(sourceSheet.columns || []);
-  const tplCols = trimTrailingEmptyCols(templateSheet?.columns || []);
+  const srcCols = sourceSheet.columns || [];
+  const tplCols = templateSheet?.columns || [];
   const maxCols = Math.max(srcCols.length, tplCols.length);
-  const MAX_REASONABLE_COLS = 100;
-  const actualCols = Math.min(maxCols, MAX_REASONABLE_COLS);
-  targetSheet.columns = Array.from({ length: actualCols }, (_, i) => {
+  targetSheet.columns = Array.from({ length: maxCols }, (_, i) => {
     const src = srcCols[i] || {};
     const tpl = tplCols[i] || {};
     return {
@@ -65,19 +51,7 @@ function cloneCellValue(cell) {
     return normalizeCopiedValue(clonePlainValue(r));
   }
 
-  const raw = cell.value;
-  // Handle cells whose value IS a formula object (sharedFormula clones, etc.)
-  if (raw && typeof raw === "object") {
-    if (Object.prototype.hasOwnProperty.call(raw, "sharedFormula") ||
-        Object.prototype.hasOwnProperty.call(raw, "formula")) {
-      if (Object.prototype.hasOwnProperty.call(raw, "result")) {
-        return normalizeCopiedValue(clonePlainValue(raw.result));
-      }
-      return null;
-    }
-  }
-
-  return normalizeCopiedValue(clonePlainValue(raw));
+  return normalizeCopiedValue(clonePlainValue(cell.value));
 }
 
 function clonePlainValue(value) {
