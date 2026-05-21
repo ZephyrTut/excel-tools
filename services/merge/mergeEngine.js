@@ -223,6 +223,7 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
       total += rows.length;
       if (!vendor) blank += rows.length;
     }
+    console.log('[DEBUG] ' + name + ': ' + total + ' rows, ' + blank + ' blank vendor');
   }
   return sheetRows;
 }
@@ -273,25 +274,19 @@ function createPassthroughSheet(templateSheet, outputSheet) {
 }
 
 function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
-  const orderedVendors = orderedVendorsForSheet(
-    sheetRowsState.vendorRows,
-    context.orderList,
-    sheetRowsState.unknownOrder,
-    mergeConfig.appendUnknownVendorsToEnd !== false
-  );
-
-  // 空 sheet：只复制列宽，不复制表头或合并单元格（避免 mergeCells 引用不存在的数据行导致 XML 报错）
-  if (orderedVendors.length === 0) {
-    copyColumnWidths(context.templateSheet, outputSheet);
-    return;
-  }
-
   copyWorksheetMeta(context.templateSheet, outputSheet, context.templateSheet);
   copyHeaderRowsWithMerges(
     context.templateSheet,
     outputSheet,
     context.headerRows,
     context.templateSheet
+  );
+
+  const orderedVendors = orderedVendorsForSheet(
+    sheetRowsState.vendorRows,
+    context.orderList,
+    sheetRowsState.unknownOrder,
+    mergeConfig.appendUnknownVendorsToEnd !== false
   );
 
   let seq = 0;
@@ -334,6 +329,7 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
           seq += 1;
           value = seq;
         }
+        if (col === 3) { console.log('[TRACE] Row' + outputSheet.rowCount + ' vendor=' + JSON.stringify(value)); }
         outCell.value = value;
         copyCellStyle(styleCell, outCell);
       }
@@ -392,26 +388,17 @@ async function runMergeEngine({
 
   reportProgress(70, "Building merged workbook");
   const outputBook = new ExcelJS.Workbook();
-
-  // 第一轮：有数据规则匹配的 sheet（数据 sheet 排前面，用户打开不再看到空白）
-  for (const context of ruleContexts) {
-    const templateSheet = templateWorkbook.getWorksheet(context.outputSheetName);
-    if (!templateSheet || templateSheet.state === 'hidden') continue;
-    const outputSheet = outputBook.addWorksheet(templateSheet.name);
-    writeMergedSheet(outputSheet, context, sheetRows.get(context.outputSheetName), mergeConfig);
-  }
-
-  // 第二轮：直通 sheet（无规则匹配的模板 sheet，排在数据 sheet 之后）
   for (const templateSheet of templateWorkbook.worksheets) {
+    // 隐藏 sheet 不加入合�?
     if (templateSheet.state === 'hidden') continue;
-    if (ruleContexts.some((r) => r.outputSheetName === templateSheet.name)) continue;
-    const outputSheet = outputBook.addWorksheet(templateSheet.name);
-    createPassthroughSheet(templateSheet, outputSheet);
-  }
 
-  // 设置第一个 sheet 为激活状态
-  if (outputBook.worksheets.length > 0) {
-    outputBook.worksheets[0].active = true;
+    const outputSheet = outputBook.addWorksheet(templateSheet.name);
+    const context = ruleContexts.find((rule) => rule.outputSheetName === templateSheet.name);
+    if (!context) {
+      createPassthroughSheet(templateSheet, outputSheet, 1);
+      continue;
+    }
+    writeMergedSheet(outputSheet, context, sheetRows.get(context.outputSheetName), mergeConfig);
   }
 
   reportProgress(100, "Completed");
