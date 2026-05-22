@@ -2,6 +2,11 @@ const ExcelJS = require("exceljs");
 const { AppError, ErrorCodes } = require("./errors");
 const { writeSplitOutput } = require("./excelWriter");
 const {
+  extractConditionalFormattingNodes,
+  findWorksheetMaxRow,
+  findWorksheetDeclaredMaxRow,
+} = require("../optimize/zipUtils");
+const {
   copyWorksheetMeta,
   copyHeaderRowsWithMerges,
   copyRowAndCellsWithOptions
@@ -84,10 +89,16 @@ function resolveSequenceColumn(sourceSheet, headerRows) {
 }
 
 function buildRuleContexts(workbook, rules) {
-  return buildRuleContextsWithTemplate(workbook, rules, null);
+  return buildRuleContextsWithTemplate(workbook, rules, null, null, null);
 }
 
-function buildRuleContextsWithTemplate(workbook, rules, templateWorkbook) {
+function buildRuleContextsWithTemplate(
+  workbook,
+  rules,
+  templateWorkbook,
+  sourceSheetXmlMap,
+  templateSheetXmlMap
+) {
   return rules.map((rule) => {
     const sourceSheet = workbook.getWorksheet(rule.sheetName);
     if (!sourceSheet) {
@@ -100,12 +111,18 @@ function buildRuleContextsWithTemplate(workbook, rules, templateWorkbook) {
     const outputSheetName = rule.outputSheetName || rule.sheetName;
     const templateSheet = templateWorkbook?.getWorksheet(outputSheetName) || null;
     const headerSheet = sourceSheet;
+    const sourceWorksheetXml = sourceSheetXmlMap?.get(rule.sheetName)?.xml || null;
+    const templateWorksheetXml = templateSheetXmlMap?.get(outputSheetName)?.xml || null;
     return {
       ...rule,
       sourceSheet,
       templateSheet,
       headerSheet,
       outputSheetName,
+      sourceWorksheetActualMaxRow: findWorksheetMaxRow(sourceWorksheetXml),
+      sourceWorksheetDeclaredMaxRow: findWorksheetDeclaredMaxRow(sourceWorksheetXml),
+      sourceConditionalFormattingNodes: extractConditionalFormattingNodes(sourceWorksheetXml),
+      templateConditionalFormattingNodes: extractConditionalFormattingNodes(templateWorksheetXml),
       sequenceColumnIndex: resolveSequenceColumn(sourceSheet, rule.headerRows),
       singleRowMergesBySourceRow: buildSingleRowMergeMap(sourceSheet),
       zeroFillColumnIndexes: isDailyReportSheetName(outputSheetName)
@@ -270,16 +287,20 @@ function applySingleRowMerges(ruleContext, sourceRowNum, targetSheet, targetRowN
   }
 }
 
-function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
+function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey, sourceDifferentialStylesNode) {
   const outputBook = new ExcelJS.Workbook();
+  const sheetTransforms = {};
   for (const context of ruleContexts) {
     const targetSheet = outputBook.addWorksheet(context.outputSheetName);
     copyWorksheetMeta(context.headerSheet, targetSheet, context.templateSheet);
     copyHeaderRowsWithMerges(context.headerSheet, targetSheet, context.headerRows, context.templateSheet);
 
     const sourceRows = rowsBySheetForKey.get(context.outputSheetName) || [];
+    const rowMap = new Map();
+    for (let rowNum = 1; rowNum <= context.headerRows; rowNum += 1) {
+      rowMap.set(rowNum, rowNum);
+    }
     let seq = 0;
-    let _debugCount = 0;
     for (const sourceRowNum of sourceRows) {
       const sourceRow = context.sourceSheet.getRow(sourceRowNum);
       const targetRowNum = targetSheet.rowCount + 1;
@@ -296,19 +317,48 @@ function buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey) {
         preserveSourceFillColumns: context.preserveSourceFillColumnIndexes
       });
       applySingleRowMerges(context, sourceRowNum, targetSheet, targetRowNum);
+      rowMap.set(sourceRowNum, targetRowNum);
       if (context.sequenceColumnIndex > 0) {
         seq += 1;
         targetSheet.getRow(targetRowNum).getCell(context.sequenceColumnIndex).value = seq;
       }
     }
 
+    sheetTransforms[context.outputSheetName] = {
+      conditionalFormatting: {
+        mode: "remap",
+        nodes: context.sourceConditionalFormattingNodes,
+        rowMap: [...rowMap.entries()],
+        sourceMaxRow: context.sourceWorksheetDeclaredMaxRow,
+        trailingRowPadding: Math.max(
+          0,
+          context.sourceWorksheetDeclaredMaxRow - context.sourceWorksheetActualMaxRow
+        ),
+      },
+      preserveMaxRow:
+        targetSheet.rowCount +
+        Math.max(0, context.sourceWorksheetDeclaredMaxRow - context.sourceWorksheetActualMaxRow),
+      normalizeView: { clearFrozenPane: true },
+      trimTrailingRows: true,
+    };
   }
-  return outputBook;
+  return {
+    workbook: outputBook,
+    postProcess: {
+      sheetTransforms,
+      stylesTransform: {
+        differentialStylesNode: sourceDifferentialStylesNode,
+      },
+    },
+  };
 }
 
 async function runSplitEngine({
   workbook,
   templateWorkbook,
+  sourceSheetXmlMap,
+  templateSheetXmlMap,
+  sourceDifferentialStylesNode,
   rules,
   outputOptions,
   splitConfig,
@@ -319,7 +369,9 @@ async function runSplitEngine({
   const ruleContexts = buildRuleContextsWithTemplate(
     workbook,
     rules,
-    templateWorkbook || null
+    templateWorkbook || null,
+    sourceSheetXmlMap || null,
+    templateSheetXmlMap || null
   );
 
   reportProgress(10, "Collecting split rows");
@@ -341,8 +393,18 @@ async function runSplitEngine({
     index += 1;
     const progress = 30 + Math.floor((index / totalKeys) * 69);
     reportProgress(progress, `Exporting files (${index}/${totalKeys})`);
-    const outputBook = buildOutputWorkbookForKey(ruleContexts, rowsBySheetForKey);
-    const filePath = await writeSplitOutput(key, outputBook, outputOptions, logger);
+    const outputBundle = buildOutputWorkbookForKey(
+      ruleContexts,
+      rowsBySheetForKey,
+      sourceDifferentialStylesNode
+    );
+    const filePath = await writeSplitOutput(
+      key,
+      outputBundle.workbook,
+      outputOptions,
+      logger,
+      outputBundle.postProcess
+    );
     outputFiles.push(filePath);
   }
   reportProgress(100, "Completed");

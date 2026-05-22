@@ -8,6 +8,13 @@ const { ensureDirectory, sanitizeWindowsFileName } = require("../split/pathUtil"
 const { runMergeEngine } = require("./mergeEngine");
 const { colLetterToNumber, normalizeSheetRules, validateMergeRequest } = require("./mergeTypes");
 const { optimizeTemplate } = require("../optimize/templateOptimizer");
+const {
+  cleanupAndOverwriteXlsx,
+  readXlsxEntries,
+  readWorkbookSheetEntries,
+  extractDifferentialStylesNode,
+  stripExternalLinks,
+} = require("../optimize/zipUtils");
 
 async function resolveRules(request) {
   if (request.rules) return request.rules;
@@ -51,7 +58,7 @@ async function listSourceFiles(inputDir, excludedAbsolutePaths) {
     .filter((filePath) => !excluded.has(path.resolve(filePath)));
 }
 
-async function writeMergeOutput(workbook, outputPath, overwriteIfExists) {
+async function writeMergeOutput(workbook, outputPath, overwriteIfExists, postProcessOptions = {}) {
   await ensureDirectory(path.dirname(outputPath));
   if (!overwriteIfExists) {
     try {
@@ -65,7 +72,15 @@ async function writeMergeOutput(workbook, outputPath, overwriteIfExists) {
     }
   }
   await workbook.xlsx.writeFile(outputPath);
+  await cleanupAndOverwriteXlsx(outputPath, postProcessOptions);
   return outputPath;
+}
+
+function buildTempXlsxPath(prefix) {
+  return path.join(
+    os.tmpdir(),
+    `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.xlsx`
+  );
 }
 
 async function runMergeTask(request, { logger, reportProgress }) {
@@ -74,6 +89,9 @@ async function runMergeTask(request, { logger, reportProgress }) {
   const rulesConfig = await resolveRules(request);
   const mergeConfig = rulesConfig.merge || {};
   const templatePath = resolveTemplatePath(request, rulesConfig);
+  const templateSheetXmlMap = await readWorkbookSheetEntries(templatePath).catch(() => new Map());
+  const templateEntries = await readXlsxEntries(templatePath).catch(() => new Map());
+  const templateDifferentialStylesNode = extractDifferentialStylesNode(templateEntries.get("xl/styles.xml"));
   const outputDir = path.resolve(request.outputDir);
   const inputDir = resolveMergeInputDir(request, rulesConfig);
 
@@ -92,9 +110,14 @@ async function runMergeTask(request, { logger, reportProgress }) {
     const stat = await fs.stat(templatePath);
     if (stat.size > 100 * 1024) {
       logger.info("Template is large, optimizing before loading.", { sizeMB: (stat.size / 1024 / 1024).toFixed(1) });
-      const tmpPath = path.join(os.tmpdir(), `template_opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.xlsx`);
+      const tmpPath = buildTempXlsxPath("template_opt");
       const optResult = await optimizeTemplate(templatePath, tmpPath);
       logger.info("Template optimized.", { savingsPercent: optResult.savingsPercent });
+      templatePathToLoad = tmpPath;
+      needCleanup = true;
+    } else {
+      const tmpPath = buildTempXlsxPath("template_clean");
+      await stripExternalLinks(templatePath, tmpPath);
       templatePathToLoad = tmpPath;
       needCleanup = true;
     }
@@ -127,6 +150,8 @@ async function runMergeTask(request, { logger, reportProgress }) {
   const result = await runMergeEngine({
     sourceFiles,
     templateWorkbook,
+    templateSheetXmlMap,
+    templateDifferentialStylesNode,
     rules,
     mergeConfig: {
       ...mergeConfig,
@@ -142,7 +167,8 @@ async function runMergeTask(request, { logger, reportProgress }) {
   const outputFile = await writeMergeOutput(
     result.workbook,
     outputPath,
-    Boolean(rulesConfig.overwriteIfExists)
+    Boolean(rulesConfig.overwriteIfExists),
+    result.postProcess
   );
   reportProgress(100, "Completed");
 

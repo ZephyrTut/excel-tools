@@ -4,6 +4,7 @@ const {
   ensureDirectory,
   sanitizeWindowsFileName
 } = require("./pathUtil");
+const { cleanupAndOverwriteXlsx } = require("../optimize/zipUtils");
 
 async function pickOutputPath(outputDir, baseName, strategy, overwriteIfExists) {
   const defaultPath = path.join(outputDir, `${baseName}.xlsx`);
@@ -39,7 +40,7 @@ async function writeSplitOutputs(workbooksByKey, options, logger) {
   return outputs;
 }
 
-async function writeSplitOutput(splitKey, workbook, options, logger) {
+async function writeSplitOutput(splitKey, workbook, options, logger, postProcessOptions = {}) {
   const {
     outputDir,
     overwriteIfExists = false,
@@ -56,6 +57,7 @@ async function writeSplitOutput(splitKey, workbook, options, logger) {
     overwriteIfExists
   );
   await workbook.xlsx.writeFile(filePath);
+  await cleanupAndOverwriteXlsx(filePath, postProcessOptions);
   logger.info("Split file written.", { key: splitKey, filePath });
   return filePath;
 }

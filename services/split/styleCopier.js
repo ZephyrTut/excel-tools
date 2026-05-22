@@ -1,30 +1,12 @@
 function copyWorksheetMeta(sourceSheet, targetSheet, templateSheet) {
   targetSheet.properties = { ...sourceSheet.properties };
   targetSheet.pageSetup = { ...sourceSheet.pageSetup };
-  targetSheet.views = sourceSheet.views ? [...sourceSheet.views] : [];
+  const baseViews = templateSheet?.views?.length ? templateSheet.views : sourceSheet.views;
+  targetSheet.views = baseViews ? JSON.parse(JSON.stringify(baseViews)) : [];
   targetSheet.state = sourceSheet.state;
-  targetSheet.conditionalFormattings = sourceSheet.conditionalFormattings
-    ? JSON.parse(JSON.stringify(sourceSheet.conditionalFormattings)).filter((cf) => {
-        // 移除那些设定"等于 0 时字体为白色"的条件格式规则——这会导致填充的 0 在视觉上消失
-        if (!cf.rules) return true;
-        cf.rules = cf.rules.filter((rule) => {
-          if (
-            rule.type === "cellIs" &&
-            rule.operator === "equal" &&
-            rule.formulae &&
-            rule.formulae[0] === "0" &&
-            rule.style &&
-            rule.style.font &&
-            rule.style.font.color &&
-            rule.style.font.color.argb === "FFFFFFFF"
-          ) {
-            return false;
-          }
-          return true;
-        });
-        return cf.rules.length > 0;
-      })
-    : [];
+  // ExcelJS does not reliably round-trip several conditional formatting rule
+  // types, so we restore those later from the original worksheet XML.
+  targetSheet.conditionalFormattings = [];
 
   // Build column defaults: source first, then template overrides on top
   const srcCols = sourceSheet.columns || [];
@@ -142,9 +124,9 @@ function copyRowAndCellsWithOptions(
       ? 0
       : copiedValue;
     // Number format: use source cell's format if defined, else template/column
-    targetCell.numFmt = (typeof cell.numFmt === 'string' && cell.numFmt)
+    targetCell.numFmt = (typeof cell.numFmt === "string" && cell.numFmt)
       ? cell.numFmt
-      : (options.styleRow && typeof styleCell.numFmt === 'string' && styleCell.numFmt)
+      : (options.styleRow && typeof styleCell.numFmt === "string" && styleCell.numFmt)
         ? styleCell.numFmt
         : undefined;
 
@@ -162,7 +144,7 @@ function copyRowAndCellsWithOptions(
 
     // Fill: preserve source fill for flagged columns (e.g. 可用结存).
     // Otherwise prefer template (styleRow) fill when available, falling
-    // back to source fill — consistent with how font/alignment/numFmt work.
+    // back to source fill - consistent with how font/alignment/numFmt work.
     const useSourceFill = preserveSourceFillColumns.has(colNumber);
     if (useSourceFill) {
       targetCell.fill = cloneStyleObject(cell.fill);
@@ -182,7 +164,7 @@ function copyRowAndCellsWithOptions(
     // Border: if source cell has explicit borders (non-empty), use them.
     // If no explicit border and template available, use template's border.
     const srcBorder = cell.border;
-    const hasExplicitBorder = srcBorder && typeof srcBorder === 'object' && Object.keys(srcBorder).length > 0;
+    const hasExplicitBorder = srcBorder && typeof srcBorder === "object" && Object.keys(srcBorder).length > 0;
     if (hasExplicitBorder) {
       targetCell.border = cloneStyleObject(srcBorder);
     } else if (options.styleRow) {
@@ -210,25 +192,25 @@ function shouldForceZero(value, templateValue, colNumber, zeroFillColumns) {
 }
 
 function hasVisibleFill(fill) {
-  if (!fill || typeof fill !== 'object') return false;
-  // Pattern fill with solid/gray125/etc — pattern !== 'none' means visible
-  if (fill.type === 'pattern' && fill.pattern !== 'none') return true;
+  if (!fill || typeof fill !== "object") return false;
+  // Pattern fill with solid/gray125/etc - pattern !== 'none' means visible
+  if (fill.type === "pattern" && fill.pattern !== "none") return true;
   // Gradient fill is always visible
-  if (fill.type === 'gradient') return true;
+  if (fill.type === "gradient") return true;
   // Some fills don't have type but have an fgColor with real color
   if (fill.fgColor) {
     const argb = fill.fgColor.argb;
     // Normalize to uppercase for comparison; exclude transparent/auto/no-fill
     if (argb) {
       const upper = String(argb).toUpperCase();
-      if (upper !== '0' && upper !== '00000000' && upper !== 'FFFFFFFF') {
+      if (upper !== "0" && upper !== "00000000" && upper !== "FFFFFFFF") {
         return true;
       }
     }
     // Theme colors (0-8) are valid visible fills regardless of argb
     const theme = fill.fgColor.theme;
     if (theme !== undefined && theme !== null) return true;
-    // Indexed colors (Excel palette) — index 64 = "automatic" (not visible)
+    // Indexed colors (Excel palette) - index 64 = "automatic" (not visible)
     const idx = fill.fgColor.indexed;
     if (idx !== undefined && idx !== null && idx !== 64) return true;
   }
@@ -282,7 +264,7 @@ function copyHeaderRowsWithMerges(sourceSheet, targetSheet, headerRows, styleShe
     const styleRow = styleSheet ? styleSheet.getRow(row) : null;
     copyRowAndCellsWithOptions(sourceSheet.getRow(row), targetSheet, row, {
       zeroFillColumns: new Set(),
-      styleRow: styleRow
+      styleRow,
     });
   }
 

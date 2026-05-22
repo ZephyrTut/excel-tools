@@ -1,6 +1,7 @@
 const ExcelJS = require("exceljs");
 const { AppError, ErrorCodes } = require("../split/errors");
 const { copyWorksheetMeta, copyHeaderRowsWithMerges } = require("../split/styleCopier");
+const { extractConditionalFormattingNodes } = require("../optimize/zipUtils");
 const { readWorkbook } = require("../split/excelReader");
 const { normalizeHeaderName } = require("./mergeTypes");
 
@@ -83,6 +84,15 @@ function readHeaderFromCell(cell) {
 }
 
 function resolveHeaderMap(sheet, headerRows) {
+  const columnsByHeader = resolveHeaderColumns(sheet, headerRows);
+  const map = new Map();
+  for (const [header, cols] of columnsByHeader.entries()) {
+    if (cols.length > 0) map.set(header, cols[0]);
+  }
+  return map;
+}
+
+function resolveHeaderColumns(sheet, headerRows) {
   const map = new Map();
   const maxCol = Math.max(sheet.columnCount || 1, sheet.getRow(headerRows).cellCount || 1);
   for (let col = 1; col <= maxCol; col += 1) {
@@ -94,7 +104,9 @@ function resolveHeaderMap(sheet, headerRows) {
         break;
       }
     }
-    if (header && !map.has(header)) map.set(header, col);
+    if (!header) continue;
+    if (!map.has(header)) map.set(header, []);
+    map.get(header).push(col);
   }
   return map;
 }
@@ -131,16 +143,20 @@ function resolveSequenceColumn(templateSheet, headerRows) {
 }
 
 function mapSourceToTargetColumns(rule, sourceSheet, templateSheet) {
-  const sourceHeaders = resolveHeaderMap(sourceSheet, rule.headerRows);
-  const targetHeaders = resolveHeaderMap(templateSheet, rule.headerRows);
+  const sourceHeaders = resolveHeaderColumns(sourceSheet, rule.headerRows);
+  const targetHeaders = resolveHeaderColumns(templateSheet, rule.headerRows);
   const colMap = new Map();
 
-  for (const [sourceHeader, sourceCol] of sourceHeaders.entries()) {
+  for (const [sourceHeader, sourceCols] of sourceHeaders.entries()) {
     if (rule.removeHeaderSet.has(sourceHeader)) continue;
     const mappedHeader = rule.aliasMap.get(sourceHeader) || sourceHeader;
-    const targetCol = targetHeaders.get(mappedHeader);
-    if (!targetCol) continue;
-    colMap.set(sourceCol, targetCol);
+    const targetCols = targetHeaders.get(mappedHeader);
+    if (!targetCols?.length) continue;
+
+    const count = Math.min(sourceCols.length, targetCols.length);
+    for (let i = 0; i < count; i += 1) {
+      colMap.set(sourceCols[i], targetCols[i]);
+    }
   }
   return colMap;
 }
@@ -223,7 +239,6 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
       total += rows.length;
       if (!vendor) blank += rows.length;
     }
-    console.log('[DEBUG] ' + name + ': ' + total + ' rows, ' + blank + ' blank vendor');
   }
   return sheetRows;
 }
@@ -329,7 +344,6 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
           seq += 1;
           value = seq;
         }
-        if (col === 3) { console.log('[TRACE] Row' + outputSheet.rowCount + ' vendor=' + JSON.stringify(value)); }
         outCell.value = value;
         copyCellStyle(styleCell, outCell);
       }
@@ -340,6 +354,8 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
 async function runMergeEngine({
   sourceFiles,
   templateWorkbook,
+  templateSheetXmlMap,
+  templateDifferentialStylesNode,
   rules,
   mergeConfig,
   logger,
@@ -359,6 +375,9 @@ async function runMergeEngine({
       return {
         ...rule,
         templateSheet,
+        templateConditionalFormattingNodes: extractConditionalFormattingNodes(
+          templateSheetXmlMap?.get(rule.outputSheetName)?.xml || null
+        ),
         sequenceColumnIndex: resolveSequenceColumn(templateSheet, rule.headerRows),
         zeroFillStartColumnIndex,
         availableBalanceColumnIndex,
@@ -388,6 +407,7 @@ async function runMergeEngine({
 
   reportProgress(70, "Building merged workbook");
   const outputBook = new ExcelJS.Workbook();
+  const sheetTransforms = {};
   for (const templateSheet of templateWorkbook.worksheets) {
     // 隐藏 sheet 不加入合�?
     if (templateSheet.state === 'hidden') continue;
@@ -396,15 +416,32 @@ async function runMergeEngine({
     const context = ruleContexts.find((rule) => rule.outputSheetName === templateSheet.name);
     if (!context) {
       createPassthroughSheet(templateSheet, outputSheet, 1);
+      sheetTransforms[templateSheet.name] = {
+        normalizeView: { clearFrozenPane: true },
+      };
       continue;
     }
     writeMergedSheet(outputSheet, context, sheetRows.get(context.outputSheetName), mergeConfig);
+    sheetTransforms[context.outputSheetName] = {
+      conditionalFormatting: {
+        mode: "clip",
+        nodes: context.templateConditionalFormattingNodes,
+      },
+      normalizeView: { clearFrozenPane: true },
+      trimTrailingRows: true,
+    };
   }
 
   reportProgress(100, "Completed");
 
   return {
     workbook: outputBook,
+    postProcess: {
+      sheetTransforms,
+      stylesTransform: {
+        differentialStylesNode: templateDifferentialStylesNode,
+      },
+    },
     stats: {
       sourceFileCount: sourceFiles.length,
       mergedRowCount: totalRows,
