@@ -19,9 +19,12 @@
       <template #header>
         <div class="card-header-row">
           <span>任务配置</span>
-          <el-button text type="primary" size="small" @click="openTemplateDialog">
-            ⚙ 模板
-          </el-button>
+          <div style="display: flex; gap: 8px">
+            <el-button text type="primary" size="small" @click="openAliasDialog">Sheet 别名</el-button>
+            <el-button text type="primary" size="small" @click="openTemplateDialog">
+              ⚙ 模板
+            </el-button>
+          </div>
         </div>
       </template>
       <el-form label-width="100px">
@@ -98,7 +101,7 @@
         </template>
       </el-alert>
       <RuleTable
-        :rules="state.rules.sheetRules"
+        :rules="state.rules.splitSheetRules"
         :source-sheet-names="state.sourceSheetNames"
         :template-sheet-names="state.templateSheetNames"
         @remove="removeRule"
@@ -127,7 +130,6 @@
         <el-table-column label="模板名称" min-width="180">
           <template #default="{ row }">
             <span>{{ row.name }}</span>
-            <el-tag v-if="row.isDefault" size="small" type="warning" style="margin-left: 6px">默认</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="大小" width="90">
@@ -138,7 +140,6 @@
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
             <el-popconfirm
-              v-if="!row.isDefault"
               title="确定删除此模板？"
               confirm-button-text="删除"
               @confirm="handleDeleteTemplate(row)"
@@ -147,7 +148,6 @@
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
             </el-popconfirm>
-            <span v-else style="color: #bbb; font-size: 13px">🔒 不可删除</span>
           </template>
         </el-table-column>
       </el-table>
@@ -159,12 +159,21 @@
       <template #footer>
         <el-space wrap>
           <el-button @click="handleImportTemplate">📂 导入模板</el-button>
-          <el-button @click="handleResetDefault">恢复默认</el-button>
           <el-button @click="handleClearTemplate">不使用模板</el-button>
           <el-button type="primary" :loading="state.templateLoading" :disabled="state.templateLoading" @click="dialogConfirm">
             {{ state.templateLoading ? '加载 Sheet 名称中...' : '确定' }}
           </el-button>
           <el-button @click="state.showTemplateDialog = false">取消</el-button>
+        </el-space>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="state.showAliasDialog" title="拆分 Sheet 别名" width="560px" append-to-body>
+      <p class="dialog-hint">格式示例：{"合格品入货记录":"合格品入库记录"}</p>
+      <el-input v-model="state.aliasText" type="textarea" :rows="12" />
+      <template #footer>
+        <el-space wrap>
+          <el-button @click="state.showAliasDialog = false">取消</el-button>
+          <el-button type="primary" @click="saveAliasDialog">保存</el-button>
         </el-space>
       </template>
     </el-dialog>
@@ -177,6 +186,7 @@ import { useDropZone } from "../composables/useDropZone";
 
 import RuleTable from "../components/RuleTable.vue";
 import LogPanel from "../components/LogPanel.vue";
+import { resolveSheetName } from "../utils/sheetNameMatcher";
 
 const state = reactive({
   inputFile: "",
@@ -190,16 +200,17 @@ const state = reactive({
   progress: 0,
   logs: [],
   showTemplateDialog: false,
+  showAliasDialog: false,
   templateLoading: false, // 模板 sheet 名加载中（防连点 + 显示加载态）
   templateList: [],
   selectedTemplatePath: "",
+  aliasText: "",
   sourceSheetNames: [],
   templateSheetNames: [],
   sheetWarnings: [],
   rules: {
     appName: "Excel Tools",
     defaultOutputDir: ".\\output",
-    templateFile: "",
     overwriteIfExists: false,
     ifExistsStrategy: "timestamp",
     fileName: {
@@ -211,10 +222,17 @@ const state = reactive({
       maxLength: 120
     },
     split: {
+      templateFile: "",
+      sheetNameAliases: {},
       skipEmptySplitKey: true,
       trimSplitKey: true
     },
-    sheetRules: []
+    merge: {
+      templateFile: "",
+      sheetNameAliases: {}
+    },
+    splitSheetRules: [],
+    mergeSheetRules: []
   },
   _loading: true // suppress auto-save during initial load
 });
@@ -231,8 +249,8 @@ const canRun = computed(
   () =>
     !!state.inputFile &&
     !!state.outputDir &&
-    Array.isArray(state.rules.sheetRules) &&
-    state.rules.sheetRules.length > 0
+    Array.isArray(state.rules.splitSheetRules) &&
+    state.rules.splitSheetRules.length > 0
 );
 
 const statusType = computed(() => {
@@ -269,23 +287,30 @@ function formatFileSize(size) {
 async function validateSheetNames(filePath) {
   try {
     const actualSheets = await getApi().getSheetNames(filePath);
-    const enabledRules = state.rules.sheetRules.filter(
+    const enabledRules = state.rules.splitSheetRules.filter(
       (r) => r.enabled && r.sheetName && r.sheetName.trim()
     );
-    const ruleSheetNames = enabledRules.map((r) => r.sheetName);
     const warnings = [];
+    const coveredActualSheets = new Set();
+    const sheetNameAliases = state.rules.split?.sheetNameAliases || {};
 
-    // 规则中有但文件中没有
     for (const rule of enabledRules) {
-      if (!actualSheets.includes(rule.sheetName)) {
+      const resolved = resolveSheetName(rule.sheetName, actualSheets, sheetNameAliases);
+      if (resolved.matchedSheetName) {
+        coveredActualSheets.add(resolved.matchedSheetName);
+        continue;
+      }
+
+      if (resolved.suggestions.length > 0) {
+        warnings.push(`规则中的 sheet「${rule.sheetName}」未命中，建议改为：${resolved.suggestions.join("、")}`);
+      } else {
         warnings.push(`规则中的 sheet「${rule.sheetName}」在文件中不存在（文件中有：${actualSheets.join("、")}）`);
       }
     }
 
-    // 文件中有但规则没覆盖
     if (enabledRules.length > 0) {
       for (const sheet of actualSheets) {
-        if (!ruleSheetNames.includes(sheet)) {
+        if (!coveredActualSheets.has(sheet)) {
           warnings.push(`文件中的 sheet「${sheet}」未配置拆分规则`);
         }
       }
@@ -317,9 +342,9 @@ async function applyInputFile(path, name, size) {
     const sheets = await getApi().getSheetNames(path);
     state.sourceSheetNames = sheets;
 
-    if (state.rules.sheetRules.length === 0) {
+    if (state.rules.splitSheetRules.length === 0) {
       for (const sheet of sheets) {
-        state.rules.sheetRules.push({
+        state.rules.splitSheetRules.push({
           enabled: true,
           sheetName: sheet,
           headerRows: 1,
@@ -365,17 +390,15 @@ function onOutputDirDrop(e) {
 }
 
 async function loadTemplateList() {
-  const list = await getApi().listTemplates();
+  const list = await getApi().listTemplates("split");
   state.templateList = list;
   // Auto-select the currently configured template if it exists in the list
-  const currentPath = state.rules.templateFile || "";
+  const currentPath = state.rules.split?.templateFile || "";
   if (currentPath) {
     const match = list.find((t) => t.path === currentPath);
     state.selectedTemplatePath = match ? match.path : "";
   } else if (list.length > 0) {
-    // Default to the first (default) template
-    const defaultTpl = list.find((t) => t.isDefault);
-    state.selectedTemplatePath = defaultTpl ? defaultTpl.path : list[0].path;
+    state.selectedTemplatePath = list[0].path;
   } else {
     state.selectedTemplatePath = "";
   }
@@ -386,6 +409,11 @@ async function openTemplateDialog() {
   state.showTemplateDialog = true;
 }
 
+function openAliasDialog() {
+  state.aliasText = JSON.stringify(state.rules.split?.sheetNameAliases || {}, null, 2);
+  state.showAliasDialog = true;
+}
+
 function onTemplateSelect(row) {
   state.selectedTemplatePath = row.path;
 }
@@ -394,7 +422,7 @@ async function handleImportTemplate() {
   const result = await getApi().selectTemplateFile();
   if (!result) return;
   try {
-    await getApi().importTemplate(result.path);
+    await getApi().importTemplate("split", result.path);
     ElMessage.success(`模板「${result.name}」导入成功`);
     await loadTemplateList();
   } catch (err) {
@@ -404,7 +432,7 @@ async function handleImportTemplate() {
 
 async function handleDeleteTemplate(row) {
   try {
-    await getApi().deleteTemplate(row.name);
+    await getApi().deleteTemplate("split", row.name);
     ElMessage.success(`模板「${row.name}」已删除`);
     // If the deleted template was selected, clear selection
     if (state.selectedTemplatePath === row.path) {
@@ -413,16 +441,6 @@ async function handleDeleteTemplate(row) {
     await loadTemplateList();
   } catch (err) {
     ElMessage.error(err.message || "删除失败");
-  }
-}
-
-async function handleResetDefault() {
-  await loadTemplateList();
-  const defaultTpl = state.templateList.find((t) => t.isDefault);
-  if (defaultTpl) {
-    state.selectedTemplatePath = defaultTpl.path;
-  } else {
-    ElMessage.warning("默认模板不存在，请导入");
   }
 }
 
@@ -436,7 +454,7 @@ async function loadTemplateSheetNames() {
   if (_loadingSheetNames) return; // 已有加载中的请求，跳过防竞态
   _loadingSheetNames = true;
   try {
-    const tplPath = state.rules.templateFile;
+    const tplPath = state.rules.split?.templateFile;
     if (tplPath) {
       try {
         state.templateSheetNames = await getApi().getSheetNames(tplPath);
@@ -455,7 +473,8 @@ async function dialogConfirm() {
   if (state.templateLoading) return; // 已有操作进行中，防连点
   state.templateLoading = true;
   try {
-    state.rules.templateFile = state.selectedTemplatePath || "";
+    if (!state.rules.split) state.rules.split = {};
+    state.rules.split.templateFile = state.selectedTemplatePath || "";
     // 先保存规则（轻操作），再异步加载 sheet 名
     await saveRules();
     await loadTemplateSheetNames();
@@ -464,6 +483,22 @@ async function dialogConfirm() {
     ElMessage.error(err.message || "模板切换失败");
   } finally {
     state.templateLoading = false;
+  }
+}
+
+async function saveAliasDialog() {
+  try {
+    const parsed = state.aliasText.trim() ? JSON.parse(state.aliasText) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Sheet 别名必须是 JSON 对象");
+    }
+    if (!state.rules.split) state.rules.split = {};
+    state.rules.split.sheetNameAliases = parsed;
+    await saveRules();
+    if (state.inputFile) await validateSheetNames(state.inputFile);
+    state.showAliasDialog = false;
+  } catch (error) {
+    ElMessage.error(error.message || "别名保存失败");
   }
 }
 
@@ -498,7 +533,7 @@ async function saveRules() {
 }
 
 function addRule() {
-  state.rules.sheetRules.push({
+  state.rules.splitSheetRules.push({
     enabled: true,
     sheetName: "",
     headerRows: 1,
@@ -510,13 +545,13 @@ function addRule() {
 }
 
 function removeRule(index) {
-  state.rules.sheetRules.splice(index, 1);
+  state.rules.splitSheetRules.splice(index, 1);
 }
 
 // 监控规则中 sheet 名称变化，自动重新比对
 watch(
   () =>
-    state.rules.sheetRules
+    state.rules.splitSheetRules
       .filter((r) => r.enabled)
       .map((r) => r.sheetName)
       .join("|"),

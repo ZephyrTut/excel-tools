@@ -19,7 +19,10 @@
       <template #header>
         <div class="card-header-row">
           <span>合并汇总配置</span>
-          <el-button text type="primary" size="small" @click="openTemplateDialog">⚙ 模板</el-button>
+          <div style="display: flex; gap: 8px">
+            <el-button text type="primary" size="small" @click="openAliasDialog">Sheet 别名</el-button>
+            <el-button text type="primary" size="small" @click="openTemplateDialog">⚙ 模板</el-button>
+          </div>
         </div>
       </template>
 
@@ -120,7 +123,6 @@
         <el-table-column label="模板名称" min-width="180">
           <template #default="{ row }">
             <span>{{ row.name }}</span>
-            <el-tag v-if="row.isDefault" size="small" type="warning" style="margin-left: 6px">默认</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="大小" width="90">
@@ -128,11 +130,10 @@
         </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-popconfirm v-if="!row.isDefault" title="确定删除此模板？" confirm-button-text="删除"
+            <el-popconfirm title="确定删除此模板？" confirm-button-text="删除"
               @confirm="handleDeleteTemplate(row)">
               <template #reference><el-button text type="danger" size="small">删除</el-button></template>
             </el-popconfirm>
-            <span v-else style="color: #bbb; font-size: 13px">🔒 不可删除</span>
           </template>
         </el-table-column>
       </el-table>
@@ -140,10 +141,19 @@
       <template #footer>
         <el-space wrap>
           <el-button @click="handleImportTemplate">📂 导入模板</el-button>
-          <el-button @click="handleResetDefault">恢复默认</el-button>
           <el-button @click="handleClearTemplate">不使用模板</el-button>
           <el-button type="primary" @click="dialogConfirm">确定</el-button>
           <el-button @click="state.showTemplateDialog = false">取消</el-button>
+        </el-space>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="state.showAliasDialog" title="合并 Sheet 别名" width="560px" append-to-body>
+      <p class="dialog-hint">格式示例：{"零跑退回":"领跑良品退回"}</p>
+      <el-input v-model="state.aliasText" type="textarea" :rows="12" />
+      <template #footer>
+        <el-space wrap>
+          <el-button @click="state.showAliasDialog = false">取消</el-button>
+          <el-button type="primary" @click="saveAliasDialog">保存</el-button>
         </el-space>
       </template>
     </el-dialog>
@@ -156,6 +166,7 @@ import { useDropZone } from "../composables/useDropZone";
 import LogPanel from "../components/LogPanel.vue";
 import MergeRuleTable from "../components/MergeRuleTable.vue";
 import MergeColumnMappingPanel from "../components/MergeColumnMappingPanel.vue";
+import { buildMergeSourceSheetOptions } from "../utils/mergeSheetOptions.browser";
 
 const state = reactive({
   inputDir: "",
@@ -169,8 +180,10 @@ const state = reactive({
   showColumnMappingPanel: false,
   currentRule: null,
   showTemplateDialog: false,
+  showAliasDialog: false,
   templateList: [],
   selectedTemplatePath: "",
+  aliasText: "",
   sourceSheetNames: [],
   templateSheetNames: [],
   mergeSheetRules: [],
@@ -190,7 +203,7 @@ let unsubTask = null;
 const MAX_LOG_LINES = 500;
 
 const currentTemplatePath = computed(() => {
-  return state.rules.merge?.templateFile || state.rules.templateFile || "";
+  return state.rules.merge?.templateFile || "";
 });
 
 const canRun = computed(() => {
@@ -216,6 +229,11 @@ function getApi() {
 }
 
 function deepClone(v) { return JSON.parse(JSON.stringify(v)); }
+
+function stageError(stage, error) {
+  const message = error?.message || String(error || "unknown error");
+  return new Error(`${stage}：${message}`);
+}
 
 function formatFileSize(size) {
   if (!size) return "0 B";
@@ -247,12 +265,17 @@ async function openTemplateDialog() {
   state.showTemplateDialog = true;
 }
 
+function openAliasDialog() {
+  state.aliasText = JSON.stringify(state.rules.merge?.sheetNameAliases || {}, null, 2);
+  state.showAliasDialog = true;
+}
+
 async function loadTemplateList() {
-  const list = await getApi().listTemplates();
+  const list = await getApi().listTemplates("merge");
   state.templateList = list;
   const currentPath = currentTemplatePath.value;
   state.selectedTemplatePath = currentPath && list.find((t) => t.path === currentPath) ? currentPath :
-    list.find((t) => t.isDefault)?.path || (list.length > 0 ? list[0].path : "");
+    (list.length > 0 ? list[0].path : "");
 }
 
 function onTemplateSelect(row) { state.selectedTemplatePath = row.path; }
@@ -261,7 +284,7 @@ async function handleImportTemplate() {
   const result = await getApi().selectTemplateFile();
   if (!result) return;
   try {
-    await getApi().importTemplate(result.path);
+    await getApi().importTemplate("merge", result.path);
     ElMessage.success(`模板「${result.name}」导入成功`);
     await loadTemplateList();
   } catch (err) { ElMessage.error(err.message || "导入失败"); }
@@ -269,42 +292,57 @@ async function handleImportTemplate() {
 
 async function handleDeleteTemplate(row) {
   try {
-    await getApi().deleteTemplate(row.name);
+    await getApi().deleteTemplate("merge", row.name);
     ElMessage.success(`模板「${row.name}」已删除`);
     if (state.selectedTemplatePath === row.path) state.selectedTemplatePath = "";
     await loadTemplateList();
   } catch (err) { ElMessage.error(err.message || "删除失败"); }
 }
 
-async function handleResetDefault() {
-  await loadTemplateList();
-  const dft = state.templateList.find((t) => t.isDefault);
-  if (dft) state.selectedTemplatePath = dft.path;
-  else ElMessage.warning("默认模板不存在，请导入");
-}
-
 function handleClearTemplate() { state.selectedTemplatePath = ""; }
 
-function dialogConfirm() {
+async function dialogConfirm() {
   if (!state.rules.merge) state.rules.merge = {};
   state.rules.merge.templateFile = state.selectedTemplatePath || "";
   state.showTemplateDialog = false;
-  loadTemplateSheetNames();
-  saveMergeRules();
+  await loadTemplateSheetNames();
+  await saveMergeRules();
+}
+
+async function saveAliasDialog() {
+  try {
+    const parsed = state.aliasText.trim() ? JSON.parse(state.aliasText) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Sheet 别名必须是 JSON 对象");
+    }
+    if (!state.rules.merge) state.rules.merge = {};
+    state.rules.merge.sheetNameAliases = parsed;
+    await saveMergeRules();
+    await refreshSourceSheetNames();
+    state.showAliasDialog = false;
+  } catch (error) {
+    ElMessage.error(error.message || "别名保存失败");
+  }
 }
 
 async function loadTemplateSheetNames() {
   const tplPath = currentTemplatePath.value;
-  if (!tplPath) { state.templateSheetNames = []; state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, []); return; }
+  if (!tplPath) { state.templateSheetNames = []; await refreshSourceSheetNames(); return; }
   try { state.templateSheetNames = await getApi().getSheetNames(tplPath); }
   catch { state.templateSheetNames = []; }
-  state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, state.templateSheetNames);
+  await refreshSourceSheetNames();
 }
 
-function getSheetOptions(rules, templateSheetNames) {
-  const names = new Set(templateSheetNames || []);
-  for (const rule of rules || []) if (rule.sheetName) names.add(rule.sheetName);
-  return [...names];
+async function refreshSourceSheetNames() {
+  const excludedPaths = currentTemplatePath.value ? [currentTemplatePath.value] : [];
+  const scannedNames = state.inputDir
+    ? await getApi().getDirectorySheetNames(state.inputDir, excludedPaths)
+    : [];
+  state.sourceSheetNames = buildMergeSourceSheetOptions(
+    scannedNames,
+    state.templateSheetNames,
+    state.mergeSheetRules
+  );
 }
 
 // ─── 规则加载/保存 ───────────────────────────────
@@ -321,10 +359,10 @@ async function loadRules() {
   };
   state.inputDir = mc.inputDir || state.rules.lastMergeInputDir || "";
   state.outputDir = state.rules.lastMergeOutputDir || state.rules.defaultOutputDir || "";
-  const seed = state.rules.mergeSheetRules || state.rules.sheetRules || [];
+  const seed = state.rules.mergeSheetRules || [];
   state.mergeSheetRules = seed.map((r) => normalizeMergeRule(r));
   await loadTemplateSheetNames();
-  state.sourceSheetNames = getSheetOptions(state.mergeSheetRules, state.templateSheetNames);
+  await refreshSourceSheetNames();
 }
 
 async function saveMergeRules() {
@@ -344,10 +382,12 @@ async function saveMergeRules() {
 
 function addRule() {
   state.mergeSheetRules.push(normalizeMergeRule({ enabled: true, headerRows: 1, splitColumn: "C", skipEmpty: true }));
+  refreshSourceSheetNames();
 }
 
 function removeRule(index) {
   state.mergeSheetRules.splice(index, 1);
+  refreshSourceSheetNames();
 }
 
 // ─── 预读取所有标题行 ────────────────────────────
@@ -382,15 +422,37 @@ async function preloadAllHeaders() {
       return;
     }
 
-    const result = await api.preloadMergeHeaders({
+    const requestPayload = deepClone({
       inputDir: state.inputDir,
       templateFile: currentTemplatePath.value,
       orderSheetName: state.merge.orderSheetName,
       orderColumn: state.merge.orderColumn,
-      rules: JSON.parse(JSON.stringify(rules)),
+      sheetNameAliases: state.rules.merge?.sheetNameAliases || {},
+      rules,
     });
 
+    try {
+      structuredClone(requestPayload);
+      pushLog("预读取阶段1/3：请求参数可克隆");
+    } catch (error) {
+      throw stageError("预读取阶段1/3 请求参数不可克隆", error);
+    }
+
+    let result;
+    try {
+      result = await api.preloadMergeHeaders(requestPayload);
+      pushLog("预读取阶段2/3：IPC 已返回");
+    } catch (error) {
+      throw stageError("预读取阶段2/3 IPC 调用失败", error);
+    }
+
     if (result._error) { throw new Error(result._error); }
+    try {
+      structuredClone(result);
+      pushLog("预读取阶段2/3：返回结果可克隆");
+    } catch (error) {
+      throw stageError("预读取阶段2/3 返回结果不可克隆", error);
+    }
     const returnedRules = result.rules || [];
     if (returnedRules.length === 0) {
       state.preloadStatus = "❌ 无数据";
@@ -399,18 +461,17 @@ async function preloadAllHeaders() {
     }
 
     // 更新 mergeSheetRules 中的 preloadedHeaders
-    for (const updated of returnedRules) {
-      const match = state.mergeSheetRules.find(
-        (r) => (r.outputSheetName || r.sheetName) === (updated.outputSheetName || updated.sheetName)
-      );
-      if (match) match.preloadedHeaders = updated.preloadedHeaders;
+    try {
+      for (const updated of returnedRules) {
+        const match = state.mergeSheetRules.find(
+          (r) => (r.outputSheetName || r.sheetName) === (updated.outputSheetName || updated.sheetName)
+        );
+        if (match) match.preloadedHeaders = deepClone(updated.preloadedHeaders);
+      }
+      pushLog("预读取阶段3/3：页面状态回填完成");
+    } catch (error) {
+      throw stageError("预读取阶段3/3 页面回填失败", error);
     }
-
-    // 保存到配置文件
-    const saved = deepClone(state.rules || {});
-    saved.mergeSheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
-    await api.saveRules(saved);
-    state.rules = saved;
 
     const totalCols = returnedRules.reduce((s, r) => s + ((r.preloadedHeaders?.templateHeaders || []).length), 0);
     state.progress = 100;
@@ -459,6 +520,7 @@ async function pickInputDir() {
   const dir = await getApi().selectOutputDir();
   if (!dir) return;
   state.inputDir = dir;
+  await refreshSourceSheetNames();
 }
 
 async function pickOutputDir() {
@@ -467,10 +529,11 @@ async function pickOutputDir() {
   state.outputDir = dir;
 }
 
-function onInputDirDrop(e) {
+async function onInputDirDrop(e) {
   const dirPath = inputDrop.onDrop(e);
   if (!dirPath) return;
   state.inputDir = dirPath;
+  await refreshSourceSheetNames();
 }
 
 function onOutputDirDrop(e) {
@@ -485,9 +548,13 @@ async function startTask() {
     state.progress = 0;
     state.logs = [];
     const requestRules = deepClone(state.rules || {});
-    requestRules.templateFile = currentTemplatePath.value;
-    requestRules.merge = { ...(requestRules.merge || {}), ...deepClone(state.merge), inputDir: state.inputDir };
-    requestRules.sheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
+    requestRules.merge = {
+      ...(requestRules.merge || {}),
+      ...deepClone(state.merge),
+      inputDir: state.inputDir,
+      templateFile: currentTemplatePath.value,
+    };
+    requestRules.mergeSheetRules = state.mergeSheetRules.map((r) => normalizeMergeRule(r));
     const { taskId } = await getApi().startMergeTask({
       inputDir: state.inputDir, outputDir: state.outputDir, rules: requestRules,
     });

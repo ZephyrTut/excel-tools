@@ -1,91 +1,233 @@
 # 技术架构与模块设计
 
-## 1. 技术栈
+## 1. 项目定位
 
-- 桌面框架：Electron
-- 前端：Vue 3 + Element Plus
-- Excel 引擎：ExcelJS
-- 配置：JSON 本地文件
-- 日志：本地日志模块（可扩展文件落盘）
-- 打包：electron-builder
+这是一个基于 Electron 的桌面 Excel 处理工具，当前核心能力分为三块：
 
-## 2. 分层原则
+- 拆分：按 `splitSheetRules` 将一个工作簿拆成多个输出文件。
+- 合并：按 `mergeSheetRules` 和模板，将多个来源文件汇总成一个工作簿。
+- 优化：对 xlsx 做 ZIP/XML 级清理，提升 Office 兼容性。
 
-1. **Renderer（UI 层）**：文件选择、规则编辑、日志展示、任务状态
-2. **Main（进程编排层）**：窗口、IPC、任务调度、进程生命周期
-3. **Service（业务层）**：拆分任务编排、规则校验、异常收敛
-4. **Engine（Excel 引擎层）**：读取、分组、写入、格式复制
-5. **Infrastructure（基础能力）**：日志、配置、路径与文件名处理
+技术栈：
 
-## 3. 实际目录
+- Electron
+- Vue 3 + Element Plus
+- ExcelJS
+- `adm-zip`
+
+## 2. 分层结构
+
+### Renderer
+
+目录：
+
+- `renderer/views/`
+- `renderer/components/`
+
+职责：
+
+- 页面交互
+- 规则编辑
+- 模板选择
+- 日志和进度展示
+- 调用 `window.excelTools.*`
+
+### Main
+
+目录：
+
+- `main/main.js`
+- `main/window.js`
+- `main/preload.js`
+- `main/ipc.js`
+- `main/workerRunner.js`
+- `main/taskWorker.js`
+
+职责：
+
+- 创建 Electron 窗口
+- 暴露 preload 桥接
+- 注册 IPC
+- 启动和管理 Worker
+- 管理模板、规则、更新、文件选择
+
+### Services
+
+目录：
+
+- `services/split/`
+- `services/merge/`
+- `services/optimize/`
+
+职责：
+
+- 承接主业务逻辑
+- 拆分和合并的请求校验、规则归一化、编排执行
+- Office 兼容修复和 ZIP/XML 后处理
+
+## 3. 实际运行链路
 
 ```text
-excel-tools/
-├── package.json
-├── electron-builder.json
-├── main/
-│   ├── main.js
-│   ├── ipc.js
-│   └── window.js
-├── renderer/
-│   ├── index.html
-│   ├── main.js
-│   ├── views/
-│   ├── components/
-│   └── stores/
-├── services/
-│   ├── split/
-│   │   ├── splitService.js
-│   │   ├── splitEngine.js
-│   │   ├── excelReader.js
-│   │   ├── excelWriter.js
-│   │   ├── styleCopier.js
-│   │   ├── splitTypes.js
-│   │   ├── ruleManager.js
-│   │   ├── pathUtil.js
-│   │   └── errors.js
-│   ├── common/     (预留共享工具)
-│   └── merge/      (预留)
-├── scripts/        (独立命令行/测试脚本)
-├── samples/        (样本源数据文件)
-├── templates/      (样式模板文件)
-├── test/           (测试文件目录)
-├── config/
-│   └── defaultRules.json
-├── docs/
-└── output/         (默认输出目录)
+Renderer
+  -> window.excelTools.*
+  -> main/preload.js
+  -> main/ipc.js
+  -> service
+  -> Worker 或主进程直调
 ```
 
-## 4. 核心模块职责
+### 重任务
 
-- `splitService`：拆分入口、参数校验、任务生命周期管理
-- `splitEngine`：按规则拆分、分组、输出编排
-- `excelReader`：读取 workbook/sheet、抽取标题与数据区
-- `excelWriter`：输出工作簿、sheet 顺序与标题保留
-- `styleCopier`：复制常见样式与合并单元格
-- `ruleManager`：加载/保存/校验规则 JSON
-- `pathUtil`：文件名清洗、输出路径解析
-- `errors`：统一错误码与 AppError 类
+以下任务走 Worker：
 
-## 5. 后台执行策略
+- `task:start-split`
+- `task:start-merge`
 
-- UI 触发任务后通过 IPC 发送到 Main
-- Main 将重任务放入 Worker Thread 执行
-- Worker 持续回传进度与日志事件
-- Renderer 只负责渲染状态，不执行 Excel 重计算
+对应文件：
 
-> 目标：避免 UI 卡顿，支持后续并发任务队列扩展。
+- `main/workerRunner.js`
+- `main/taskWorker.js`
 
-## 6. 关键数据流
+### 轻任务
 
-1. Renderer 提交 `inputFile + outputDir + rules`
-2. Main 校验并创建任务上下文（taskId）
-3. Worker 执行拆分（读取 -> 分组 -> 写入）
-4. 日志与进度通过 IPC 增量回传
-5. 任务完成后返回输出摘要（文件数、耗时、异常）
+以下任务通常由主进程直接处理：
 
-## 7. 扩展点
+- `merge:preload-headers`
+- `rules:*`
+- `template:*`
+- `optimize:*`
+- `dialog:*`
 
-- 新增功能（合并、汇总、去重、对账）按 `services/<feature>/` 接入
-- 复用 `ruleManager/logger/pathUtil/errors`
-- 通过统一任务总线（任务类型 + payload）接入 UI
+## 4. 关键入口
+
+### 应用入口
+
+- `main/main.js`
+
+### 窗口与 preload
+
+- `main/window.js`
+- `main/preload.js`
+
+`preload.js` 通过 `contextBridge.exposeInMainWorld("excelTools", api)` 暴露桌面桥接。
+
+### IPC 中枢
+
+- `main/ipc.js`
+
+排查“按钮点下去后到底执行了什么”时，优先从这里开始。
+
+## 5. 当前规则模型
+
+当前真实生效的字段名如下：
+
+- `split.templateFile`
+- `merge.templateFile`
+- `split.sheetNameAliases`
+- `merge.sheetNameAliases`
+- `splitSheetRules`
+- `mergeSheetRules`
+
+默认规则模板：
+
+- `config/defaultRules.json`
+
+规则加载与持久化：
+
+- `services/split/ruleManager.js`
+
+注意：
+
+- `sheetRules` 应视为旧概念，不再作为当前主路径理解。
+- 拆分和合并的模板、别名、规则数组都是分开的。
+
+## 6. 拆分架构
+
+核心文件：
+
+- `services/split/splitService.js`
+- `services/split/splitEngine.js`
+- `services/split/excelReader.js`
+- `services/split/excelWriter.js`
+- `services/split/styleCopier.js`
+- `services/split/sheetNameMatcher.js`
+
+职责划分：
+
+- `splitService.js`
+  负责读取规则、加载源工作簿、加载拆分模板、准备原始 sheet XML 和样式节点。
+- `splitEngine.js`
+  负责按规则分组并生成输出工作簿。
+- `styleCopier.js`
+  负责复制表头、行样式、列宽、合并单元格等。
+- `excelWriter.js`
+  负责文件写出。
+
+## 7. 合并架构
+
+核心文件：
+
+- `services/merge/mergeService.js`
+- `services/merge/mergeEngine.js`
+- `services/merge/mergeTypes.js`
+
+职责划分：
+
+- `mergeService.js`
+  负责加载模板、扫描来源目录、排除模板文件、写出结果。
+- `mergeEngine.js`
+  负责列映射、供应商排序、数据写入、后处理配置生成。
+- `mergeTypes.js`
+  负责规则归一化、列号转换、请求校验。
+
+## 8. 优化与兼容修复架构
+
+核心文件：
+
+- `services/optimize/zipUtils.js`
+- `services/optimize/templateOptimizer.js`
+
+负责内容：
+
+- 移除外部链接
+- 清理空条件格式节点
+- 注入保真的条件格式 XML
+- 修复 `dxfs`
+- 归一化 worksheet 视图
+- 安全裁剪尾部空行
+- 清理 `NaN` 和部分兼容性属性
+
+这一层是 Office/WPS 兼容问题的核心排障入口。
+
+## 9. 模板架构
+
+模板管理文件：
+
+- `services/templateStore.js`
+- `main/ipc.js`
+
+模板作用域：
+
+- `split`
+- `merge`
+
+模板目录按作用域分离，不应再把一个模板概念同时套到拆分和合并上。
+
+## 10. 常见问题对应层
+
+- `window.excelTools` 不存在：先看 `main/preload.js`、`main/window.js`
+- `An object could not be cloned`：先看 `main/preload.js`、`main/ipcPayload.js`、对应 View 的请求构造
+- Office 打开修复弹窗：先看 `services/optimize/zipUtils.js`
+- 拆分 sheet 对不上：先看 `services/split/sheetNameMatcher.js` 和 `split.sheetNameAliases`
+- 合并列匹配错位：先看 `services/merge/mergeEngine.js` 和 `merge.sheetNameAliases`
+
+## 11. 推荐阅读顺序
+
+1. `docs/PROJECT_HANDBOOK.md`
+2. `main/preload.js`
+3. `main/ipc.js`
+4. `renderer/views/SplitView.vue`
+5. `renderer/views/MergeView.vue`
+6. `services/split/splitService.js`
+7. `services/merge/mergeService.js`
+8. `services/optimize/zipUtils.js`

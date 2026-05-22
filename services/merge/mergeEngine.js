@@ -1,20 +1,27 @@
 const ExcelJS = require("exceljs");
 const { AppError, ErrorCodes } = require("../split/errors");
-const { copyWorksheetMeta, copyHeaderRowsWithMerges } = require("../split/styleCopier");
+const {
+  copyWorksheetMeta,
+  copyHeaderRowsWithMerges,
+} = require("../split/styleCopier");
 const { extractConditionalFormattingNodes } = require("../optimize/zipUtils");
 const { readWorkbook } = require("../split/excelReader");
+const { resolveSheetName } = require("../split/sheetNameMatcher");
 const { normalizeHeaderName } = require("./mergeTypes");
 
 function textValue(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") {
-    if (Object.prototype.hasOwnProperty.call(value, "text")) return String(value.text || "");
-    if (Object.prototype.hasOwnProperty.call(value, "result")) return textValue(value.result);
+    if (Object.prototype.hasOwnProperty.call(value, "text"))
+      return String(value.text || "");
+    if (Object.prototype.hasOwnProperty.call(value, "result"))
+      return textValue(value.result);
     if (Object.prototype.hasOwnProperty.call(value, "richText")) {
       const parts = Array.isArray(value.richText) ? value.richText : [];
       return parts.map((item) => item.text || "").join("");
     }
-    if (Object.prototype.hasOwnProperty.call(value, "error")) return String(value.error || "");
+    if (Object.prototype.hasOwnProperty.call(value, "error"))
+      return String(value.error || "");
   }
   return String(value);
 }
@@ -30,18 +37,26 @@ function cloneValue(value) {
 }
 
 function normalizeCellValue(value) {
-  if (value && typeof value === 'object') {
-    // Strip formula/sharedFormula metadata �?only keep the cached result
-    if (Object.prototype.hasOwnProperty.call(value, 'sharedFormula') ||
-        Object.prototype.hasOwnProperty.call(value, 'formula')) {
-      if (Object.prototype.hasOwnProperty.call(value, 'result')) {
+  if (value && typeof value === "object") {
+    // Strip formula/sharedFormula metadata 锟�?only keep the cached result
+    if (
+      Object.prototype.hasOwnProperty.call(value, "sharedFormula") ||
+      Object.prototype.hasOwnProperty.call(value, "formula")
+    ) {
+      if (Object.prototype.hasOwnProperty.call(value, "result")) {
         return cloneValue(value.result);
       }
       return null;
     }
     // Also strip raw formula objects where the whole value IS a formula
     const keys = Object.keys(value);
-    if (keys.length === 4 && keys.includes('formula') && keys.includes('result') && keys.includes('ref') && keys.includes('shareType')) {
+    if (
+      keys.length === 4 &&
+      keys.includes("formula") &&
+      keys.includes("result") &&
+      keys.includes("ref") &&
+      keys.includes("shareType")
+    ) {
       return cloneValue(value.result);
     }
   }
@@ -64,20 +79,20 @@ function copyCellStyle(styleCell, targetCell) {
 }
 
 /**
- * 统一从单元格读取列头：Date→MM-DD，文本→normalizeHeaderName
- * �?excelReader.js �?getHeadersFromWorksheet 保持完全一�?
+ * 缁熶竴浠庡崟鍏冩牸璇诲彇鍒楀ご锛欴ate鈫扢M-DD锛屾枃鏈啋normalizeHeaderName
+ * 锟�?excelReader.js 锟�?getHeadersFromWorksheet 淇濇寔瀹屽叏涓€锟�?
  */
 function readHeaderFromCell(cell) {
   const value = cell.value;
   if (value instanceof Date) {
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
     return `${m}-${d}`;
   }
-  if (value && typeof value === 'object' && value.result instanceof Date) {
+  if (value && typeof value === "object" && value.result instanceof Date) {
     const dt = value.result;
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
-    const d = String(dt.getDate()).padStart(2, '0');
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
     return `${m}-${d}`;
   }
   return normalizeHeaderName(textValue(value));
@@ -94,7 +109,10 @@ function resolveHeaderMap(sheet, headerRows) {
 
 function resolveHeaderColumns(sheet, headerRows) {
   const map = new Map();
-  const maxCol = Math.max(sheet.columnCount || 1, sheet.getRow(headerRows).cellCount || 1);
+  const maxCol = Math.max(
+    sheet.columnCount || 1,
+    sheet.getRow(headerRows).cellCount || 1
+  );
   for (let col = 1; col <= maxCol; col += 1) {
     let header = "";
     for (let row = headerRows; row >= 1; row -= 1) {
@@ -112,22 +130,29 @@ function resolveHeaderColumns(sheet, headerRows) {
 }
 
 /**
- * 找零填充范围：从"上月结存"所在列�?可用结存"列（含），空白填 0
+ * 鎵鹃浂濉厖鑼冨洿锛氫粠"涓婃湀缁撳瓨"鎵€鍦ㄥ垪锟�?鍙敤缁撳瓨"鍒楋紙鍚級锛岀┖鐧藉～ 0
  */
 function resolveZeroFillRange(templateSheet, headerRows) {
   const headerMap = resolveHeaderMap(templateSheet, headerRows);
-  const availableBalanceCol = headerMap.get("可用结存") || headerMap.get("可用结余") || -1;
-  if (availableBalanceCol < 1) return { zeroFillStartColumnIndex: -1, availableBalanceColumnIndex: -1 };
+  const availableBalanceCol =
+    headerMap.get("\u53ef\u7528\u7ed3\u5b58") ||
+    headerMap.get("\u53ef\u7528\u7ed3\u4f59") ||
+    -1;
+  if (availableBalanceCol < 1)
+    return { zeroFillStartColumnIndex: -1, availableBalanceColumnIndex: -1 };
 
   let startCol = -1;
   for (const [name, col] of headerMap.entries()) {
     if (col >= availableBalanceCol) continue;
-    if (name.includes("上月结存")) {
+    if (name.includes("\u4e0a\u6708\u7ed3\u5b58")) {
       if (startCol === -1 || col < startCol) startCol = col;
     }
   }
 
-  return { zeroFillStartColumnIndex: startCol, availableBalanceColumnIndex: availableBalanceCol };
+  return {
+    zeroFillStartColumnIndex: startCol,
+    availableBalanceColumnIndex: availableBalanceCol,
+  };
 }
 
 function resolveSequenceColumn(templateSheet, headerRows) {
@@ -135,7 +160,8 @@ function resolveSequenceColumn(templateSheet, headerRows) {
     const row = templateSheet.getRow(rowNum);
     let found = -1;
     row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      if (normalizeHeaderName(textValue(cell.value)) === "序号") found = colNumber;
+      if (normalizeHeaderName(textValue(cell.value)) === "\u5e8f\u53f7")
+        found = colNumber;
     });
     if (found > 0) return found;
   }
@@ -164,8 +190,14 @@ function mapSourceToTargetColumns(rule, sourceSheet, templateSheet) {
 function buildOrderList(templateSheet, headerRows, orderColumnIndex) {
   const order = [];
   const seen = new Set();
-  for (let rowNum = headerRows + 1; rowNum <= templateSheet.rowCount; rowNum += 1) {
-    const vendor = textValue(templateSheet.getRow(rowNum).getCell(orderColumnIndex).value).trim();
+  for (
+    let rowNum = headerRows + 1;
+    rowNum <= templateSheet.rowCount;
+    rowNum += 1
+  ) {
+    const vendor = textValue(
+      templateSheet.getRow(rowNum).getCell(orderColumnIndex).value
+    ).trim();
     if (!vendor || seen.has(vendor)) continue;
     seen.add(vendor);
     order.push(vendor);
@@ -174,45 +206,74 @@ function buildOrderList(templateSheet, headerRows, orderColumnIndex) {
 }
 
 function resolveOrderRule(rules, mergeConfig) {
-  const orderSheetName = mergeConfig.orderSheetName || "日报";
-  const target = rules.find((rule) => rule.outputSheetName === orderSheetName || rule.sheetName === orderSheetName);
+  const orderSheetName = mergeConfig.orderSheetName || "\u65e5\u62a5";
+  const target = rules.find(
+    (rule) =>
+      rule.outputSheetName === orderSheetName ||
+      rule.sheetName === orderSheetName
+  );
   if (!target) {
     throw new AppError(
       ErrorCodes.INVALID_RULES,
-      `Order source sheet "${orderSheetName}" is not configured in sheetRules.`
+      `Order source sheet "${orderSheetName}" is not configured in mergeSheetRules.`
     );
   }
   return target;
 }
 
-async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
+async function collectSheetRowsByVendor(
+  sourceFiles,
+  ruleContexts,
+  logger,
+  mergeConfig
+) {
   const sheetRows = new Map();
 
   for (const context of ruleContexts) {
     sheetRows.set(context.outputSheetName, {
       vendorRows: new Map(),
-      unknownOrder: []
+      unknownOrder: [],
     });
   }
 
   for (const filePath of sourceFiles) {
     logger.info("Reading merge source workbook.", { filePath });
     const workbook = await readWorkbook(filePath);
+    const actualSheetNames = workbook.worksheets.map((sheet) => sheet.name);
 
     for (const context of ruleContexts) {
-      const sourceSheet = workbook.getWorksheet(context.sheetName);
+      const resolved = resolveSheetName(
+        context.sheetName,
+        actualSheetNames,
+        mergeConfig?.sheetNameAliases || {}
+      );
+      const sourceSheet = resolved.matchedSheetName
+        ? workbook.getWorksheet(resolved.matchedSheetName)
+        : null;
       if (!sourceSheet) continue;
 
       const rowsState = sheetRows.get(context.outputSheetName);
       const vendorRows = rowsState.vendorRows;
       const unknownOrder = rowsState.unknownOrder;
       const seenUnknown = new Set(unknownOrder);
-      const colMap = mapSourceToTargetColumns(context, sourceSheet, context.templateSheet);
+      const colMap = mapSourceToTargetColumns(
+        context,
+        sourceSheet,
+        context.templateSheet
+      );
 
-      for (let rowNum = context.headerRows + 1; rowNum <= sourceSheet.rowCount; rowNum += 1) {
+      for (
+        let rowNum = context.headerRows + 1;
+        rowNum <= sourceSheet.rowCount;
+        rowNum += 1
+      ) {
         const sourceRow = sourceSheet.getRow(rowNum);
-        const vendor = textValue(sourceRow.getCell(context.splitColumnIndex).value).trim();
-        if (!vendor) { /* 空白供应商跳�?*/ continue; }
+        const vendor = textValue(
+          sourceRow.getCell(context.splitColumnIndex).value
+        ).trim();
+        if (!vendor) {
+          /* 绌虹櫧渚涘簲鍟嗚烦锟�?*/ continue;
+        }
         const vendorKey = vendor;
 
         const valuesByCol = new Map();
@@ -232,9 +293,10 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
     }
   }
 
-    // 统计输出
+  // 缁熻杈撳嚭
   for (const [name, state] of sheetRows) {
-    let blank = 0, total = 0;
+    let blank = 0,
+      total = 0;
     for (const [vendor, rows] of state.vendorRows) {
       total += rows.length;
       if (!vendor) blank += rows.length;
@@ -243,7 +305,12 @@ async function collectSheetRowsByVendor(sourceFiles, ruleContexts, logger) {
   return sheetRows;
 }
 
-function orderedVendorsForSheet(vendorRows, orderList, unknownOrder, appendUnknown) {
+function orderedVendorsForSheet(
+  vendorRows,
+  orderList,
+  unknownOrder,
+  appendUnknown
+) {
   const ordered = [];
   const rowKeys = new Set(vendorRows.keys());
   for (const vendor of orderList) {
@@ -259,10 +326,12 @@ function orderedVendorsForSheet(vendorRows, orderList, unknownOrder, appendUnkno
 
 function safeCellValue(sourceCell) {
   const val = sourceCell.value;
-  if (!val || typeof val !== 'object') return cloneValue(val);
-  if (Object.prototype.hasOwnProperty.call(val, 'sharedFormula') ||
-      Object.prototype.hasOwnProperty.call(val, 'formula')) {
-    if (Object.prototype.hasOwnProperty.call(val, 'result')) {
+  if (!val || typeof val !== "object") return cloneValue(val);
+  if (
+    Object.prototype.hasOwnProperty.call(val, "sharedFormula") ||
+    Object.prototype.hasOwnProperty.call(val, "formula")
+  ) {
+    if (Object.prototype.hasOwnProperty.call(val, "result")) {
       return cloneValue(val.result);
     }
     return null;
@@ -277,7 +346,7 @@ function copyColumnWidths(templateSheet, outputSheet) {
     width: col.width,
     key: col.key,
     hidden: col.hidden,
-    outlineLevel: col.outlineLevel
+    outlineLevel: col.outlineLevel,
   }));
   if (cols.length > 0) outputSheet.columns = cols;
 }
@@ -286,6 +355,61 @@ function copyColumnWidths(templateSheet, outputSheet) {
 function createPassthroughSheet(templateSheet, outputSheet) {
   copyColumnWidths(templateSheet, outputSheet);
   // Intentionally NOT copying header rows or merges to avoid shared formula issues
+}
+
+function isBlankOrZeroCellValue(value) {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "number") return value === 0;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" || trimmed === "0";
+  }
+  if (typeof value === "object") {
+    if (Object.prototype.hasOwnProperty.call(value, "result")) {
+      return isBlankOrZeroCellValue(value.result);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "text")) {
+      return isBlankOrZeroCellValue(value.text);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "richText")) {
+      const text = (Array.isArray(value.richText) ? value.richText : [])
+        .map((item) => item.text || "")
+        .join("");
+      return isBlankOrZeroCellValue(text);
+    }
+  }
+  return false;
+}
+
+function trimTrailingVendorlessRows(outputSheet, context) {
+  const startRow = Number(context?.headerRows || 0) + 1;
+  const vendorCol = Number(context?.splitColumnIndex || 0);
+  if (!vendorCol || outputSheet.rowCount < startRow) {
+    return 0;
+  }
+
+  let removed = 0;
+  for (let rowNum = outputSheet.rowCount; rowNum >= startRow; rowNum -= 1) {
+    const row = outputSheet.getRow(rowNum);
+    const vendor = textValue(row.getCell(vendorCol).value).trim();
+    if (vendor) break;
+
+    outputSheet.spliceRows(rowNum, 1);
+    removed += 1;
+  }
+
+  return removed;
+}
+
+function resolveTemplateStyleRow(templateSheet, headerRows, targetRowNum) {
+  const firstDataRowNum = Number(headerRows || 0) + 1;
+  if (targetRowNum > 0 && targetRowNum <= (templateSheet.rowCount || 0)) {
+    return templateSheet.getRow(targetRowNum);
+  }
+  return (
+    templateSheet.getRow(firstDataRowNum) ||
+    templateSheet.getRow(Number(headerRows || 0))
+  );
 }
 
 function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
@@ -305,9 +429,7 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
   );
 
   let seq = 0;
-  const templateStyleRow =
-    context.templateSheet.getRow(context.headerRows + 1) || context.templateSheet.getRow(context.headerRows);
-  // Compute max column from actual data �?template may have 2570 cols but data ~11
+  // Compute max column from actual data 锟�?template may have 2570 cols but data ~11
   let dataMaxCol = 0;
   for (const rows of sheetRowsState.vendorRows.values()) {
     for (const rowMap of rows) {
@@ -326,17 +448,24 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
     const rows = sheetRowsState.vendorRows.get(vendor) || [];
     for (const rowMap of rows) {
       const outRow = outputSheet.getRow(outputSheet.rowCount + 1);
+      const templateStyleRow = resolveTemplateStyleRow(
+        context.templateSheet,
+        context.headerRows,
+        outRow.number
+      );
       outRow.height = templateStyleRow.height;
       for (let col = 1; col <= templateMaxCol; col += 1) {
         const styleCell = templateStyleRow.getCell(col);
         const outCell = outRow.getCell(col);
         let value = rowMap.has(col) ? rowMap.get(col) : null;
-        
-        // 零填充：�?上月结存"�?可用结存"（含），空白�?0
-        if (value == null &&
-            context.zeroFillStartColumnIndex > 0 &&
-            col >= context.zeroFillStartColumnIndex &&
-            col <= context.availableBalanceColumnIndex) {
+
+        // 闆跺～鍏咃細锟�?涓婃湀缁撳瓨"锟�?鍙敤缁撳瓨"锛堝惈锛夛紝绌虹櫧锟�?0
+        if (
+          value == null &&
+          context.zeroFillStartColumnIndex > 0 &&
+          col >= context.zeroFillStartColumnIndex &&
+          col <= context.availableBalanceColumnIndex
+        ) {
           value = 0;
         }
 
@@ -349,6 +478,13 @@ function writeMergedSheet(outputSheet, context, sheetRowsState, mergeConfig) {
       }
     }
   }
+
+  trimTrailingVendorlessRows(outputSheet, {
+    headerRows: context.headerRows,
+    splitColumnIndex: context.splitColumnIndex,
+    sequenceColumnIndex: context.sequenceColumnIndex,
+    dataColumnCount: templateMaxCol,
+  });
 }
 
 async function runMergeEngine({
@@ -359,36 +495,44 @@ async function runMergeEngine({
   rules,
   mergeConfig,
   logger,
-  reportProgress
+  reportProgress,
 }) {
-  const ruleContexts = rules
-    .map((rule) => {
-      const templateSheet = templateWorkbook.getWorksheet(rule.outputSheetName);
-      if (!templateSheet) {
-        throw new AppError(
-          ErrorCodes.SHEET_NOT_FOUND,
-          `Template sheet "${rule.outputSheetName}" not found.`,
-          { sheetName: rule.outputSheetName }
-        );
-      }
-      const { zeroFillStartColumnIndex, availableBalanceColumnIndex } = resolveZeroFillRange(templateSheet, rule.headerRows);
-      return {
-        ...rule,
+  const ruleContexts = rules.map((rule) => {
+    const templateSheet = templateWorkbook.getWorksheet(rule.outputSheetName);
+    if (!templateSheet) {
+      throw new AppError(
+        ErrorCodes.SHEET_NOT_FOUND,
+        `Template sheet "${rule.outputSheetName}" not found.`,
+        { sheetName: rule.outputSheetName }
+      );
+    }
+    const { zeroFillStartColumnIndex, availableBalanceColumnIndex } =
+      resolveZeroFillRange(templateSheet, rule.headerRows);
+    return {
+      ...rule,
+      templateSheet,
+      templateConditionalFormattingNodes: extractConditionalFormattingNodes(
+        templateSheetXmlMap?.get(rule.outputSheetName)?.xml || null
+      ),
+      sequenceColumnIndex: resolveSequenceColumn(
         templateSheet,
-        templateConditionalFormattingNodes: extractConditionalFormattingNodes(
-          templateSheetXmlMap?.get(rule.outputSheetName)?.xml || null
-        ),
-        sequenceColumnIndex: resolveSequenceColumn(templateSheet, rule.headerRows),
-        zeroFillStartColumnIndex,
-        availableBalanceColumnIndex,
-        orderList: [],
-        orderSet: new Set()
-      };
-    });
+        rule.headerRows
+      ),
+      zeroFillStartColumnIndex,
+      availableBalanceColumnIndex,
+      orderList: [],
+      orderSet: new Set(),
+    };
+  });
 
   const orderRule = resolveOrderRule(ruleContexts, mergeConfig);
-  const orderColumnIndex = mergeConfig.orderColumnIndex || orderRule.splitColumnIndex;
-  orderRule.orderList = buildOrderList(orderRule.templateSheet, orderRule.headerRows, orderColumnIndex);
+  const orderColumnIndex =
+    mergeConfig.orderColumnIndex || orderRule.splitColumnIndex;
+  orderRule.orderList = buildOrderList(
+    orderRule.templateSheet,
+    orderRule.headerRows,
+    orderColumnIndex
+  );
   orderRule.orderSet = new Set(orderRule.orderList);
   for (const context of ruleContexts) {
     if (context === orderRule) continue;
@@ -397,7 +541,12 @@ async function runMergeEngine({
   }
 
   reportProgress(20, "Collecting source rows");
-  const sheetRows = await collectSheetRowsByVendor(sourceFiles, ruleContexts, logger);
+  const sheetRows = await collectSheetRowsByVendor(
+    sourceFiles,
+    ruleContexts,
+    logger,
+    mergeConfig
+  );
 
   const totalRows = [...sheetRows.values()].reduce((acc, state) => {
     let count = 0;
@@ -409,11 +558,13 @@ async function runMergeEngine({
   const outputBook = new ExcelJS.Workbook();
   const sheetTransforms = {};
   for (const templateSheet of templateWorkbook.worksheets) {
-    // 隐藏 sheet 不加入合�?
-    if (templateSheet.state === 'hidden') continue;
+    // 闅愯棌 sheet 涓嶅姞鍏ュ悎锟�?
+    if (templateSheet.state === "hidden") continue;
 
     const outputSheet = outputBook.addWorksheet(templateSheet.name);
-    const context = ruleContexts.find((rule) => rule.outputSheetName === templateSheet.name);
+    const context = ruleContexts.find(
+      (rule) => rule.outputSheetName === templateSheet.name
+    );
     if (!context) {
       createPassthroughSheet(templateSheet, outputSheet, 1);
       sheetTransforms[templateSheet.name] = {
@@ -421,7 +572,12 @@ async function runMergeEngine({
       };
       continue;
     }
-    writeMergedSheet(outputSheet, context, sheetRows.get(context.outputSheetName), mergeConfig);
+    writeMergedSheet(
+      outputSheet,
+      context,
+      sheetRows.get(context.outputSheetName),
+      mergeConfig
+    );
     sheetTransforms[context.outputSheetName] = {
       conditionalFormatting: {
         mode: "clip",
@@ -445,14 +601,14 @@ async function runMergeEngine({
     stats: {
       sourceFileCount: sourceFiles.length,
       mergedRowCount: totalRows,
-      vendorCount: orderRule.orderList.length
-    }
+      vendorCount: orderRule.orderList.length,
+    },
   };
 }
 
 module.exports = {
   runMergeEngine,
-  // 以下为测试用的内部函数导�?
+  // 浠ヤ笅涓烘祴璇曠敤鐨勫唴閮ㄥ嚱鏁板锟�?
   normalizeCellValue,
   cloneValue,
   cloneStyle,
@@ -464,5 +620,7 @@ module.exports = {
   buildOrderList,
   resolveOrderRule,
   orderedVendorsForSheet,
+  resolveTemplateStyleRow,
+  trimTrailingVendorlessRows,
   textValue,
 };

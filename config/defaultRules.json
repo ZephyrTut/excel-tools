@@ -4,7 +4,6 @@
   "preserveSheetOrder": true,
   "overwriteIfExists": true,
   "ifExistsStrategy": "timestamp",
-  "templateFile": "_default.xlsx",
   "fileName": {
     "source": "splitKey",
     "prefix": "",
@@ -14,18 +13,22 @@
     "maxLength": 120
   },
   "split": {
+    "templateFile": "",
+    "sheetNameAliases": {},
     "skipEmptySplitKey": true,
     "trimSplitKey": true
   },
   "merge": {
     "enabled": false,
+    "templateFile": "",
+    "sheetNameAliases": {},
     "inputDir": ".\\test",
     "outputName": "合并汇总.xlsx",
     "orderSheetName": "日报",
     "orderColumn": "C",
     "appendUnknownVendorsToEnd": true
   },
-  "sheetRules": [
+  "splitSheetRules": [
     {
       "enabled": true,
       "sheetName": "日报",
@@ -81,5 +84,6 @@
       "removeColumnsByHeader": [],
       "columnAliasMap": {}
     }
-  ]
+  ],
+  "mergeSheetRules": []
 }

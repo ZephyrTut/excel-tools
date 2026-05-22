@@ -10,16 +10,24 @@ async function main() {
     outputDir: path.join(__dirname, "..", "output"),
     projectRoot: path.join(__dirname, ".."),
     rules: {
-      templateFile: path.join(testDir, "湖州仓26年5月13日进销存报表.xlsx"),
       overwriteIfExists: false,
       ifExistsStrategy: "timestamp",
+      split: {
+        templateFile: "",
+        sheetNameAliases: {},
+        skipEmptySplitKey: true,
+        trimSplitKey: true,
+      },
       merge: {
+        templateFile: path.join(testDir, "湖州仓26年5月13日进销存报表.xlsx"),
+        sheetNameAliases: {},
         orderSheetName: "日报",
         orderColumn: "C",
         inputDir,  // subExcel 目录
         outputName: "合并汇总"
       },
-      sheetRules: [
+      splitSheetRules: [],
+      mergeSheetRules: [
         {
           enabled: true,
           sheetName: "日报",

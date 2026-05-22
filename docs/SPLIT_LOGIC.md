@@ -1,91 +1,213 @@
 # 拆分逻辑说明
 
-## 概要
-本文件列出当前 `日报` 表拆分（split）流程的实现逻辑，目的为保证数据与视觉样式（尤其是"可用结存"列的底色）在拆分输出中保持与源文件一致，并修复因模板不足导致的合并与零填充问题。
+## 1. 当前拆分链路
 
-## 高级流程
-1. 读取请求：包含 `inputFile`、`templateFile`（可选）、`outputDir`、`sheetRules` 等配置。
-2. 对每个启用的 `sheetRule`（例如 `sheetName: "日报"`）按 `headerRows` 确定表头区，并按 `splitColumn` / `splitBy` 把数据行分组为多个输出文件键（splitKey）。
-3. 为每个 splitKey 构建输出工作簿：
-   - 复制表头（保留合并区域，**以模板样式为优先**）；
-   - 复制数据行并按规则应用样式复制选项（见"样式复制"）；
-   - 写入并保存为配置的文件名格式。
-4. 运行后验证（可选）：通过比较脚本对比源表与生成表中关键列（如 `可用结存`）的填充，确保一致。
+拆分功能的真实入口在：
 
-## 关键实现细节
-- 表头来源：优先使用**源文件（source sheet）**作为表头/元数据来源以保留源端的合并区域与零填充覆盖；但表头的**样式**（填充、字体、对齐、行高、列宽）优先从模板获取。
-- 拆分键（splitKey）：由 `sheetRules.splitColumn` 指定的列（例如列 `C`）按 `splitBy`（通常为 `cellValue`）提取并按配置 `trimSplitKey` / `skipEmptySplitKey` 处理。
+- `services/split/splitService.js`
+- `services/split/splitEngine.js`
 
-### 表头样式复制（模板样式优先）
+高层流程：
 
-`copyHeaderRowsWithMerges()` 接受可选的 `styleSheet` 参数。当模板存在时，表头行以模板的对应行作为 `styleRow` 进行样式复制：
+1. 读取请求和规则。
+2. 加载源工作簿。
+3. 按 `splitSheetRules` 找到要拆分的 sheet。
+4. 结合 `split.sheetNameAliases` 做 sheet 名解析。
+5. 按 `splitColumn` 将数据行分组为多个 `splitKey`。
+6. 为每个 `splitKey` 生成输出工作簿。
+7. 写出文件后执行必要的 ZIP/XML 后处理。
 
-| 属性 | 优先级 |
-|------|--------|
-| 字体 / 对齐 / 数字格式 | template（`styleCell`）→ source → 列默认值 |
-| 填充底色（非保留列） | template（显式 pattern fill）→ source → 列默认值 |
-| 填充底色（`preserveSourceFillColumns`，如`可用结存`） | **source 强制**（跳过模板优先） |
-| 边框 | source（显式边框）→ template → 列默认值 |
-| 行高 | template → source |
-| 列宽 / 列级样式 | template 覆盖 source（由 `copyWorksheetMeta` 合并） |
+## 2. 当前生效的配置名
 
-`copyWorksheetMeta()` 接受可选的 `templateSheet` 参数：列定义以模板为优先，源文件作为 fallback。
+拆分功能应认准以下字段：
 
-### 可用结存（`可用结存`）列的样式保留
-- 目标：`可用结存` 列每个数据单元格的底色（红/黄）必须与源文件完全一致。
-- 检测列：优先在表头中查找与文本**完全等于** `可用结存` 的列；若未找到，使用硬编码回退列列表 `DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS = [13]`（即第 13 列，基于历史模板约定）。
-- 样式复制策略：对于被标记需要保留源端填色的列（`preserveSourceFillColumns`），`styleCopier` 会强制使用 `sourceCell.fill`（跳过模板优先逻辑）。
-- 条件格式：若源表的颜色是由条件格式驱动（常见情形），拆分逻辑会把 `worksheet.conditionalFormattings` 整体从源表复制到目标表，以恢复基于规则的视觉效果。
+- `split.templateFile`
+- `split.sheetNameAliases`
+- `split.skipEmptySplitKey`
+- `split.trimSplitKey`
+- `splitSheetRules`
 
-### 合并与零填充
-- 问题：模板可能缺少某些日期列的合并或零填充（例如 5-29 到 5-31 未与"入库"合并，下面数据未被填 0）。
-- 解决：表头使用源表作为基线（包含合并区间），复制时保留源端合并（`copyHeaderRowsWithMerges`）。同时根据 `resolveZeroFillColumns` 识别需要零填充的数值列，在数据区对空单元格进行零填充。
+不要再把 `sheetRules` 当作当前拆分主配置理解。
 
-#### 零填充列检测策略（resolveZeroFillColumns）
+## 3. 规则解析
 
-**多行表头（headerRows ≥ 3，如 日报 布局）：**
-- 扫描 Row 2（列标签行），所有非标识符列（排除 `序号`/`供应商代码`/`供应商名称`/`零件编号`/`零件名称`）均加入零填充集合。
-- 扫描 Row 3（日期公式行），所有有内容的列均加入零填充集合。
-- 覆盖范围：库存字段列（上月结存、累进、累出、当前库存、不合格品库存、可用结存、最高库存量等）+ 全部日期列（入库/出库日期范围）。
+规则入口在：
 
-**单行表头（其他 sheet，如 合格品入库记录、领跑良品退回）：**
-- 保留原有关键词匹配：`["入库","出库","领跑良品退回","零跑退回良品"]`。
+- `services/split/splitService.js`
+- `services/split/splitTypes.js`
 
-#### shouldForceZero 判定规则
-对零填充集合内的每个数据单元格：
+关键行为：
 
-| 源数据 | 模板值 | 结果 |
-|--------|--------|------|
-| 有值（非 0/非空） | 任意 | 保留源值 |
-| `null` / 空字符串 | 任意 | → **0** |
-| `0` | 任意 | 保留 0 |
+- 仅处理启用的 `splitSheetRules`
+- 按 `sheetNameAliases` 将规则中的业务名映射到实际 sheet 名
+- 如果 `preserveSheetOrder = true`，输出顺序跟源工作簿一致
 
-### 标题/关键词匹配规则
-- 为避免误匹配（例如表格顶部说明性文字包含关键字），用于判定 `可用结存` 的匹配是**精确相等**（`text === "可用结存"`），而非包含式匹配。
+如果规则里的 `sheetName` 找不到真实 sheet，会抛出带建议项的错误。
 
-### 输出命名与覆盖策略
-- 输出文件名依据请求中的 `fileName` 配置（如 `{ source: "splitKey", prefix: "", suffix: "日报表" }`）生成。
-- 覆盖策略支持 `overwriteIfExists` 与 `ifExistsStrategy`（如 `timestamp`）等选项，由上层请求控制。
+## 4. sheet 名匹配
 
-## 代码位置（关键文件）
-- 核心拆分引擎: [services/split/splitEngine.js](services/split/splitEngine.js)
-- 样式/单元格复制: [services/split/styleCopier.js](services/split/styleCopier.js)
-- 拆分服务入口: [services/split/splitService.js](services/split/splitService.js)
-- 读写工具: [services/split/excelReader.js](services/split/excelReader.js), [services/split/excelWriter.js](services/split/excelWriter.js)
-- 生成脚本（测试/演示）: [scripts/generate-split.js](scripts/generate-split.js)
-- 比较/验证工具: [scripts/excel-compare-core.js](scripts/excel-compare-core.js), [scripts/compare-with-output.js](scripts/compare-with-output.js)
+匹配逻辑在：
 
-## 验证与测试流程
-- 使用 `scripts/generate-split.js`（或 `pnpm split:zhejiang`）运行拆分并触发内置的"可用结存"填色比较；脚本会在发现颜色差异时抛错以便回归检测。
-- 同时可用 `scripts/compare-with-output.js`（或 `pnpm compare:zhejiang`）对比更多项目（值/合并/样式/填充）。
+- `services/split/sheetNameMatcher.js`
 
-## 可配置项与扩展点
-- `DAILY_REPORT_AVAILABLE_STOCK_FALLBACK_COLUMNS`：回退列数组，可按需要调整。
-- 是否复制条件格式：当前默认复制源表的 `conditionalFormattings`，若需限制到仅某些规则可在 `styleCopier` 中加入白名单。
+推荐思路：
 
-## 常见问题与建议
-- 如果打开生成的 xlsx 看不到颜色，先确保没有同时打开旧文件（Windows 文件锁可能阻止覆盖）；关闭 Excel 后重新打开生成文件检查。
-- 若某些颜色仍然缺失，确认源文件中颜色是否由条件格式驱动（而非单元格静态 `fill`），必要时检查 `worksheet.conditionalFormattings` 是否存在并正确被复制。
-- 模板并非始终权威：若模板缺合并/列，优先使用源表的表头以保证结构一致性。
+- 规则里写标准业务名
+- 实际来源差异通过 `split.sheetNameAliases` 解决
 
----
+例如：
+
+- 规则使用 `合格品入库记录`
+- 实际文件里出现 `合格品入货记录`
+- 在别名中配置映射，而不是靠模糊猜测
+
+## 5. 模板与源工作簿的关系
+
+拆分支持独立模板：
+
+- `split.templateFile`
+
+当前链路中：
+
+- 源工作簿负责数据内容
+- 模板工作簿负责样式参考和结构参考
+- 原始 OOXML 条件格式节点会单独保留，不能只依赖 ExcelJS round-trip
+
+相关代码：
+
+- `services/split/splitService.js`
+- `services/split/styleCopier.js`
+- `services/optimize/zipUtils.js`
+
+## 6. 样式复制
+
+样式复制主要在：
+
+- `services/split/styleCopier.js`
+
+负责内容：
+
+- 表头行复制
+- 数据行复制
+- 列宽、行高
+- 合并单元格
+- 常规单元格样式
+
+注意：
+
+- 条件格式不是完全依靠 `worksheet.conditionalFormattings` 回写来保真
+- `styleCopier.js` 当前会避免继续把条件格式当作安全的 ExcelJS round-trip 对象使用
+
+## 7. 条件格式与 Office 兼容
+
+这是拆分里最容易误判的一块。
+
+过去容易认为：
+
+- 样式丢失是因为普通 fill 没复制好
+
+现在更常见的真实根因是：
+
+- ExcelJS 回写后产生了空的 `<conditionalFormatting/>`
+- 某些条件格式规则被写成空壳
+- `sqref` 引用了输出中已经不存在的行
+
+因此当前修复思路是：
+
+1. 保存源 sheet 的原始条件格式 XML。
+2. 生成输出后删除 ExcelJS 写出的空节点。
+3. 按输出行映射重建 `sqref`。
+4. 再把合法条件格式节点注入回去。
+
+相关文件：
+
+- `services/split/splitEngine.js`
+- `services/optimize/zipUtils.js`
+
+## 8. 视图归一化
+
+拆分输出的日报如果打开后首屏偏到右边，通常不是数据错，而是继承了源文件历史视图状态。
+
+当前策略：
+
+- 不直接信任源 sheet 的 `selection`、`activeCell`、`topLeftCell`
+- 输出后统一做 worksheet view 归一化
+- 现在可按配置取消冻结窗格，或保留但重置到左上
+
+相关文件：
+
+- `services/optimize/zipUtils.js`
+
+## 9. 尾部空行处理
+
+用户实测“删除多余空行后 Office 可以打开”是有效线索，但当前不应做破坏性删行。
+
+当前策略是：
+
+- 仅安全裁剪真正无内容、无合并依赖、无条件格式依赖的尾部空行
+- 这一步发生在 XML 后处理阶段
+
+相关文件：
+
+- `services/optimize/zipUtils.js`
+
+## 10. 输出命名
+
+输出目录与文件名受这些字段控制：
+
+- `defaultOutputDir`
+- `overwriteIfExists`
+- `ifExistsStrategy`
+- `fileName.source`
+- `fileName.prefix`
+- `fileName.suffix`
+- `fileName.customName`
+
+路径与命名工具：
+
+- `services/split/pathUtil.js`
+
+## 11. 常见排障入口
+
+### 拆分结果 sheet 对不上
+
+先看：
+
+- `services/split/splitService.js`
+- `services/split/sheetNameMatcher.js`
+
+重点检查：
+
+- `splitSheetRules`
+- `split.sheetNameAliases`
+
+### 拆分后 Office 修复弹窗
+
+先看：
+
+- `services/optimize/zipUtils.js`
+- `docs/COMPATIBILITY_FIXES.md`
+
+### 样式或合并异常
+
+先看：
+
+- `services/split/styleCopier.js`
+- `services/split/splitEngine.js`
+
+### 打开后首屏偏移
+
+先看：
+
+- `services/optimize/zipUtils.js`
+
+## 12. 验证方式
+
+常用命令：
+
+```bash
+npm run split:zhejiang
+npm run compare:zhejiang
+node --test .\services\split\ruleManager.test.js
+node --test .\services\optimize\zipUtils.test.js
+```

@@ -111,20 +111,25 @@ async function main() {
       preserveSheetOrder: true,
       overwriteIfExists: true,
       ifExistsStrategy: "timestamp",
-      templateFile: path.join(
-        __dirname, "..", "templates",
-        "浙江华锐捷技术有限公司日报表(2).xlsx"
-      ),
       fileName: {
         source: "splitKey",
         prefix: "",
         suffix: "日报表",
       },
       split: {
+        templateFile: path.join(
+          __dirname, "..", "templates",
+          "浙江华锐捷技术有限公司日报表(2).xlsx"
+        ),
+        sheetNameAliases: {},
         skipEmptySplitKey: true,
         trimSplitKey: true,
       },
-      sheetRules: [
+      merge: {
+        templateFile: "",
+        sheetNameAliases: {},
+      },
+      splitSheetRules: [
         {
           enabled: true,
           sheetName: "日报",
@@ -171,6 +176,7 @@ async function main() {
           skipEmpty: true,
         },
       ],
+      mergeSheetRules: [],
     },
   };
 

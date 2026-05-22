@@ -26,9 +26,11 @@ async function resolveRules(request) {
 
 function resolveTemplatePath(request, rulesConfig) {
   // 优先使用请求中传来的模板路径（UI 传入的合并模板），fallback 到配置
-  const templateFile = request.templateFile || request.rules?.templateFile || rulesConfig.templateFile;
+  const templateFile =
+    request.rules?.merge?.templateFile ||
+    rulesConfig.merge?.templateFile;
   if (!templateFile) {
-    throw new AppError(ErrorCodes.INVALID_RULES, "templateFile is required for merge.");
+    throw new AppError(ErrorCodes.INVALID_RULES, "merge.templateFile is required for merge.");
   }
   return path.isAbsolute(templateFile)
     ? templateFile
@@ -132,9 +134,9 @@ async function runMergeTask(request, { logger, reportProgress }) {
   if (needCleanup) {
     fs.unlink(templatePathToLoad).catch(() => {});
   }
-  const rules = normalizeSheetRules(rulesConfig.sheetRules || []);
+  const rules = normalizeSheetRules(rulesConfig.mergeSheetRules || []);
   if (rules.length === 0) {
-    throw new AppError(ErrorCodes.INVALID_RULES, "No enabled sheetRules found for merge.");
+    throw new AppError(ErrorCodes.INVALID_RULES, "No enabled mergeSheetRules found for merge.");
   }
 
   const outputPath = resolveMergeOutputPath(outputDir, rulesConfig);

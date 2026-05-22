@@ -1,5 +1,10 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+function sanitizeForIpc(value) {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
 const api = {
   selectInputFile: () => ipcRenderer.invoke("dialog:select-input-file"),
   selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
@@ -7,16 +12,25 @@ const api = {
   selectOptimizeFile: () => ipcRenderer.invoke("dialog:select-optimize-file"),
   getFileInfo: (filePath) => ipcRenderer.invoke("file:get-info", filePath),
   getSheetNames: (filePath) => ipcRenderer.invoke("file:get-sheet-names", filePath),
-  preloadMergeHeaders: (payload) => ipcRenderer.invoke("merge:preload-headers", payload),
+  getDirectorySheetNames: (inputDir, excludedPaths = []) =>
+    ipcRenderer.invoke(
+      "file:get-directory-sheet-names",
+      sanitizeForIpc(inputDir),
+      sanitizeForIpc(excludedPaths)
+    ),
+  preloadMergeHeaders: (payload) =>
+    ipcRenderer.invoke("merge:preload-headers", sanitizeForIpc(payload)),
   loadRules: () => ipcRenderer.invoke("rules:load"),
   getDefaultRules: () => ipcRenderer.invoke("rules:get-defaults"),
-  saveRules: (rules) => ipcRenderer.invoke("rules:save", rules),
-  startSplitTask: (payload) => ipcRenderer.invoke("task:start-split", payload),
-  startMergeTask: (payload) => ipcRenderer.invoke("task:start-merge", payload),
-  cancelTask: (taskId) => ipcRenderer.invoke("task:cancel", taskId),
-  listTemplates: () => ipcRenderer.invoke("template:list"),
-  importTemplate: (sourcePath) => ipcRenderer.invoke("template:import", sourcePath),
-  deleteTemplate: (name) => ipcRenderer.invoke("template:delete", name),
+  saveRules: (rules) => ipcRenderer.invoke("rules:save", sanitizeForIpc(rules)),
+  startSplitTask: (payload) =>
+    ipcRenderer.invoke("task:start-split", sanitizeForIpc(payload)),
+  startMergeTask: (payload) =>
+    ipcRenderer.invoke("task:start-merge", sanitizeForIpc(payload)),
+  cancelTask: (taskId) => ipcRenderer.invoke("task:cancel", sanitizeForIpc(taskId)),
+  listTemplates: (scope) => ipcRenderer.invoke("template:list", scope),
+  importTemplate: (scope, sourcePath) => ipcRenderer.invoke("template:import", scope, sourcePath),
+  deleteTemplate: (scope, name) => ipcRenderer.invoke("template:delete", scope, name),
   runOptimize: (filePath) => ipcRenderer.invoke("optimize:run", filePath),
   saveOptimizedFile: (tempPath) => ipcRenderer.invoke("optimize:save", tempPath),
   onTaskEvent: (handler) => {

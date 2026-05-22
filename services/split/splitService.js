@@ -2,7 +2,9 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const { validateSplitRequest, normalizeSheetRules } = require("./splitTypes");
+const { AppError, ErrorCodes } = require("./errors");
 const { readWorkbook } = require("./excelReader");
+const { resolveSheetName } = require("./sheetNameMatcher");
 const { runSplitEngine } = require("./splitEngine");
 const { loadRules } = require("./ruleManager");
 const {
@@ -47,6 +49,7 @@ async function runSplitTask(request, { logger, reportProgress }) {
 
   reportProgress(8, "Reading workbook");
   const workbook = await readWorkbook(request.inputFile);
+  const actualSheetNames = workbook.worksheets.map((sheet) => sheet.name);
   const sourceSheetXmlMap = await readWorkbookSheetEntries(request.inputFile).catch(() => new Map());
   const sourceEntries = await readXlsxEntries(request.inputFile).catch(() => new Map());
   const sourceDifferentialStylesNode = extractDifferentialStylesNode(sourceEntries.get("xl/styles.xml"));
@@ -55,10 +58,10 @@ async function runSplitTask(request, { logger, reportProgress }) {
   let templateSheetXmlMap = new Map();
   let tempTemplatePath = null;
   try {
-    if (rulesConfig.templateFile) {
-      const templatePath = path.isAbsolute(rulesConfig.templateFile)
-        ? rulesConfig.templateFile
-        : path.resolve(request.projectRoot || process.cwd(), rulesConfig.templateFile);
+    if (rulesConfig.split?.templateFile) {
+      const templatePath = path.isAbsolute(rulesConfig.split.templateFile)
+        ? rulesConfig.split.templateFile
+        : path.resolve(request.projectRoot || process.cwd(), rulesConfig.split.templateFile);
       templateSheetXmlMap = await readWorkbookSheetEntries(templatePath).catch(() => new Map());
       reportProgress(9, "Loading template workbook");
       try {
@@ -70,7 +73,28 @@ async function runSplitTask(request, { logger, reportProgress }) {
         templateWorkbook = await readWorkbook(templatePath);
       }
     }
-    let rules = normalizeSheetRules(rulesConfig.sheetRules || []);
+    let rules = normalizeSheetRules(rulesConfig.splitSheetRules || []).map((rule) => {
+      const resolved = resolveSheetName(
+        rule.sheetName,
+        actualSheetNames,
+        rulesConfig.split?.sheetNameAliases || {}
+      );
+      if (!resolved.matchedSheetName) {
+        throw new AppError(
+          ErrorCodes.SHEET_NOT_FOUND,
+          `Sheet "${rule.sheetName}" not found in source workbook.`,
+          {
+            sheetName: rule.sheetName,
+            suggestions: resolved.suggestions,
+          }
+        );
+      }
+      return {
+        ...rule,
+        requestedSheetName: rule.sheetName,
+        sheetName: resolved.matchedSheetName,
+      };
+    });
 
     if (rulesConfig.preserveSheetOrder) {
       const enabledRuleMap = new Map(rules.map((rule) => [rule.sheetName, rule]));
