@@ -52,11 +52,11 @@
             <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
           </svg>
         </div>
-        <h3 class="feature-title">模板优化</h3>
-        <p class="feature-desc">XLSX ZIP 级别深度压缩——清理空单元格、冗余 XML、隐藏元数据，显著减小文件体积。</p>
+        <h3 class="feature-title">文件压缩</h3>
+        <p class="feature-desc">XLSX ZIP 级别深度压缩——清理空单元格、冗余 XML、隐藏元数据，显著减小文件体积，兼容 Office。</p>
         <div class="feature-actions">
           <el-button type="warning" size="small" round @click="emit('navigate', 'optimize')">
-            开始优化 →
+            开始压缩 →
           </el-button>
         </div>
       </article>

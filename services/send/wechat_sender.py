@@ -148,21 +148,40 @@ def send_file_to_group(group_name: str, file_path: str) -> dict:
     wechat.SendKeys("{Enter}")
     time.sleep(0.8)
 
+    return {"success": True, "group": group_name, "file": abs_path}
+
+
+def minimize_wechat() -> dict:
+    """Minimize the WeChat PC main window."""
+    wechat = auto.WindowControl(searchDepth=1, ClassName="WeChatMainWndForPC")
+    if not wechat.Exists(maxSearchSeconds=3):
+        wechat = auto.WindowControl(searchDepth=1, Name="微信")
+    if not wechat.Exists(maxSearchSeconds=3):
+        wechat = auto.WindowControl(searchDepth=1, SubName="微信")
+    if not wechat.Exists(maxSearchSeconds=5):
+        return {"success": False, "error": "未找到微信窗口"}
+
     try:
         wechat.GetWindowPattern().SetWindowVisualState(2)
-    except Exception:
-        pass
-
-    return {"success": True, "group": group_name, "file": abs_path}
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def main():
     parser = argparse.ArgumentParser(description="微信 PC 端发送文件")
-    parser.add_argument("--group", required=True, help="目标微信群名称")
-    parser.add_argument("--file", required=True, help="要发送的文件路径")
+    parser.add_argument("--action", choices=["send", "minimize"], default="send", help="操作类型：发送文件或最小化窗口")
+    parser.add_argument("--group", help="目标微信群名称")
+    parser.add_argument("--file", help="要发送的文件路径")
     args = parser.parse_args()
 
-    result = send_file_to_group(args.group, args.file)
+    if args.action == "minimize":
+        result = minimize_wechat()
+    else:
+        if not args.group or not args.file:
+            result = {"success": False, "error": "send 操作需要 --group 和 --file 参数"}
+        else:
+            result = send_file_to_group(args.group, args.file)
     print(json.dumps(result, ensure_ascii=True))
 
 

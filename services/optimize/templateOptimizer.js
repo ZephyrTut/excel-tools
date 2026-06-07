@@ -10,7 +10,7 @@
  * This module strips all that bloat at the ZIP/XML level so ExcelJS
  * can actually load the file without OOM.
  */
-const { readXlsxEntries, writeXlsxFile } = require("./zipUtils");
+const { readXlsxEntries, writeXlsxFile, cleanupAndOverwriteXlsx } = require("./zipUtils");
 
 /** Column letter → number (A=1, Z=26, AA=27, ...) */
 function colLetterToNum(col) {
@@ -224,6 +224,19 @@ async function optimizeTemplate(inputPath, outputPath, onProgress) {
 
   const output = outputPath || inputPath;
   await writeXlsxFile(output, optimized);
+
+  // Office 兼容处理：清理 NaN、x14ac 属性、冻窗、尾部空行
+  const wbXml = optimized.get("xl/workbook.xml") || "";
+  const sheetNameRe = /<sheet\s+name="([^"]+)"/g;
+  const sheetTransforms = {};
+  let m;
+  while ((m = sheetNameRe.exec(typeof wbXml === "string" ? wbXml : "")) !== null) {
+    sheetTransforms[m[1]] = {
+      normalizeView: { clearFrozenPane: true },
+      trimTrailingRows: true,
+    };
+  }
+  await cleanupAndOverwriteXlsx(output, { sheetTransforms });
 
   const outStat = await fs.promises.stat(output);
   const savingsPercent = (((originalSize - outStat.size) / originalSize) * 100).toFixed(1);

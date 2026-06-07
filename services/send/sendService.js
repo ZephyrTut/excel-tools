@@ -5,7 +5,7 @@ const ExcelJS = require("exceljs");
 const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
-const { sendToWechatGroup } = require("./wechatController");
+const { sendToWechatGroup, minimizeWechat } = require("./wechatController");
 const {
   loadHistory,
   saveHistoryEntry,
@@ -129,6 +129,8 @@ async function executeSend({
   const historyFiles = [];
   const historyTargets = [];
 
+  let hasWechat = false;
+
   // 构建发送队列
   const queue = [];
   for (const item of matched) {
@@ -174,6 +176,7 @@ async function executeSend({
 
     let result;
     if (item.channel === "wechat") {
+      hasWechat = true;
       result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath);
       results.push({
         originalName: item.originalName,
@@ -234,6 +237,11 @@ async function executeSend({
         status: result.success ? "success" : "error",
       });
     }
+  }
+
+  // 所有微信发送完成后最小化窗口
+  if (hasWechat) {
+    minimizeWechat().catch(() => {});
   }
 
   // 去重 files

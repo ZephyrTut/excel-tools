@@ -101,7 +101,7 @@ const tabs = [
   { name: "home",   label: "首页" },
   { name: "split",  label: "Excel 拆分" },
   { name: "merge",  label: "合并汇总" },
-  { name: "optimize", label: "模板优化" },
+  { name: "optimize", label: "文件压缩" },
   { name: "send",   label: "发送工具" },
 ];
 

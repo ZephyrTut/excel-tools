@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <div class="ov-header animate-fade-in-up">
       <div class="ov-header-accent"></div>
-      <h2 class="ov-title">XLSX 模板优化</h2>
+      <h2 class="ov-title">XLSX 文件压缩</h2>
       <p class="ov-desc">ZIP 级别深度压缩，清理空单元格、冗余 XML 与隐藏元数据</p>
     </div>
 
@@ -39,7 +39,7 @@
 
     <!-- §2 执行区 -->
     <section class="ov-section animate-fade-in-up">
-      <div class="section-label">执行优化</div>
+      <div class="section-label">执行压缩</div>
       <div class="ov-action-card">
         <div class="ov-action-row">
           <el-button
@@ -55,7 +55,7 @@
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
             </template>
-            {{ state.optimizing ? '优化中...' : '开始优化' }}
+            {{ state.optimizing ? '压缩中...' : '开始压缩' }}
           </el-button>
           <div v-if="state.optimizing || state.result" class="ov-progress-wrap">
             <el-progress
@@ -78,11 +78,11 @@
             <span class="ov-preview-bar-value">{{ formatSize(state.fileInfo.size) }}</span>
           </div>
           <div class="ov-preview-bar">
-            <span class="ov-preview-bar-label">优化后</span>
+            <span class="ov-preview-bar-label">压缩后</span>
             <div class="ov-preview-track">
               <div class="ov-preview-fill ov-preview-fill--opt" :style="{ width: '0%' }"></div>
             </div>
-            <span class="ov-preview-bar-value ov-preview-bar-value--muted">等待优化</span>
+            <span class="ov-preview-bar-value ov-preview-bar-value--muted">等待压缩</span>
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@
 
     <!-- §4 结果区 -->
     <section v-if="state.result" class="ov-section ov-result-section animate-slide-up">
-      <div class="section-label">优化结果</div>
+      <div class="section-label">压缩结果</div>
 
       <!-- 统计卡片 -->
       <div class="ov-result-stats">
@@ -105,7 +105,7 @@
         </div>
         <div class="ov-result-arrow">→</div>
         <div class="stat-card">
-          <div class="stat-label">优化后大小</div>
+          <div class="stat-label">压缩后大小</div>
           <div class="stat-value primary">{{ formatSize(state.result.optimizedSize) }}</div>
         </div>
         <div class="ov-result-arrow">→</div>
@@ -124,12 +124,12 @@
       <div class="ov-result-table-wrap">
         <el-table :data="state.result.sheets" stripe size="small" class="ov-table" style="width: 100%">
           <el-table-column label="Sheet 名称" prop="name" min-width="180" />
-          <el-table-column label="优化前" align="right" width="140">
+          <el-table-column label="压缩前" align="right" width="140">
             <template #default="{ row }">
               {{ formatSize(row.originalSize) }}
             </template>
           </el-table-column>
-          <el-table-column label="优化后" align="right" width="140">
+          <el-table-column label="压缩后" align="right" width="140">
             <template #default="{ row }">
               <span class="text-success">{{ formatSize(row.optimizedSize) }}</span>
             </template>
@@ -152,7 +152,7 @@
       <!-- 保存 -->
       <div class="ov-save-row">
         <el-button type="success" size="large" class="ov-save-btn" @click="saveFile" :icon="Download">
-          {{ state.savedPath ? '保存另一份' : '保存优化后的文件' }}
+          {{ state.savedPath ? '保存另一份' : '保存压缩后的文件' }}
         </el-button>
         <transition name="fade">
           <span v-if="state.savedPath" class="ov-saved-hint">
@@ -245,10 +245,10 @@ async function runOptimize() {
     const result = await getApi().runOptimize(state.fileInfo.path);
     state.progress = 100;
     state.result = result;
-    ElMessage.success(`优化完成！压缩率 ${result.savingsPercent}%`);
+    ElMessage.success(`压缩完成！压缩率 ${result.savingsPercent}%`);
   } catch (err) {
     state.progress = 0;
-    ElMessage.error(`优化失败：${err.message}`);
+    ElMessage.error(`压缩失败：${err.message}`);
   } finally {
     state.optimizing = false;
   }

@@ -38,4 +38,19 @@ async function sendToWechatGroup(groupName, filePath) {
   }
 }
 
-module.exports = { sendToWechatGroup };
+async function minimizeWechat() {
+  const scriptPath = path.join(__dirname, "wechat_sender.py");
+
+  try {
+    const { stdout } = await execFileAsync(
+      "python",
+      [scriptPath, "--action", "minimize"],
+      { timeout: 10000 }
+    );
+    return JSON.parse(stdout.trim());
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+module.exports = { sendToWechatGroup, minimizeWechat };
