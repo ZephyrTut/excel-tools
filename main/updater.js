@@ -2,6 +2,9 @@ const { BrowserWindow } = require("electron");
 
 let _autoUpdater = null;
 
+// ── 国内更新镜像 ──────────────────────────────────────────
+const MIRROR_URL = "https://gitee.com/ZephyrTut/excel-tools/raw/release/";
+
 /** Lazy-init autoUpdater — electron-updater is 1.3MB and blocks startup. */
 function getAutoUpdater() {
   if (_autoUpdater) return _autoUpdater;
@@ -51,9 +54,37 @@ function getAutoUpdater() {
   return _autoUpdater;
 }
 
-/** Check for updates from the configured publish server. */
+/** Check for updates: try domestic mirror first, fall back to GitHub. */
 async function checkForUpdates() {
-  return getAutoUpdater().checkForUpdates();
+  const updater = getAutoUpdater();
+  let lastError = null;
+
+  // ① 尝试 Gitee 镜像（国内直连，无需 VPN）
+  try {
+    updater.setFeedURL({
+      provider: "generic",
+      url: MIRROR_URL,
+    });
+    return await updater.checkForUpdates();
+  } catch (err) {
+    lastError = err;
+    console.warn("[updater] 镜像源检查失败，回退 GitHub:", err.message);
+  }
+
+  // ② 回退 GitHub（需要 VPN）
+  try {
+    updater.setFeedURL({
+      provider: "github",
+      owner: "ZephyrTut",
+      repo: "excel-tools",
+    });
+    return await updater.checkForUpdates();
+  } catch (err) {
+    console.warn("[updater] GitHub 检查也失败:", err.message);
+    lastError = err;
+  }
+
+  throw lastError;
 }
 
 /** Start downloading the available update. */
