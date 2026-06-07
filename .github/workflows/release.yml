@@ -64,3 +64,18 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: false
+
+      # ── 同步安装包到 Gitee（国内用户免 VPN 更新） ──────────────
+      - name: Sync installers to Gitee mirror
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          cd dist/installers
+          git init
+          git checkout -b release
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "sync ${{ github.ref_name }}"
+          git remote add gitee https://oauth2:${GITEE_TOKEN}@gitee.com/ZephyrTut/excel-tools.git
+          git push gitee release --force
