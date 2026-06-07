@@ -238,8 +238,6 @@ onMounted(async () => {
   try { rules.value = await api.getSendRules(); } catch {}
   try { history.value = await api.getSendHistory(); } catch {}
   try {
-    // 加载 SMTP 配置
-  try {
     const config = await api.getSmtpConfig();
     if (config) {
       Object.assign(smtpForm, config);
