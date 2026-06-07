@@ -108,8 +108,10 @@ const api = {
   saveSmtpConfig: (config) =>
     ipcRenderer.invoke("send:save-smtp-config", sanitizeForIpc(config)),
   selectSendFolder: () => ipcRenderer.invoke("dialog:select-send-folder"),
-  listFolderFiles: (folderPath) => ipcRenderer.invoke("send:list-folder-files", folderPath),
-  exportSendResults: (data) => ipcRenderer.invoke("send:export-results", sanitizeForIpc(data)),
+  listFolderFiles: (folderPath) =>
+    ipcRenderer.invoke("send:list-folder-files", folderPath),
+  exportSendResults: (data) =>
+    ipcRenderer.invoke("send:export-results", sanitizeForIpc(data)),
 };
 
 contextBridge.exposeInMainWorld("excelTools", api);

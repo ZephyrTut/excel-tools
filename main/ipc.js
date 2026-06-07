@@ -710,7 +710,8 @@ function registerIpcHandlers() {
       defaultPath: `发送结果_${new Date().toISOString().slice(0, 10)}.csv`,
       filters: [{ name: "CSV 文件", extensions: ["csv"] }],
     });
-    if (result.canceled || !result.filePath) return { success: false, error: "已取消" };
+    if (result.canceled || !result.filePath)
+      return { success: false, error: "已取消" };
 
     const { headers, rows } = data || {};
     if (!Array.isArray(headers) || !Array.isArray(rows)) {
@@ -720,7 +721,9 @@ function registerIpcHandlers() {
     const csvContent = [
       headers.join(","),
       ...rows.map((r) =>
-        r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(",")
+        r
+          .map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`)
+          .join(",")
       ),
     ].join("\r\n");
 
@@ -728,7 +731,6 @@ function registerIpcHandlers() {
     await fs.writeFile(result.filePath, "﻿" + csvContent, "utf-8");
     return { success: true };
   });
-
 }
 
 module.exports = {

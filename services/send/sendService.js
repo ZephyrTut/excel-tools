@@ -6,7 +6,11 @@ const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
 const { sendToWechatGroup } = require("./wechatController");
-const { loadHistory, saveHistoryEntry, clearHistory } = require("./sendHistory");
+const {
+  loadHistory,
+  saveHistoryEntry,
+  clearHistory,
+} = require("./sendHistory");
 
 /**
  * 导入规则 Excel 并保存为 JSON
@@ -161,7 +165,7 @@ async function executeSend({
       target: String(
         item.channel === "wechat"
           ? (item.rule && item.rule.wechatGroup) || ""
-          : (item.rule && item.rule.emailTo || []).join(", ")
+          : ((item.rule && item.rule.emailTo) || []).join(", ")
       ),
       status: "sending",
     };
