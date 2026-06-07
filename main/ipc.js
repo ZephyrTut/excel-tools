@@ -673,6 +673,20 @@ function registerIpcHandlers() {
     await sendService.saveSmtpConfig(app.getPath("userData"), config);
     return { success: true };
   });
+
+  ipcMain.handle("send:list-folder-files", async (_, folderPath) => {
+    try {
+      const entries = await fs.readdir(folderPath, { withFileTypes: true });
+      const files = entries
+        .filter((e) => e.isFile())
+        .map((e) => e.name)
+        .filter((n) => n.toLowerCase().endsWith(".xlsx"))
+        .filter((n) => !n.startsWith("~$"));
+      return { files };
+    } catch (e) {
+      return { files: [], error: e.message };
+    }
+  });
 }
 
 module.exports = {

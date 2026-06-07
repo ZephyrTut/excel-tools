@@ -397,24 +397,23 @@ async function saveSmtp() {
 async function pickFolderForCopy() {
   const folder = await api.selectSendFolder();
   if (!folder) return;
-  // 通过 API 获取文件夹下的文件列表
   try {
-    const result = await api.matchSendFiles(folder);
+    const result = await api.listFolderFiles(folder);
     if (result.error) {
       addLog("warn", result.error);
       return;
     }
-    const names = result.matched.map((m) => m.originalName).concat(result.unmatched);
-    clipboardFiles.value = names.filter(Boolean);
-    if (clipboardFiles.value.length > 0) {
-      const text = clipboardFiles.value.join("\n");
+    const names = result.files || [];
+    clipboardFiles.value = names;
+    if (names.length > 0) {
+      const text = names.join("\n");
       await navigator.clipboard.writeText(text);
-      addLog("success", `已复制 ${clipboardFiles.value.length} 个文件名到剪贴板`);
+      addLog("success", `已复制 ${names.length} 个文件名到剪贴板，可直接粘贴到 Excel A 列`);
     } else {
-      addLog("warn", "未找到 Excel 文件");
+      addLog("warn", "该文件夹下未找到 Excel 文件");
     }
   } catch (e) {
-    addLog("error", `读取文件夹失败: ${e.message}`);
+    addLog("error", `读取失败: ${e.message}`);
   }
 }
 
