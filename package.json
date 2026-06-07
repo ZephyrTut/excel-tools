@@ -16,8 +16,9 @@
     "merge": "node --max-old-space-size=8192 scripts/generate-merge.js",
     "merge:huzhou": "node scripts/generate-merge.js",
     "compare:merge": "node scripts/compare-merge-output.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "node scripts/run-local-tests.js",
+    "test:watch": "node --test --watch main/**/*.test.js services/**/*.test.js",
+    "test:vitest": "vitest run --config ./vitest.config.mjs",
     "release": "node scripts/release.js"
   },
   "dependencies": {

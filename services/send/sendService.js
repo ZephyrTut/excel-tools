@@ -114,7 +114,12 @@ async function saveSmtpConfig(userDataPath, config) {
  * @param {function} params.onProgress - (event) => void
  * @returns {Promise<{results: Array, historyEntry: object, successCount: number, failCount: number}>}
  */
-async function executeSend({ matched, wechatFirst = true, userDataPath, onProgress }) {
+async function executeSend({
+  matched,
+  wechatFirst = true,
+  userDataPath,
+  onProgress,
+}) {
   const smtpConfig = await getSmtpConfig(userDataPath);
   const results = [];
   const historyFiles = [];
@@ -132,8 +137,12 @@ async function executeSend({ matched, wechatFirst = true, userDataPath, onProgre
   queue.sort((a, b) => {
     if (a.channel === b.channel) return 0;
     return wechatFirst
-      ? (a.channel === "wechat" ? -1 : 1)
-      : (a.channel === "email" ? -1 : 1);
+      ? a.channel === "wechat"
+        ? -1
+        : 1
+      : a.channel === "email"
+      ? -1
+      : 1;
   });
 
   const total = queue.length;
@@ -149,7 +158,10 @@ async function executeSend({ matched, wechatFirst = true, userDataPath, onProgre
       total,
       currentFile: item.originalName,
       channel: item.channel,
-      target: item.channel === "wechat" ? item.rule.wechatGroup : item.rule.emailTo.join(", "),
+      target:
+        item.channel === "wechat"
+          ? item.rule.wechatGroup
+          : item.rule.emailTo.join(", "),
       status: "sending",
     };
 
@@ -174,7 +186,9 @@ async function executeSend({ matched, wechatFirst = true, userDataPath, onProgre
           to: item.rule.emailTo,
           cc: item.rule.emailCc,
           subject: item.resolvedSubject,
-          attachments: [{ filePath: item.filePath, mappedName: item.mappedName }],
+          attachments: [
+            { filePath: item.filePath, mappedName: item.mappedName },
+          ],
         });
       }
       results.push({
@@ -190,21 +204,30 @@ async function executeSend({ matched, wechatFirst = true, userDataPath, onProgre
       successCount++;
       historyTargets.push({
         type: item.channel,
-        name: item.channel === "wechat" ? item.rule.wechatGroup : item.rule.emailTo.join(", "),
+        name:
+          item.channel === "wechat"
+            ? item.rule.wechatGroup
+            : item.rule.emailTo.join(", "),
         status: "success",
       });
     } else {
       failCount++;
       historyTargets.push({
         type: item.channel,
-        name: item.channel === "wechat" ? item.rule.wechatGroup : item.rule.emailTo.join(", "),
+        name:
+          item.channel === "wechat"
+            ? item.rule.wechatGroup
+            : item.rule.emailTo.join(", "),
         status: "error",
         error: result.error,
       });
     }
 
     if (onProgress) {
-      onProgress({ ...progressEvent, status: result.success ? "success" : "error" });
+      onProgress({
+        ...progressEvent,
+        status: result.success ? "success" : "error",
+      });
     }
   }
 

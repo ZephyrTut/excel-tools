@@ -14,7 +14,8 @@ function replaceVariables(template, originalFileName) {
   const dateStr = `${y}-${m}-${d}`;
 
   const dotIdx = originalFileName.lastIndexOf(".");
-  const baseName = dotIdx > 0 ? originalFileName.slice(0, dotIdx) : originalFileName;
+  const baseName =
+    dotIdx > 0 ? originalFileName.slice(0, dotIdx) : originalFileName;
 
   return template
     .replace(/\{\{date\}\}/g, dateStr)

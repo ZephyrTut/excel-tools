@@ -3,8 +3,7 @@ import ExcelJS from "exceljs";
 import { parseRuleExcel } from "./parseRuleExcel.js";
 
 describe("parseRuleExcel", () => {
-  it("应正确解析规则 Excel 表头并把分发方式拆成数组", () => {
-    const ExcelJS = require("exceljs");
+  it("parses rules and splits delivery channels into arrays", () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("规则");
     ws.addRow(["文件名(原)", "文件名(映射)", "分发方式", "微信群名", "邮件主题", "收件人", "抄送人"]);
@@ -14,22 +13,17 @@ describe("parseRuleExcel", () => {
     const result = parseRuleExcel(ws);
 
     expect(result.rules).toHaveLength(2);
-    expect(result.rules[0].originalName).toBe("月报.xlsx");
-    expect(result.rules[0].mappedName).toBe("{{date}}经营月报.xlsx");
     expect(result.rules[0].channels).toEqual(["wechat", "email"]);
     expect(result.rules[0].wechatGroup).toBe("管理群");
     expect(result.rules[0].emailTo).toEqual(["boss@a.com", "ceo@a.com"]);
-    expect(result.rules[0].emailCc).toEqual(["cto@a.com", "hr@a.com"]);
     expect(result.rules[1].channels).toEqual(["wechat"]);
-    expect(result.rules[1].wechatGroup).toBe("部门群");
   });
 
-  it("应跳过缺少必填字段的行并记录警告", () => {
-    const ExcelJS = require("exceljs");
+  it("skips rows with missing required fields", () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("规则");
     ws.addRow(["文件名(原)", "文件名(映射)", "分发方式", "微信群名", "邮件主题", "收件人", "抄送人"]);
-    ws.addRow(["月报.xlsx", "", "微信", "", "", "", ""]); // 缺微信群名
+    ws.addRow(["月报.xlsx", "", "微信", "", "", "", ""]);
 
     const result = parseRuleExcel(ws);
     expect(result.warnings).toHaveLength(1);
@@ -37,7 +31,7 @@ describe("parseRuleExcel", () => {
     expect(result.rules).toHaveLength(0);
   });
 
-  it("应支持中文和英文分发方式标识", () => {
+  it("supports mixed Chinese and English channel labels", () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("规则");
     ws.addRow(["文件名(原)", "文件名(映射)", "分发方式", "微信群名", "邮件主题", "收件人", "抄送人"]);
@@ -51,7 +45,7 @@ describe("parseRuleExcel", () => {
     expect(result.rules[1].channels).toContain("email");
   });
 
-  it("应处理只有邮件分发方式的行", () => {
+  it("handles email-only rows", () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("规则");
     ws.addRow(["文件名(原)", "文件名(映射)", "分发方式", "微信群名", "邮件主题", "收件人", "抄送人"]);

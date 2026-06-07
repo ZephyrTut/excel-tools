@@ -15,11 +15,11 @@ async function sendToWechatGroup(groupName, filePath) {
   const scriptPath = path.join(__dirname, "wechat_sender.py");
 
   try {
-    const { stdout } = await execFileAsync("python", [
-      scriptPath,
-      "--group", groupName,
-      "--file", filePath,
-    ], { timeout: 60000 });
+    const { stdout } = await execFileAsync(
+      "python",
+      [scriptPath, "--group", groupName, "--file", filePath],
+      { timeout: 60000 }
+    );
 
     const result = JSON.parse(stdout.trim());
     return result;

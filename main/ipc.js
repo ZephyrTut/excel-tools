@@ -11,20 +11,29 @@ const { resolveSheetName } = require("../services/split/sheetNameMatcher");
 const sendService = require("../services/send/sendService");
 
 /** Lazy getters — these modules are heavy and only needed on first IPC call. */
-function excelReader() { return require("../services/split/excelReader"); }
-function templateOptimizer() { return require("../services/optimize/templateOptimizer"); }
+function excelReader() {
+  return require("../services/split/excelReader");
+}
+function templateOptimizer() {
+  return require("../services/optimize/templateOptimizer");
+}
 
 /**
  * 递归净化数据，移除所有不可 structuredClone 的值
  */
 function deepCloneable(obj, seen = new WeakSet()) {
   if (obj === null || obj === undefined) return null;
-  if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') return obj;
-  if (typeof obj === 'bigint') return Number(obj);
-  if (typeof obj === 'function' || typeof obj === 'symbol') return null;
-  if (seen.has(obj)) return '[Circular]';
+  if (
+    typeof obj === "string" ||
+    typeof obj === "number" ||
+    typeof obj === "boolean"
+  )
+    return obj;
+  if (typeof obj === "bigint") return Number(obj);
+  if (typeof obj === "function" || typeof obj === "symbol") return null;
+  if (seen.has(obj)) return "[Circular]";
   seen.add(obj);
-  if (Array.isArray(obj)) return obj.map(v => deepCloneable(v, seen));
+  if (Array.isArray(obj)) return obj.map((v) => deepCloneable(v, seen));
   if (obj instanceof Date) return obj.toISOString();
   if (obj instanceof Map) return Object.fromEntries(obj);
   if (obj instanceof Set) return [...obj];
@@ -175,33 +184,38 @@ function registerIpcHandlers() {
     return { path: filePath, name: path.basename(filePath), size: stat.size };
   });
 
-  ipcMain.handle("file:get-directory-sheet-names", async (_, inputDir, excludedPaths = []) => {
-    if (!inputDir) return [];
-    let entries = [];
-    try {
-      entries = await fs.readdir(inputDir, { withFileTypes: true });
-    } catch {
-      return [];
-    }
-
-    const excluded = new Set((excludedPaths || []).filter(Boolean).map((item) => path.resolve(item)));
-    const sheetNames = new Set();
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      const filePath = path.join(inputDir, entry.name);
-      if (!filePath.toLowerCase().endsWith(".xlsx")) continue;
-      if (path.basename(filePath).startsWith("~$")) continue;
-      if (excluded.has(path.resolve(filePath))) continue;
+  ipcMain.handle(
+    "file:get-directory-sheet-names",
+    async (_, inputDir, excludedPaths = []) => {
+      if (!inputDir) return [];
+      let entries = [];
       try {
-        const names = await excelReader().getSheetNames(filePath);
-        for (const name of names) sheetNames.add(name);
+        entries = await fs.readdir(inputDir, { withFileTypes: true });
       } catch {
-        // ignore individual unreadable files during option discovery
+        return [];
       }
-    }
 
-    return [...sheetNames];
-  });
+      const excluded = new Set(
+        (excludedPaths || []).filter(Boolean).map((item) => path.resolve(item))
+      );
+      const sheetNames = new Set();
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const filePath = path.join(inputDir, entry.name);
+        if (!filePath.toLowerCase().endsWith(".xlsx")) continue;
+        if (path.basename(filePath).startsWith("~$")) continue;
+        if (excluded.has(path.resolve(filePath))) continue;
+        try {
+          const names = await excelReader().getSheetNames(filePath);
+          for (const name of names) sheetNames.add(name);
+        } catch {
+          // ignore individual unreadable files during option discovery
+        }
+      }
+
+      return [...sheetNames];
+    }
+  );
 
   /** List all templates for a scope. */
   ipcMain.handle("template:list", async (_, scope) => {
@@ -210,12 +224,20 @@ function registerIpcHandlers() {
 
   /** Import a new template file into a scope-specific directory. */
   ipcMain.handle("template:import", async (_, scope, sourcePath) => {
-    return templateStore.importTemplate(app.getPath("userData"), scope, sourcePath);
+    return templateStore.importTemplate(
+      app.getPath("userData"),
+      scope,
+      sourcePath
+    );
   });
 
   /** Delete a template file from a scope-specific directory. */
   ipcMain.handle("template:delete", async (_, scope, templateName) => {
-    return templateStore.deleteTemplate(app.getPath("userData"), scope, templateName);
+    return templateStore.deleteTemplate(
+      app.getPath("userData"),
+      scope,
+      templateName
+    );
   });
 
   ipcMain.handle("task:start-split", async (_, payload) => {
@@ -249,13 +271,32 @@ function registerIpcHandlers() {
 
   ipcMain.handle("merge:preload-headers", async (_, payload) => {
     try {
-      const { inputDir, templateFile, orderSheetName, orderColumn, sheetNameAliases, rules: incoming } = payload || {};
-      if (!inputDir || !templateFile || !Array.isArray(incoming) || incoming.length === 0) {
+      const {
+        inputDir,
+        templateFile,
+        orderSheetName,
+        orderColumn,
+        sheetNameAliases,
+        rules: incoming,
+      } = payload || {};
+      if (
+        !inputDir ||
+        !templateFile ||
+        !Array.isArray(incoming) ||
+        incoming.length === 0
+      ) {
         return { rules: [] };
       }
 
       const prog = (pct, stage) => {
-        try { broadcast({ type: "progress", taskId: "preload-headers", progress: pct, stage }); } catch {}
+        try {
+          broadcast({
+            type: "progress",
+            taskId: "preload-headers",
+            progress: pct,
+            stage,
+          });
+        } catch {}
       };
 
       prog(5, "开始预读取...");
@@ -268,7 +309,10 @@ function registerIpcHandlers() {
       }));
       let templateHeadersBySheet = {};
       try {
-        templateHeadersBySheet = await excelReader().getMultipleSheetHeaders(templateFile, templateConfigs);
+        templateHeadersBySheet = await excelReader().getMultipleSheetHeaders(
+          templateFile,
+          templateConfigs
+        );
       } catch {
         templateHeadersBySheet = {};
       }
@@ -276,7 +320,11 @@ function registerIpcHandlers() {
       // 2. 扫描数据目录
       prog(15, "扫描数据目录...");
       let entries = [];
-      try { entries = await fs.readdir(inputDir, { withFileTypes: true }); } catch { entries = []; }
+      try {
+        entries = await fs.readdir(inputDir, { withFileTypes: true });
+      } catch {
+        entries = [];
+      }
       const allFiles = entries
         .filter((e) => e.isFile())
         .map((e) => path.join(inputDir, e.name))
@@ -320,7 +368,10 @@ function registerIpcHandlers() {
               ? wb.getWorksheet(resolved.matchedSheetName)
               : null;
             headersMap[rule.sheetName] = worksheet
-              ? excelReader().getHeadersFromWorksheet(worksheet, rule.headerRows || 1)
+              ? excelReader().getHeadersFromWorksheet(
+                  worksheet,
+                  rule.headerRows || 1
+                )
               : [];
           }
           const hasData = Object.values(headersMap).some(
@@ -339,13 +390,28 @@ function registerIpcHandlers() {
             ? wb.getWorksheet(resolvedOrderSheet.matchedSheetName)
             : null;
           if (orderSheet) {
-            const colIndex = (function(l){return[...l.toUpperCase()].reduce((a,c)=>a*26+c.charCodeAt(0)-64,0)})(orderColumn || incoming[0]?.splitColumn || "C");
+            const colIndex = (function (l) {
+              return [...l.toUpperCase()].reduce(
+                (a, c) => a * 26 + c.charCodeAt(0) - 64,
+                0
+              );
+            })(orderColumn || incoming[0]?.splitColumn || "C");
             const vendors = new Set();
-            const orderHeaderRows = incoming.find(r => r.sheetName === orderSheetName)?.headerRows || 1;
+            const orderHeaderRows =
+              incoming.find((r) => r.sheetName === orderSheetName)
+                ?.headerRows || 1;
             for (let r = orderHeaderRows + 1; r <= orderSheet.rowCount; r++) {
               const cell = orderSheet.getRow(r).getCell(colIndex);
               const cv = cell.value;
-              if (cv && typeof cv === 'object' && !Object.prototype.hasOwnProperty.call(cv, 'result') && !Object.prototype.hasOwnProperty.call(cv, 'text') && !Object.prototype.hasOwnProperty.call(cv, 'richText') && !Object.prototype.hasOwnProperty.call(cv, 'error')) continue;
+              if (
+                cv &&
+                typeof cv === "object" &&
+                !Object.prototype.hasOwnProperty.call(cv, "result") &&
+                !Object.prototype.hasOwnProperty.call(cv, "text") &&
+                !Object.prototype.hasOwnProperty.call(cv, "richText") &&
+                !Object.prototype.hasOwnProperty.call(cv, "error")
+              )
+                continue;
               const v = excelReader().textValue(cv).trim();
               if (v) vendors.add(v);
             }
@@ -390,14 +456,18 @@ function registerIpcHandlers() {
             // 没有供应商数据，用文件名
             sources.push({
               file: fr.file,
-              headers: headers.map((h) => (h === null || h === undefined ? null : String(h))),
+              headers: headers.map((h) =>
+                h === null || h === undefined ? null : String(h)
+              ),
             });
           } else {
             // 每个供应商一行
             for (const vendor of vendors) {
               sources.push({
                 file: vendor,
-                headers: headers.map((h) => (h === null || h === undefined ? null : String(h))),
+                headers: headers.map((h) =>
+                  h === null || h === undefined ? null : String(h)
+                ),
               });
             }
           }
@@ -407,7 +477,9 @@ function registerIpcHandlers() {
           outputSheetName: String(key),
           headerRows: Number(rule.headerRows || 1),
           preloadedHeaders: {
-            templateHeaders: (templateHeaders || []).map((h) => (h === null || h === undefined ? null : String(h))),
+            templateHeaders: (templateHeaders || []).map((h) =>
+              h === null || h === undefined ? null : String(h)
+            ),
             sources,
           },
         };
@@ -417,7 +489,14 @@ function registerIpcHandlers() {
       return deepCloneable({ rules: resultRules });
     } catch (err) {
       console.error("preload-headers error:", err?.message || err);
-      try { broadcast({ type: "progress", taskId: "preload-headers", progress: 100, stage: "读取失败" }); } catch {}
+      try {
+        broadcast({
+          type: "progress",
+          taskId: "preload-headers",
+          progress: 100,
+          stage: "读取失败",
+        });
+      } catch {}
       return deepCloneable({ rules: [] });
     }
   });
@@ -452,16 +531,45 @@ function registerIpcHandlers() {
 
   ipcMain.handle("optimize:run", async (_, filePath) => {
     const taskId = crypto.randomUUID();
-    const tmpPath = path.join(os.tmpdir(), `template_opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.xlsx`);
+    const tmpPath = path.join(
+      os.tmpdir(),
+      `template_opt_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}.xlsx`
+    );
 
-    broadcast({ type: "log", taskId, level: "info", message: "开始优化文件..." });
-    broadcast({ type: "progress", taskId, progress: 5, stage: "正在分析文件结构..." });
-
-    const optResult = await templateOptimizer().optimizeTemplate(filePath, tmpPath, (pct) => {
-      broadcast({ type: "progress", taskId, progress: 5 + Math.round(pct * 85), stage: "正在优化..." });
+    broadcast({
+      type: "log",
+      taskId,
+      level: "info",
+      message: "开始优化文件...",
+    });
+    broadcast({
+      type: "progress",
+      taskId,
+      progress: 5,
+      stage: "正在分析文件结构...",
     });
 
-    broadcast({ type: "progress", taskId, progress: 90, stage: "正在计算统计信息..." });
+    const optResult = await templateOptimizer().optimizeTemplate(
+      filePath,
+      tmpPath,
+      (pct) => {
+        broadcast({
+          type: "progress",
+          taskId,
+          progress: 5 + Math.round(pct * 85),
+          stage: "正在优化...",
+        });
+      }
+    );
+
+    broadcast({
+      type: "progress",
+      taskId,
+      progress: 90,
+      stage: "正在计算统计信息...",
+    });
 
     // Read sheet-level stats from the optimized file
     const AdmZip = require("adm-zip");
@@ -471,17 +579,25 @@ function registerIpcHandlers() {
     const origSheets = {};
     const optSheets = {};
     for (const e of origZip.getEntries()) {
-      if (e.entryName.startsWith("xl/worksheets/sheet") && e.entryName.endsWith(".xml")) {
+      if (
+        e.entryName.startsWith("xl/worksheets/sheet") &&
+        e.entryName.endsWith(".xml")
+      ) {
         origSheets[e.entryName] = e.getData().length;
       }
     }
     for (const e of optZip.getEntries()) {
-      if (e.entryName.startsWith("xl/worksheets/sheet") && e.entryName.endsWith(".xml")) {
+      if (
+        e.entryName.startsWith("xl/worksheets/sheet") &&
+        e.entryName.endsWith(".xml")
+      ) {
         optSheets[e.entryName] = e.getData().length;
       }
     }
 
-    const sheetNames = [...new Set([...Object.keys(origSheets), ...Object.keys(optSheets)])].sort();
+    const sheetNames = [
+      ...new Set([...Object.keys(origSheets), ...Object.keys(optSheets)]),
+    ].sort();
     const sheets = sheetNames.map((name) => {
       const shortName = name.replace("xl/worksheets/", "").replace(".xml", "");
       return {
@@ -491,7 +607,12 @@ function registerIpcHandlers() {
       };
     });
 
-    broadcast({ type: "log", taskId, level: "info", message: `优化完成，压缩率 ${optResult.savingsPercent}%` });
+    broadcast({
+      type: "log",
+      taskId,
+      level: "info",
+      message: `优化完成，压缩率 ${optResult.savingsPercent}%`,
+    });
     broadcast({ type: "progress", taskId, progress: 100, stage: "优化完成" });
 
     return {

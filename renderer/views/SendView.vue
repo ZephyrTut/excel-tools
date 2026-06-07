@@ -12,11 +12,33 @@
           </el-button>
         </el-form-item>
         <el-form-item label="规则模板">
-          <el-button size="small" @click="pickRuleFile">📥 导入</el-button>
-          <el-text v-if="rules.length > 0" size="small" style="margin-left: 8px">
-            已导入 {{ rules.length }} 条规则
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+            <el-button size="small" @click="pickRuleFile">📥 导入规则表</el-button>
+            <el-button size="small" text type="primary" @click="downloadTemplate">
+              📋 下载空白规则表
+            </el-button>
+          </div>
+          <el-text v-if="rules.length > 0" size="small" style="margin-top: 6px">
+            已导入 <b>{{ rules.length }}</b> 条规则
           </el-text>
-          <el-text v-else size="small" type="info" style="margin-left: 8px">尚未导入</el-text>
+          <template v-if="rules.length === 0">
+            <div class="rule-template-help">
+              <p>规则表是一份 Excel 文件，每一行描述"哪个文件发给谁"：</p>
+              <table class="rule-template-table">
+                <thead><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th></tr></thead>
+                <tbody>
+                  <tr><td>文件名(原)</td><td>文件名(映射)</td><td>分发方式</td><td>微信群名</td><td>邮件主题</td><td>收件人</td><td>抄送人</td></tr>
+                  <tr class="example-row"><td>月报.xlsx</td><td>{{date}}经营月报</td><td>微信,邮件</td><td>管理群</td><td>{{date}} 月报</td><td>boss@qq.com</td><td>cto@qq.com</td></tr>
+                </tbody>
+              </table>
+              <ul class="rule-template-tips">
+                <li>📱 <b>分发方式</b>填<code>微信</code>、<code>邮件</code> 或 <code>微信,邮件</code></li>
+                <li>📝 <code>{{date}}</code> 自动替换为当天日期，<code>{{fileName}}</code> 替换为文件名</li>
+                <li>👥 <b>收件人</b>和<b>抄送人</b>有多个时用<code>英文逗号</code>分隔</li>
+                <li>✅ 只发微信就留空邮件列，只发邮件就留空微信群列</li>
+              </ul>
+            </div>
+          </template>
         </el-form-item>
         <el-form-item label="发送顺序">
           <el-radio-group v-model="wechatFirst">
@@ -102,27 +124,63 @@
     </el-card>
 
     <!-- SMTP 配置弹窗 -->
-    <el-dialog v-model="showSmtpDialog" title="SMTP 邮件配置" width="480px">
-      <el-form label-width="100px">
-        <el-form-item label="SMTP 服务器">
-          <el-input v-model="smtpForm.host" placeholder="smtp.aliyun.com" />
+    <el-dialog v-model="showSmtpDialog" title="配置发件邮箱" width="520px">
+      <el-alert
+        title="任何支持 SMTP 的邮箱都可以用（QQ邮箱、163、阿里邮箱、企业邮箱等）"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      />
+
+      <el-form label-width="90px">
+        <el-form-item label="邮箱类型">
+          <el-select v-model="smtpForm.provider" placeholder="选择你的邮箱" style="width: 100%" @change="onProviderChange">
+            <el-option label="QQ 邮箱 (@qq.com)" value="qq" />
+            <el-option label="163 邮箱 (@163.com)" value="163" />
+            <el-option label="阿里邮箱 (@aliyun.com)" value="aliyun" />
+            <el-option label="其他邮箱（手动填写）" value="other" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="端口">
+
+        <el-form-item v-if="smtpForm.provider === 'other'" label="服务器">
+          <el-input v-model="smtpForm.host" placeholder="例如 smtp.exmail.qq.com" />
+        </el-form-item>
+        <el-form-item v-if="smtpForm.provider === 'other'" label="端口">
           <el-input-number v-model="smtpForm.port" :min="1" :max="65535" />
         </el-form-item>
-        <el-form-item label="SSL">
-          <el-switch v-model="smtpForm.secure" />
+
+        <el-form-item v-if="smtpForm.provider" label="邮箱地址">
+          <el-input v-model="smtpForm.user" placeholder="你的邮箱地址，如 zhangsan@qq.com" />
         </el-form-item>
-        <el-form-item label="邮箱地址">
-          <el-input v-model="smtpForm.user" placeholder="your-email@aliyun.com" />
-        </el-form-item>
-        <el-form-item label="授权码">
-          <el-input v-model="smtpForm.pass" type="password" show-password placeholder="SMTP 授权码（非密码）" />
+
+        <el-form-item v-if="smtpForm.provider" label="授权码">
+          <el-input v-model="smtpForm.pass" type="password" show-password placeholder="不是邮箱密码，是 SMTP 授权码" />
+          <template v-if="smtpForm.provider === 'qq'">
+            <div class="smtp-help">
+              💡 如何获取：QQ邮箱 → 设置 → 账户 → POP3/SMTP 服务 → 开启 → 生成授权码
+            </div>
+          </template>
+          <template v-else-if="smtpForm.provider === '163'">
+            <div class="smtp-help">
+              💡 如何获取：163邮箱 → 设置 → POP3/SMTP/IMAP → 开启 SMTP → 新增授权码
+            </div>
+          </template>
+          <template v-else-if="smtpForm.provider === 'aliyun'">
+            <div class="smtp-help">
+              💡 如何获取：阿里邮箱 → 设置 → 账户安全 → 生成三方客户端密码
+            </div>
+          </template>
+          <template v-else-if="smtpForm.provider === 'other'">
+            <div class="smtp-help">
+              💡 授权码通常在邮箱设置的「客户端专用密码」或「SMTP 授权码」中生成
+            </div>
+          </template>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showSmtpDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveSmtp">保存</el-button>
+        <el-button type="primary" @click="saveSmtp" :disabled="!smtpForm.user || !smtpForm.pass">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -146,12 +204,28 @@ const showSmtpDialog = ref(false);
 const sendProgress = ref(0);
 
 const smtpForm = reactive({
+  provider: "",
   host: "smtp.aliyun.com",
   port: 465,
   secure: true,
   user: "",
   pass: "",
 });
+
+const PROVIDER_CONFIG = {
+  qq:    { host: "smtp.qq.com",       port: 465, secure: true },
+  163:   { host: "smtp.163.com",      port: 465, secure: true },
+  aliyun:{ host: "smtp.aliyun.com",   port: 465, secure: true },
+};
+
+function onProviderChange(provider) {
+  const config = PROVIDER_CONFIG[provider];
+  if (config) {
+    smtpForm.host = config.host;
+    smtpForm.port = config.port;
+    smtpForm.secure = config.secure;
+  }
+}
 
 const selectedCount = computed(() => {
   if (!matchResult.value) return 0;
@@ -164,9 +238,18 @@ onMounted(async () => {
   try { rules.value = await api.getSendRules(); } catch {}
   try { history.value = await api.getSendHistory(); } catch {}
   try {
+    // 加载 SMTP 配置
+  try {
     const config = await api.getSmtpConfig();
     if (config) {
       Object.assign(smtpForm, config);
+      if (config.host) {
+        // 反推 provider
+        for (const [key, cfg] of Object.entries(PROVIDER_CONFIG)) {
+          if (cfg.host === config.host) { smtpForm.provider = key; break; }
+        }
+        if (!smtpForm.provider) smtpForm.provider = "other";
+      }
       smtpConfigured.value = true;
     }
   } catch {}
@@ -192,6 +275,61 @@ async function pickRuleFile() {
 async function pickFolder() {
   const folder = await api.selectSendFolder();
   if (folder) folderPath.value = folder;
+}
+
+function downloadTemplate() {
+  // 用 ExcelJS 在内存生成一个空白规则表并下载
+  import("exceljs").then(async ({ default: ExcelJS }) => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("发送规则");
+
+    // 表头
+    ws.columns = [
+      { header: "文件名(原)", key: "originalName", width: 18 },
+      { header: "文件名(映射)", key: "mappedName", width: 22 },
+      { header: "分发方式", key: "channels", width: 14 },
+      { header: "微信群名", key: "wechatGroup", width: 18 },
+      { header: "邮件主题", key: "emailSubject", width: 22 },
+      { header: "收件人", key: "emailTo", width: 26 },
+      { header: "抄送人", key: "emailCc", width: 26 },
+    ];
+
+    // 表头样式
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true, color: { argb: "FF0891B2" } };
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F9FA" } };
+    headerRow.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    headerRow.height = 28;
+    headerRow.eachCell((cell) => (cell.border = {
+      top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" }
+    }));
+
+    // 示例行
+    ws.addRow(["月报.xlsx", "{{date}}经营月报", "微信,邮件", "管理群", "{{date}} {{fileName}}", "boss@qq.com", "cto@qq.com,hr@qq.com"]);
+    ws.addRow(["日报.xlsx", "日报", "微信", "部门群", "", "", ""]);
+    ws.addRow(["周报.xlsx", "{{date}}周报", "邮件", "", "{{date}} 周报", "sales@163.com", ""]);
+
+    // 示例行样式
+    for (let r = 2; r <= 4; r++) {
+      const row = ws.getRow(r);
+      row.alignment = { vertical: "middle" };
+      row.eachCell((cell) => (cell.border = {
+        top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" }
+      }));
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "发送规则模板.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog("success", "空白规则模板已下载");
+  }).catch(() => {
+    addLog("error", "下载模板失败");
+  });
 }
 
 async function refreshMatch() {
@@ -325,4 +463,67 @@ function formatDate(iso) {
 .log-error { color: var(--danger); }
 .log-warn { color: var(--warning); }
 .log-info { color: var(--text-secondary); }
+
+/* ── SMTP 帮助 ── */
+.smtp-help {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ── 规则模板帮助 ── */
+.rule-template-help {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+}
+
+.rule-template-help p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.rule-template-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.rule-template-table th, .rule-template-table td {
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.rule-template-table th {
+  background: var(--bg-canvas);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.rule-template-table .example-row td {
+  background: rgba(8, 145, 178, 0.04);
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.rule-template-tips {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.rule-template-tips code {
+  background: var(--bg-canvas);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
 </style>
