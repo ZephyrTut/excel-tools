@@ -6,7 +6,7 @@
         <div class="app-brand">
           <span class="brand-icon">▣</span>
           <span class="brand-name">Excel Tools</span>
-          <span class="brand-version">v0.3</span>
+          <span class="brand-version">v{{ version }}</span>
         </div>
         <nav class="app-nav">
           <button
@@ -87,6 +87,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { version } from "../package.json";
 import { Refresh, Warning, Download, SuccessFilled, CircleClose } from "@element-plus/icons-vue";
 import HomeView from "./views/HomeView.vue";
 import SplitView from "./views/SplitView.vue";

@@ -13,7 +13,7 @@
         </el-form-item>
         <el-form-item label="规则模板">
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-            <el-button size="small" @click="pickRuleFile">📥 导入规则表</el-button>
+            <el-button size="small" @click="pickRuleFile">📥 导入规则表{{ rules.length > 0 ? ' ✓' : '' }}</el-button>
             <el-button size="small" text type="primary" @click="downloadTemplate">
               📋 下载空白模板
             </el-button>
@@ -35,12 +35,6 @@
           <el-text v-if="clipboardFiles.length > 0" size="small" type="info" style="margin-top: 6px">
             已粘贴到剪贴板，可直接 Ctrl+V 粘贴到 Excel A 列
           </el-text>
-        </el-form-item>
-        <el-form-item label="发送顺序">
-          <el-radio-group v-model="wechatFirst">
-            <el-radio :value="true">先微信后邮件</el-radio>
-            <el-radio :value="false">先邮件后微信</el-radio>
-          </el-radio-group>
         </el-form-item>
       </el-form>
     </el-card>
@@ -141,13 +135,6 @@
       <div v-for="(log, idx) in logs" :key="idx" class="log-line" :class="'log-' + log.level">
         {{ logText(log) }}
       </div>
-      <!-- 失败项 -->
-      <div v-if="failedItems.length > 0" class="failure-section">
-        <div class="failure-title">❌ 失败项 ({{ failedItems.length }})</div>
-        <div v-for="(item, idx) in failedItems" :key="idx" class="failure-item">
-          {{ idx + 1 }}. {{ item.originalName }} → {{ item.channel === 'wechat' ? '📱' : '📧' }} {{ item.target }} — {{ item.error }}
-        </div>
-      </div>
     </el-card>
 
     <!-- SMTP 配置弹窗 -->
@@ -211,6 +198,28 @@
       </template>
     </el-dialog>
 
+    <!-- 发送结果弹窗 -->
+    <el-dialog v-model="showResultDialog" title="📊 发送结果" width="480px" :close-on-click-modal="false">
+      <div class="result-summary" :class="resultFailCount > 0 ? 'result-summary--warn' : 'result-summary--ok'">
+        <span class="result-summary-icon">{{ resultFailCount > 0 ? '⚠️' : '✅' }}</span>
+        <span>成功 <b>{{ resultSuccessCount }}</b> 项</span>
+        <span v-if="resultFailCount > 0" style="margin-left: 12px">失败 <b style="color: var(--danger)">{{ resultFailCount }}</b> 项</span>
+      </div>
+      <div class="result-list" v-if="sendResults.length > 0">
+        <div v-for="(r, idx) in sendResults" :key="idx" class="result-item" :class="'result-item--' + (r.success ? 'ok' : 'fail')">
+          <span class="result-icon">{{ r.success ? '✓' : '✗' }}</span>
+          <span class="result-channel">{{ r.channel === 'wechat' ? '📱' : '📧' }}</span>
+          <span class="result-target">{{ r.target }}</span>
+          <span class="result-arrow">→</span>
+          <span class="result-file">{{ r.originalName }}</span>
+          <span v-if="!r.success && r.error" class="result-error">{{ r.error }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="showResultDialog = false">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 规则说明弹窗 -->
     <el-dialog v-model="showRuleHelp" title="📋 规则表使用说明" width="600px">
       <p>规则表是一份 <b>Excel 文件</b>，每一行描述"哪个文件发给谁"。表头如下：</p>
@@ -253,7 +262,6 @@ function getApi() {
 const rules = ref([]);
 const folderPath = ref("");
 const matchResult = ref(null);
-const wechatFirst = ref(true);
 const sending = ref(false);
 const logs = ref([]);
 const sendResults = ref([]);
@@ -261,6 +269,7 @@ const history = ref([]);
 const smtpConfigured = ref(false);
 const showSmtpDialog = ref(false);
 const showRuleHelp = ref(false);
+const showResultDialog = ref(false);
 const clipboardFiles = ref([]);
 const folderDropActive = ref(false);
 const sendProgress = ref(0);
@@ -295,6 +304,8 @@ const selectedCount = computed(() => {
 });
 
 const failedItems = computed(() => sendResults.value.filter((r) => !r.success));
+const resultSuccessCount = computed(() => sendResults.value.filter((r) => r.success).length);
+const resultFailCount = computed(() => failedItems.value.length);
 
 // ── 初始化 ──
 onMounted(async () => {
@@ -477,7 +488,7 @@ async function startSend() {
 
   try {
     const result = await getApi().sendItems(
-      createSendPayload(selected, wechatFirst.value)
+      createSendPayload(selected, true)
     );
     sending.value = false;
     sendResults.value = result.results || [];
@@ -499,6 +510,8 @@ async function startSend() {
     } else {
       addLog("success", `全部发送成功 (${result.successCount} 项)`);
     }
+
+    showResultDialog.value = true;
 
     history.value = await getApi().getSendHistory();
   } catch (e) {
@@ -676,25 +689,83 @@ function formatDate(iso) {
 .log-warn { color: var(--warning); }
 .log-info { color: var(--text-secondary); }
 
-.failure-section {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+/* ── 发送结果弹窗 ── */
+.result-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 0;
+  font-size: 15px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
 }
-
-.failure-title {
-  font-weight: 600;
-  color: var(--danger);
-  margin-bottom: 6px;
-  font-size: 14px;
+.result-summary--ok {
+  background: rgba(16,185,129,0.08);
+  color: var(--success);
 }
-
-.failure-item {
+.result-summary--warn {
+  background: rgba(245,158,11,0.08);
+  color: var(--warning);
+}
+.result-summary-icon {
+  font-size: 18px;
+  margin-right: 4px;
+}
+.result-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
+  line-height: 1.4;
+}
+.result-item--ok {
+  background: rgba(16,185,129,0.05);
+}
+.result-item--fail {
+  background: rgba(239,68,68,0.05);
+}
+.result-icon {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  width: 16px;
+  text-align: center;
+}
+.result-item--ok .result-icon { color: var(--success); }
+.result-item--fail .result-icon { color: var(--danger); }
+.result-channel { flex-shrink: 0; }
+.result-target {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.result-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.result-file {
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-error {
   color: var(--danger);
-  padding: 2px 0;
-  padding-left: 8px;
-  line-height: 1.6;
+  font-size: 12px;
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 }
 
 /* ── SMTP 帮助 ── */

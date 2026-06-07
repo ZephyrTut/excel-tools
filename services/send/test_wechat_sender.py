@@ -26,6 +26,9 @@ class FakeControl:
     def Exists(self, maxSearchSeconds=None):
         return True
 
+    def Click(self):
+        pass
+
     def SetActive(self):
         self.active = True
 
@@ -45,9 +48,9 @@ class FakeExistsControl:
 
 
 class FakeAutoModule:
-    def __init__(self, wechat, no_result_exists=False, wechat_exists=True):
+    def __init__(self, wechat, group_chat_exists=True, wechat_exists=True):
         self._wechat = wechat
-        self._no_result_exists = no_result_exists
+        self._group_chat_exists = group_chat_exists
         self._wechat_exists = wechat_exists
 
     def WindowControl(self, **_kwargs):
@@ -55,8 +58,14 @@ class FakeAutoModule:
             return self._wechat
         return FakeExistsControl(False)
 
-    def TextControl(self, **_kwargs):
-        return FakeExistsControl(self._no_result_exists)
+    def EditControl(self, **_kwargs):
+        return FakeControl("", "EditControl")
+
+    def TextControl(self, **kwargs):
+        subname = kwargs.get("SubName", "")
+        if subname == "群聊":
+            return FakeExistsControl(self._group_chat_exists)
+        return FakeExistsControl(False)
 
 
 class WechatSenderTests(unittest.TestCase):
@@ -78,7 +87,7 @@ class WechatSenderTests(unittest.TestCase):
 
     def test_fails_when_group_not_found(self):
         root = FakeControl("微信", "WindowControl")
-        fake_auto = FakeAutoModule(root, no_result_exists=True)
+        fake_auto = FakeAutoModule(root, group_chat_exists=False)
 
         with tempfile.NamedTemporaryFile(suffix=".xlsx") as handle:
             with mock.patch.object(wechat_sender, "auto", fake_auto), \

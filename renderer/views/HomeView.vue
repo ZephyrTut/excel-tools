@@ -8,7 +8,7 @@
         基于 Electron + ExcelJS 的高性能 Excel 自动化平台
       </p>
       <div class="hero-meta">
-        <span class="hero-badge">v0.3</span>
+        <span class="hero-badge">v{{ version }}</span>
         <span class="hero-badge">Electron 31</span>
         <span class="hero-badge">ExcelJS 4</span>
       </div>
@@ -60,6 +60,21 @@
           </el-button>
         </div>
       </article>
+
+      <article class="feature-card">
+        <div class="feature-icon" style="background: rgba(139,92,246,0.1); color: #8b5cf6">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+        </div>
+        <h3 class="feature-title">发送工具</h3>
+        <p class="feature-desc">按规则表将文件通过微信或邮件自动分发，支持混搭通道、文件夹扫描、变量替换。</p>
+        <div class="feature-actions">
+          <el-button type="primary" size="small" round @click="emit('navigate', 'send')">
+            开始发送 →
+          </el-button>
+        </div>
+      </article>
     </section>
 
     <!-- 快速统计 -->
@@ -67,7 +82,7 @@
       <el-card shadow="never" class="panel-card">
         <div class="stats-grid">
           <div class="stat-item">
-            <span class="stat-num">3</span>
+            <span class="stat-num">4</span>
             <span class="stat-desc">核心功能</span>
           </div>
           <div class="stat-divider"></div>
@@ -143,7 +158,7 @@
 /* ---- 功能卡片 ---- */
 .features-section {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -226,7 +241,12 @@
 }
 
 /* ---- 响应式 ---- */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
+  .features-section {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 560px) {
   .features-section {
     grid-template-columns: 1fr;
   }
@@ -237,5 +257,7 @@
 </style>
 
 <script setup>
+import { version } from "../../package.json";
+
 const emit = defineEmits(['navigate']);
 </script>

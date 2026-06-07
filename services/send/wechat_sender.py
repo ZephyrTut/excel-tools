@@ -127,21 +127,32 @@ def send_file_to_group(group_name: str, file_path: str) -> dict:
     wechat.SendKeys(group_name)
     time.sleep(1.5)
 
-    no_result = auto.TextControl(searchDepth=5, SubName="未找到")
-    if no_result.Exists(maxSearchSeconds=1):
+    group_chat = auto.TextControl(searchDepth=10, SubName="群聊")
+    if not group_chat.Exists(maxSearchSeconds=1):
         return {"success": False, "error": f"未找到微信群「{group_name}」"}
 
     wechat.SendKeys("{Enter}")
-    time.sleep(0.5)
+    time.sleep(0.8)
+
+    edit = auto.EditControl(searchDepth=3)
+    if edit.Exists(maxSearchSeconds=1):
+        edit.Click()
+        time.sleep(0.3)
 
     if not copy_file_to_clipboard(abs_path):
         return {"success": False, "error": "无法将文件复制到剪贴板"}
 
-    time.sleep(0.2)
+    time.sleep(0.8)
     wechat.SendKeys("{Ctrl}v")
-    time.sleep(1.0)
+    time.sleep(1.5)
     wechat.SendKeys("{Enter}")
-    time.sleep(0.5)
+    time.sleep(0.8)
+
+    try:
+        wechat.GetWindowPattern().SetWindowVisualState(2)
+    except Exception:
+        pass
+
     return {"success": True, "group": group_name, "file": abs_path}
 
 
