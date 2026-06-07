@@ -15,30 +15,26 @@
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
             <el-button size="small" @click="pickRuleFile">📥 导入规则表</el-button>
             <el-button size="small" text type="primary" @click="downloadTemplate">
-              📋 下载空白规则表
+              📋 下载空白模板
+            </el-button>
+            <el-button size="small" text @click="showRuleHelp = true" class="help-icon-btn" title="规则表使用说明">
+              ❓
             </el-button>
           </div>
           <el-text v-if="rules.length > 0" size="small" style="margin-top: 6px">
             已导入 <b>{{ rules.length }}</b> 条规则
           </el-text>
-          <template v-if="rules.length === 0">
-            <div class="rule-template-help">
-              <p>规则表是一份 Excel 文件，每一行描述"哪个文件发给谁"：</p>
-              <table class="rule-template-table">
-                <thead><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th></tr></thead>
-                <tbody>
-                  <tr><td>文件名(原)</td><td>文件名(映射)</td><td>分发方式</td><td>微信群名</td><td>邮件主题</td><td>收件人</td><td>抄送人</td></tr>
-                  <tr class="example-row"><td>月报.xlsx</td><td>{{date}}经营月报</td><td>微信,邮件</td><td>管理群</td><td>{{date}} 月报</td><td>boss@qq.com</td><td>cto@qq.com</td></tr>
-                </tbody>
-              </table>
-              <ul class="rule-template-tips">
-                <li>📱 <b>分发方式</b>填<code>微信</code>、<code>邮件</code> 或 <code>微信,邮件</code></li>
-                <li>📝 <code>{{date}}</code> 自动替换为当天日期，<code>{{fileName}}</code> 替换为文件名</li>
-                <li>👥 <b>收件人</b>和<b>抄送人</b>有多个时用<code>英文逗号</code>分隔</li>
-                <li>✅ 只发微信就留空邮件列，只发邮件就留空微信群列</li>
-              </ul>
-            </div>
-          </template>
+        </el-form-item>
+        <el-form-item label="辅助工具">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+            <el-button size="small" @click="pickFolderForCopy">📁 选取文件夹</el-button>
+            <el-button v-if="clipboardFiles.length > 0" size="small" text type="success" @click="copyFileNames">
+              📋 一键复制 {{ clipboardFiles.length }} 个文件名
+            </el-button>
+          </div>
+          <el-text v-if="clipboardFiles.length > 0" size="small" type="info" style="margin-top: 6px">
+            已粘贴到剪贴板，可直接 Ctrl+V 粘贴到 Excel A 列
+          </el-text>
         </el-form-item>
         <el-form-item label="发送顺序">
           <el-radio-group v-model="wechatFirst">
@@ -111,6 +107,9 @@
         >
           {{ t.type === 'wechat' ? '📱' : '📧' }} {{ t.name }}
         </el-tag>
+        <el-button text size="small" type="primary" style="margin-left: 8px" @click="reuseHistory(entry)">
+          🔄 复用
+        </el-button>
       </div>
     </el-card>
 
@@ -158,7 +157,7 @@
           <el-input v-model="smtpForm.pass" type="password" show-password placeholder="不是邮箱密码，是 SMTP 授权码" />
           <template v-if="smtpForm.provider === 'qq'">
             <div class="smtp-help">
-              💡 如何获取：QQ邮箱 → 设置 → 账户 → POP3/SMTP 服务 → 开启 → 生成授权码
+              💡 如何获取：QQ邮箱 → 设置 → 账号与安全 → 安全设置 → POP3/SMTP 服务 → 开启 → 生成授权码
             </div>
           </template>
           <template v-else-if="smtpForm.provider === '163'">
@@ -183,6 +182,28 @@
         <el-button type="primary" @click="saveSmtp" :disabled="!smtpForm.user || !smtpForm.pass">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 规则说明弹窗 -->
+    <el-dialog v-model="showRuleHelp" title="📋 规则表使用说明" width="600px">
+      <p>规则表是一份 <b>Excel 文件</b>，每一行描述"哪个文件发给谁"。表头如下：</p>
+      <table class="rule-template-table" style="width: 100%; margin: 12px 0">
+        <thead><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th></tr></thead>
+        <tbody>
+          <tr><td><b>文件名(原)</b></td><td><b>文件名(映射)</b></td><td><b>分发方式</b></td><td><b>微信群名</b></td><td><b>邮件主题</b></td><td><b>收件人</b></td><td><b>抄送人</b></td></tr>
+          <tr class="example-row"><td>月报.xlsx</td><td><code>{{date}}经营月报</code></td><td>微信,邮件</td><td>管理群</td><td><code>{{date}} 月报</code></td><td>boss@qq.com</td><td>cto@qq.com</td></tr>
+        </tbody>
+      </table>
+      <ul class="rule-template-tips" style="padding-left: 16px">
+        <li>📱 <b>分发方式</b> 填 <code>微信</code>、<code>邮件</code> 或 <code>微信,邮件</code></li>
+        <li>📝 <code>{{date}}</code> → 当天日期（如 2026-06-07），<code>{{fileName}}</code> → 原始文件名</li>
+        <li>👥 <b>收件人</b>和<b>抄送人</b>有多个时用 <b>英文逗号</b> 分隔</li>
+        <li>✅ 只发微信 → 留空邮件列；只发邮件 → 留空微信群列</li>
+        <li>📋 用<b>辅助工具</b>拖入文件夹 → 一键复制文件名 → 粘贴到 Excel A 列</li>
+      </ul>
+      <template #footer>
+        <el-button type="primary" @click="showRuleHelp = false">知道了</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -201,6 +222,8 @@ const logs = ref([]);
 const history = ref([]);
 const smtpConfigured = ref(false);
 const showSmtpDialog = ref(false);
+const showRuleHelp = ref(false);
+const clipboardFiles = ref([]);
 const sendProgress = ref(0);
 
 const smtpForm = reactive({
@@ -371,6 +394,42 @@ async function saveSmtp() {
   addLog("success", "SMTP 配置已保存");
 }
 
+async function pickFolderForCopy() {
+  const folder = await api.selectSendFolder();
+  if (!folder) return;
+  // 通过 API 获取文件夹下的文件列表
+  try {
+    const result = await api.matchSendFiles(folder);
+    if (result.error) {
+      addLog("warn", result.error);
+      return;
+    }
+    const names = result.matched.map((m) => m.originalName).concat(result.unmatched);
+    clipboardFiles.value = names.filter(Boolean);
+    if (clipboardFiles.value.length > 0) {
+      const text = clipboardFiles.value.join("\n");
+      await navigator.clipboard.writeText(text);
+      addLog("success", `已复制 ${clipboardFiles.value.length} 个文件名到剪贴板`);
+    } else {
+      addLog("warn", "未找到 Excel 文件");
+    }
+  } catch (e) {
+    addLog("error", `读取文件夹失败: ${e.message}`);
+  }
+}
+
+function copyFileNames() {
+  if (clipboardFiles.value.length === 0) return;
+  const text = clipboardFiles.value.join("\n");
+  navigator.clipboard.writeText(text);
+  addLog("success", `已复制 ${clipboardFiles.value.length} 个文件名`);
+}
+
+function reuseHistory(entry) {
+  addLog("info", `已加载历史记录: ${entry.files.join(", ")}`);
+  // TODO: 后续可以自动填入上次的收件人等信息
+}
+
 function addLog(level, message) {
   logs.value.push({ level, message, time: new Date().toLocaleTimeString() });
 }
@@ -470,7 +529,24 @@ function formatDate(iso) {
   line-height: 1.5;
 }
 
-/* ── 规则模板帮助 ── */
+/* ── 帮助图标按钮 ── */
+.help-icon-btn {
+  font-size: 15px;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.help-icon-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
 .rule-template-help {
   margin-top: 8px;
   padding: 12px;
