@@ -156,12 +156,13 @@ async function executeSend({
       type: "progress",
       current: i + 1,
       total,
-      currentFile: item.originalName,
-      channel: item.channel,
-      target:
+      currentFile: String(item.originalName || ""),
+      channel: String(item.channel || ""),
+      target: String(
         item.channel === "wechat"
-          ? item.rule.wechatGroup
-          : item.rule.emailTo.join(", "),
+          ? (item.rule && item.rule.wechatGroup) || ""
+          : (item.rule && item.rule.emailTo || []).join(", ")
+      ),
       status: "sending",
     };
 
@@ -249,7 +250,11 @@ async function executeSend({
   await saveHistoryEntry(userDataPath, historyEntry);
 
   if (onProgress) {
-    onProgress({ type: "done", successCount, failCount, results });
+    onProgress({
+      type: "done",
+      successCount,
+      failCount,
+    });
   }
 
   return { results, historyEntry, successCount, failCount };

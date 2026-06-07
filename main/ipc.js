@@ -651,7 +651,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle("send:send", async (_, payload) => {
     const { matched, wechatFirst } = payload || {};
-    return sendService.executeSend({
+    const result = await sendService.executeSend({
       matched,
       wechatFirst,
       userDataPath: app.getPath("userData"),
@@ -659,6 +659,12 @@ function registerIpcHandlers() {
         broadcast({ ...event, taskId: "send" });
       },
     });
+    // 返回纯数据，去除 rule 引用等不可序列化对象
+    return {
+      results: result.results,
+      successCount: result.successCount,
+      failCount: result.failCount,
+    };
   });
 
   ipcMain.handle("send:get-history", async () => {
