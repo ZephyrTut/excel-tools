@@ -48,12 +48,21 @@
     <!-- 文件选择 + 匹配预览 -->
     <el-card class="panel-card">
       <template #header><span>📂 选择文件</span></template>
-      <div class="drop-zone" style="margin-bottom: 12px">
-        <el-input v-model="folderPath" placeholder="选择待发送文件所在文件夹">
+      <div
+        class="drop-zone"
+        :class="{ 'drop-zone--active': folderDropActive }"
+        @dragover.prevent="folderDropActive = true"
+        @dragenter.prevent="folderDropActive = true"
+        @dragleave="folderDropActive = false"
+        @drop.prevent="onFolderDrop"
+        style="margin-bottom: 12px"
+      >
+        <el-input v-model="folderPath" placeholder="拖拽文件夹到此处，或点击浏览选择">
           <template #append>
             <el-button @click="pickFolder">浏览</el-button>
           </template>
         </el-input>
+        <div v-if="folderDropActive" class="drop-hint">📁 释放以选择此文件夹</div>
       </div>
 
       <el-button size="small" type="primary" @click="refreshMatch" :disabled="!folderPath || rules.length === 0">
@@ -224,6 +233,7 @@ const smtpConfigured = ref(false);
 const showSmtpDialog = ref(false);
 const showRuleHelp = ref(false);
 const clipboardFiles = ref([]);
+const folderDropActive = ref(false);
 const sendProgress = ref(0);
 
 const smtpForm = reactive({
@@ -295,7 +305,58 @@ async function pickRuleFile() {
 
 async function pickFolder() {
   const folder = await api.selectSendFolder();
-  if (folder) folderPath.value = folder;
+  if (folder) {
+    folderPath.value = folder;
+    if (rules.value.length > 0) refreshMatch();
+  }
+}
+
+function onFolderDrop(event) {
+  folderDropActive.value = false;
+  const items = event.dataTransfer.items;
+  if (!items) return;
+
+  let found = null;
+  // 遍历所有拖入项，找到第一个文件夹路径
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.kind === "file" && item.type === "") {
+      // 尝试通过 webkitGetAsEntry 获取文件夹
+      if (item.webkitGetAsEntry) {
+        const entry = item.webkitGetAsEntry();
+        if (entry && entry.isDirectory) {
+          found = entry;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!found) return;
+
+  // Electron 中 webkitGetAsEntry 可获得文件夹的 filesystem: URL
+  // 解析出实际路径
+  const fullPath = itemPathFromEntry(found);
+
+  // 备选：从 dataTransfer.files 获取路径（Electron 特有 API）
+  const file = event.dataTransfer.files[0];
+  if (file && file.path) {
+    // Electron 在 file 对象上提供 .path 属性
+    folderPath.value = file.path;
+    if (rules.value.length > 0) refreshMatch();
+    return;
+  }
+
+  if (fullPath) {
+    folderPath.value = fullPath;
+    if (rules.value.length > 0) refreshMatch();
+  }
+}
+
+function itemPathFromEntry(entry) {
+  // Electron 的 webkitGetAsEntry 通常在 file.path 上暴露路径
+  // 如果没有，回退到空
+  return null;
 }
 
 function downloadTemplate() {
@@ -545,6 +606,23 @@ function formatDate(iso) {
 .help-icon-btn:hover {
   color: var(--primary);
   border-color: var(--primary);
+}
+
+/* ── 拖拽提示 ── */
+.drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 145, 178, 0.08);
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 10;
+  pointer-events: none;
 }
 .rule-template-help {
   margin-top: 8px;

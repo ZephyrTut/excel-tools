@@ -656,15 +656,14 @@ function registerIpcHandlers() {
       wechatFirst,
       userDataPath: app.getPath("userData"),
       onProgress: (event) => {
-        broadcast({ ...event, taskId: "send" });
+        broadcast(deepCloneable({ ...event, taskId: "send" }));
       },
     });
-    // 返回纯数据，去除 rule 引用等不可序列化对象
-    return {
+    return deepCloneable({
       results: result.results,
       successCount: result.successCount,
       failCount: result.failCount,
-    };
+    });
   });
 
   ipcMain.handle("send:get-history", async () => {
