@@ -103,7 +103,12 @@
 
     <!-- 发送历史 -->
     <el-card class="panel-card" v-if="history.length > 0">
-      <template #header><span>📜 发送历史</span></template>
+      <template #header>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span>📜 发送历史</span>
+          <el-button text size="small" type="danger" @click="clearHistory">清空</el-button>
+        </div>
+      </template>
       <div v-for="(entry, idx) in history.slice(0, 5)" :key="idx" class="history-item">
         <span class="history-date">{{ formatDate(entry.date) }}</span>
         <span class="history-files">{{ entry.files.join(', ') }}</span>
@@ -124,10 +129,24 @@
 
     <!-- 发送日志 -->
     <el-card class="panel-card" v-if="logs.length > 0">
-      <template #header><span>📊 发送日志</span></template>
+      <template #header>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span>📊 发送日志</span>
+          <el-button v-if="sendResults.length > 0" text size="small" type="primary" @click="exportResults">
+            📥 导出
+          </el-button>
+        </div>
+      </template>
       <el-progress v-if="sending" :percentage="sendProgress" :stroke-width="14" style="margin-bottom: 8px" />
       <div v-for="(log, idx) in logs" :key="idx" class="log-line" :class="'log-' + log.level">
         {{ logText(log) }}
+      </div>
+      <!-- 失败项 -->
+      <div v-if="failedItems.length > 0" class="failure-section">
+        <div class="failure-title">❌ 失败项 ({{ failedItems.length }})</div>
+        <div v-for="(item, idx) in failedItems" :key="idx" class="failure-item">
+          {{ idx + 1 }}. {{ item.originalName }} → {{ item.channel === 'wechat' ? '📱' : '📧' }} {{ item.target }} — {{ item.error }}
+        </div>
       </div>
     </el-card>
 
@@ -218,8 +237,17 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
+import { createSendPayload } from "../utils/sendPayload.mjs";
 
-const api = window.excelTools;
+function getApi() {
+  const api = window.excelTools;
+  if (!api) {
+    throw new Error(
+      "桌面桥接未就绪：window.excelTools 不存在。请重启 Electron 窗口后重试。"
+    );
+  }
+  return api;
+}
 
 // ── 状态 ──
 const rules = ref([]);
@@ -228,6 +256,7 @@ const matchResult = ref(null);
 const wechatFirst = ref(true);
 const sending = ref(false);
 const logs = ref([]);
+const sendResults = ref([]);
 const history = ref([]);
 const smtpConfigured = ref(false);
 const showSmtpDialog = ref(false);
@@ -265,9 +294,17 @@ const selectedCount = computed(() => {
   return matchResult.value.matched.filter((m) => m.selected !== false).length;
 });
 
+const failedItems = computed(() => sendResults.value.filter((r) => !r.success));
+
 // ── 初始化 ──
 onMounted(async () => {
-  if (!api) return;
+  let api;
+  try {
+    api = getApi();
+  } catch (error) {
+    addLog("error", error.message);
+    return;
+  }
   try { rules.value = await api.getSendRules(); } catch {}
   try { history.value = await api.getSendHistory(); } catch {}
   try {
@@ -288,10 +325,10 @@ onMounted(async () => {
 
 // ── 方法 ──
 async function pickRuleFile() {
-  const file = await api.selectTemplateFile();
+  const file = await getApi().selectTemplateFile();
   if (!file) return;
   try {
-    const result = await api.importSendRules(file.path);
+    const result = await getApi().importSendRules(file.path);
     rules.value = result.rules;
     if (result.warnings.length > 0) {
       addLog("warn", `导入规则时有 ${result.warnings.length} 条警告: ${result.warnings.join("; ")}`);
@@ -304,7 +341,7 @@ async function pickRuleFile() {
 }
 
 async function pickFolder() {
-  const folder = await api.selectSendFolder();
+  const folder = await getApi().selectSendFolder();
   if (folder) {
     folderPath.value = folder;
     if (rules.value.length > 0) refreshMatch();
@@ -417,7 +454,7 @@ function downloadTemplate() {
 async function refreshMatch() {
   if (!folderPath.value) return;
   try {
-    const result = await api.matchSendFiles(folderPath.value);
+    const result = await getApi().matchSendFiles(folderPath.value);
     if (result.matched) {
       result.matched.forEach((m) => (m.selected = true));
     }
@@ -435,13 +472,35 @@ async function startSend() {
 
   sending.value = true;
   logs.value = [];
+  sendResults.value = [];
   sendProgress.value = 0;
 
   try {
-    const result = await api.sendItems({ matched: selected, wechatFirst: wechatFirst.value });
+    const result = await getApi().sendItems(
+      createSendPayload(selected, wechatFirst.value)
+    );
     sending.value = false;
-    history.value = await api.getSendHistory();
-    addLog("info", `发送完成: ${result.successCount} 成功, ${result.failCount} 失败`);
+    sendResults.value = result.results || [];
+
+    // 逐行显示每条发送结果
+    for (const r of result.results || []) {
+      const channelIcon = r.channel === "wechat" ? "📱" : "📧";
+      const successIcon = r.success ? "✓" : "✗";
+      const errorSuffix = r.error ? ` (${r.error})` : "";
+      addLog(
+        r.success ? "success" : "error",
+        `${channelIcon} ${r.target} → ${r.originalName} ${successIcon}${errorSuffix}`
+      );
+    }
+
+    // 汇总
+    if (result.failCount > 0) {
+      addLog("error", `发送完成: ${result.successCount} 成功, ${result.failCount} 失败`);
+    } else {
+      addLog("success", `全部发送成功 (${result.successCount} 项)`);
+    }
+
+    history.value = await getApi().getSendHistory();
   } catch (e) {
     sending.value = false;
     addLog("error", `发送异常: ${e.message}`);
@@ -449,17 +508,17 @@ async function startSend() {
 }
 
 async function saveSmtp() {
-  await api.saveSmtpConfig({ ...smtpForm });
+  await getApi().saveSmtpConfig({ ...smtpForm });
   smtpConfigured.value = true;
   showSmtpDialog.value = false;
   addLog("success", "SMTP 配置已保存");
 }
 
 async function pickFolderForCopy() {
-  const folder = await api.selectSendFolder();
+  const folder = await getApi().selectSendFolder();
   if (!folder) return;
   try {
-    const result = await api.listFolderFiles(folder);
+    const result = await getApi().listFolderFiles(folder);
     if (result.error) {
       addLog("warn", result.error);
       return;
@@ -488,6 +547,41 @@ function copyFileNames() {
 function reuseHistory(entry) {
   addLog("info", `已加载历史记录: ${entry.files.join(", ")}`);
   // TODO: 后续可以自动填入上次的收件人等信息
+}
+
+async function clearHistory() {
+  try {
+    await getApi().clearSendHistory();
+    history.value = [];
+    addLog("info", "发送历史已清空");
+  } catch (e) {
+    addLog("error", `清空历史失败: ${e.message}`);
+  }
+}
+
+async function exportResults() {
+  const results = sendResults.value;
+  if (results.length === 0) return;
+
+  const headers = ["文件名", "渠道", "目标", "状态", "错误信息"];
+  const rows = results.map((r) => [
+    r.originalName,
+    r.channel === "wechat" ? "微信" : "邮件",
+    r.target,
+    r.success ? "成功" : "失败",
+    r.error || "",
+  ]);
+
+  try {
+    const ret = await getApi().exportSendResults({ headers, rows });
+    if (ret.success) {
+      addLog("success", "发送结果已导出为 CSV 文件");
+    } else if (ret.error !== "已取消") {
+      addLog("warn", ret.error || "导出失败");
+    }
+  } catch (e) {
+    addLog("error", `导出失败: ${e.message}`);
+  }
 }
 
 function addLog(level, message) {
@@ -541,6 +635,7 @@ function formatDate(iso) {
   font-size: 13px;
 }
 
+
 .send-warning {
   color: var(--warning);
   font-size: 13px;
@@ -580,6 +675,27 @@ function formatDate(iso) {
 .log-error { color: var(--danger); }
 .log-warn { color: var(--warning); }
 .log-info { color: var(--text-secondary); }
+
+.failure-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.failure-title {
+  font-weight: 600;
+  color: var(--danger);
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.failure-item {
+  font-size: 13px;
+  color: var(--danger);
+  padding: 2px 0;
+  padding-left: 8px;
+  line-height: 1.6;
+}
 
 /* ── SMTP 帮助 ── */
 .smtp-help {

@@ -6,7 +6,28 @@ const fs = require("node:fs/promises");
 const { spawn } = require("node:child_process");
 
 const projectRoot = path.resolve(__dirname, "..");
-const testRoots = ["main", "services"];
+const testRoots = ["main", "services", path.join("renderer", "utils")];
+
+function runCommand(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: projectRoot,
+      stdio: "inherit",
+    });
+
+    child.on("exit", (code, signal) => {
+      if (signal) {
+        process.kill(process.pid, signal);
+        return;
+      }
+      if ((code ?? 1) === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} exited with code ${code ?? 1}`));
+    });
+  });
+}
 
 async function collectTestFiles(rootDir) {
   const discovered = [];
@@ -49,18 +70,16 @@ async function main() {
     process.exit(1);
   }
 
-  const child = spawn(process.execPath, ["--test", ...files], {
-    cwd: projectRoot,
-    stdio: "inherit",
-  });
-
-  child.on("exit", (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exit(code ?? 1);
-  });
+  await runCommand(process.execPath, ["--test", ...files]);
+  await runCommand("python", [
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "services/send",
+    "-p",
+    "test_*.py",
+  ]);
 }
 
 main().catch((error) => {

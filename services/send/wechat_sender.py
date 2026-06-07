@@ -1,34 +1,119 @@
-"""微信 PC 端 uiautomation 发送文件脚本
-
-用法:
-    python wechat_sender.py --group "管理层工作群" --file "D:/reports/月报.xlsx"
-
-返回:
-    stdout 输出 JSON: {"success": true/false, "group": "...", "file": "...", "error": "..."}
-"""
+"""WeChat PC sender script driven by uiautomation."""
 
 import argparse
+import ctypes
+import ctypes.wintypes
 import json
+import os
 import sys
 import time
+
+
+CF_HDROP = 0xF
+GMEM_MOVEABLE = 0x0002
+GMEM_ZEROINIT = 0x0040
+GHND = GMEM_MOVEABLE | GMEM_ZEROINIT
+
+
+class POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+class DROPFILES(ctypes.Structure):
+    _fields_ = [
+        ("pFiles", ctypes.wintypes.DWORD),
+        ("pt", POINT),
+        ("fNC", ctypes.wintypes.BOOL),
+        ("fWide", ctypes.wintypes.BOOL),
+    ]
+
+
+_k32 = ctypes.windll.kernel32
+_k32.GlobalAlloc.argtypes = [ctypes.wintypes.UINT, ctypes.c_size_t]
+_k32.GlobalAlloc.restype = ctypes.wintypes.HGLOBAL
+_k32.GlobalLock.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalLock.restype = ctypes.c_void_p
+_k32.GlobalUnlock.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalUnlock.restype = ctypes.wintypes.BOOL
+_k32.GlobalFree.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalFree.restype = ctypes.wintypes.HGLOBAL
+
+_u32 = ctypes.windll.user32
+_u32.OpenClipboard.argtypes = [ctypes.wintypes.HWND]
+_u32.OpenClipboard.restype = ctypes.wintypes.BOOL
+_u32.EmptyClipboard.argtypes = []
+_u32.EmptyClipboard.restype = ctypes.wintypes.BOOL
+_u32.SetClipboardData.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.HANDLE]
+_u32.SetClipboardData.restype = ctypes.wintypes.HANDLE
+_u32.CloseClipboard.argtypes = []
+_u32.CloseClipboard.restype = ctypes.wintypes.BOOL
+
 
 try:
     import uiautomation as auto
 except ImportError:
-    print(json.dumps({"success": False, "error": "uiautomation 未安装，请运行: pip install uiautomation"}))
-    sys.exit(1)
+    result = {"success": False, "error": "uiautomation 未安装，请运行: pip install uiautomation"}
+    print(json.dumps(result, ensure_ascii=True))
+    sys.exit(0)
+
+
+def copy_file_to_clipboard(file_path: str) -> bool:
+    """Put the file path into the Windows clipboard as CF_HDROP."""
+    abs_path = os.path.abspath(file_path)
+    if not os.path.exists(abs_path):
+        return False
+
+    files_encoded = abs_path.encode("utf-16-le") + b"\0\0"
+    drop_files = DROPFILES()
+    drop_files.pFiles = ctypes.sizeof(DROPFILES)
+    drop_files.fWide = True
+
+    buf_size = ctypes.sizeof(DROPFILES) + len(files_encoded)
+    buffer = ctypes.create_string_buffer(buf_size)
+    ctypes.memmove(buffer, ctypes.byref(drop_files), ctypes.sizeof(DROPFILES))
+    ctypes.memmove(
+        ctypes.byref(buffer, ctypes.sizeof(DROPFILES)),
+        files_encoded,
+        len(files_encoded),
+    )
+
+    h_mem = _k32.GlobalAlloc(GHND, buf_size)
+    if not h_mem:
+        return False
+
+    locked = _k32.GlobalLock(h_mem)
+    if not locked:
+        _k32.GlobalFree(h_mem)
+        return False
+
+    ctypes.memmove(locked, buffer, buf_size)
+    _k32.GlobalUnlock(h_mem)
+
+    if not _u32.OpenClipboard(None):
+        _k32.GlobalFree(h_mem)
+        return False
+
+    try:
+        if not _u32.EmptyClipboard():
+            _k32.GlobalFree(h_mem)
+            return False
+        result = _u32.SetClipboardData(CF_HDROP, h_mem)
+        return bool(result)
+    finally:
+        _u32.CloseClipboard()
 
 
 def send_file_to_group(group_name: str, file_path: str) -> dict:
-    """通过 uiautomation 操作微信 PC 客户端发送文件到指定群聊"""
+    if not os.path.exists(file_path):
+        return {"success": False, "error": f"文件不存在: {file_path}"}
 
-    # 1. 查找微信窗口
+    abs_path = os.path.abspath(file_path)
+
     wechat = auto.WindowControl(searchDepth=1, ClassName="WeChatMainWndForPC")
     if not wechat.Exists(maxSearchSeconds=3):
         wechat = auto.WindowControl(searchDepth=1, Name="微信")
     if not wechat.Exists(maxSearchSeconds=3):
         wechat = auto.WindowControl(searchDepth=1, SubName="微信")
-
     if not wechat.Exists(maxSearchSeconds=5):
         return {"success": False, "error": "未找到微信窗口，请确保微信已登录并打开"}
 
@@ -36,47 +121,28 @@ def send_file_to_group(group_name: str, file_path: str) -> dict:
     wechat.SetFocus()
     time.sleep(0.5)
 
-    # 2. 搜索目标群聊：Ctrl+F -> 输入群名 -> Enter
     wechat.SendKeys("{Ctrl}f")
     time.sleep(0.3)
-
     wechat.SendKeys("{Ctrl}a")
     wechat.SendKeys(group_name)
-    time.sleep(0.5)
+    time.sleep(1.5)
+
+    no_result = auto.TextControl(searchDepth=5, SubName="未找到")
+    if no_result.Exists(maxSearchSeconds=1):
+        return {"success": False, "error": f"未找到微信群「{group_name}」"}
+
     wechat.SendKeys("{Enter}")
     time.sleep(0.5)
 
-    # 3. 发送文件快捷键
-    wechat.SendKeys("{Ctrl}{Alt}f")
-    time.sleep(0.5)
+    if not copy_file_to_clipboard(abs_path):
+        return {"success": False, "error": "无法将文件复制到剪贴板"}
 
-    # 4. 在文件选择对话框中输入文件路径
-    file_dialog = auto.WindowControl(searchDepth=2, ClassName="#32770")
-    if file_dialog.Exists(maxSearchSeconds=3):
-        edit = file_dialog.EditControl(searchDepth=3)
-        if edit.Exists():
-            edit.SendKeys(file_path)
-            time.sleep(0.3)
-            open_btn = file_dialog.ButtonControl(searchDepth=3, Name="打开")
-            if not open_btn.Exists():
-                open_btn = file_dialog.ButtonControl(searchDepth=3, Name="Open")
-            if open_btn.Exists():
-                open_btn.Click()
-                time.sleep(1.0)
-                wechat.SendKeys("{Enter}")
-                time.sleep(0.5)
-                return {"success": True, "group": group_name, "file": file_path}
-            else:
-                return {"success": False, "error": "文件对话框中未找到「打开」按钮"}
-        else:
-            return {"success": False, "error": "文件对话框中未找到文件名输入框"}
-    else:
-        # 备选：直接输入路径发送
-        wechat.SendKeys(file_path)
-        time.sleep(0.3)
-        wechat.SendKeys("{Enter}")
-        time.sleep(1.0)
-        return {"success": True, "group": group_name, "file": file_path}
+    time.sleep(0.2)
+    wechat.SendKeys("{Ctrl}v")
+    time.sleep(1.0)
+    wechat.SendKeys("{Enter}")
+    time.sleep(0.5)
+    return {"success": True, "group": group_name, "file": abs_path}
 
 
 def main():
@@ -86,7 +152,7 @@ def main():
     args = parser.parse_args()
 
     result = send_file_to_group(args.group, args.file)
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(result, ensure_ascii=True))
 
 
 if __name__ == "__main__":

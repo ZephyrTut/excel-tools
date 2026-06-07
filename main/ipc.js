@@ -656,7 +656,13 @@ function registerIpcHandlers() {
       wechatFirst,
       userDataPath: app.getPath("userData"),
       onProgress: (event) => {
-        broadcast(deepCloneable({ ...event, taskId: "send" }));
+        const safeEvent = deepCloneable({ ...event, taskId: "send" });
+        try {
+          if (typeof structuredClone === "function") structuredClone(safeEvent);
+          broadcast(safeEvent);
+        } catch (err) {
+          console.warn("send progress broadcast skipped:", err?.message || err);
+        }
       },
     });
     return deepCloneable({
@@ -668,6 +674,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle("send:get-history", async () => {
     return sendService.loadHistory(app.getPath("userData"));
+  });
+
+  ipcMain.handle("send:clear-history", async () => {
+    await sendService.clearHistory(app.getPath("userData"));
+    return { success: true };
   });
 
   ipcMain.handle("send:get-smtp-config", async () => {
@@ -692,6 +703,32 @@ function registerIpcHandlers() {
       return { files: [], error: e.message };
     }
   });
+
+  ipcMain.handle("send:export-results", async (_, data) => {
+    const result = await dialog.showSaveDialog({
+      title: "导出发送结果",
+      defaultPath: `发送结果_${new Date().toISOString().slice(0, 10)}.csv`,
+      filters: [{ name: "CSV 文件", extensions: ["csv"] }],
+    });
+    if (result.canceled || !result.filePath) return { success: false, error: "已取消" };
+
+    const { headers, rows } = data || {};
+    if (!Array.isArray(headers) || !Array.isArray(rows)) {
+      return { success: false, error: "数据无效" };
+    }
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((r) =>
+        r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(",")
+      ),
+    ].join("\r\n");
+
+    // BOM 让 Excel 正确识别 UTF-8 中文
+    await fs.writeFile(result.filePath, "﻿" + csvContent, "utf-8");
+    return { success: true };
+  });
+
 }
 
 module.exports = {

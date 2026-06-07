@@ -36,4 +36,14 @@ async function saveHistoryEntry(userDataPath, entry) {
   await fs.writeFile(filePath, JSON.stringify(history, null, 2), "utf-8");
 }
 
-module.exports = { loadHistory, saveHistoryEntry };
+/**
+ * 清空全部发送历史
+ * @param {string} userDataPath
+ * @returns {Promise<void>}
+ */
+async function clearHistory(userDataPath) {
+  const filePath = path.join(userDataPath, HISTORY_FILE);
+  await fs.writeFile(filePath, JSON.stringify([], null, 2), "utf-8");
+}
+
+module.exports = { loadHistory, saveHistoryEntry, clearHistory };

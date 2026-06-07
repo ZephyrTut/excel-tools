@@ -6,7 +6,7 @@ const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
 const { sendToWechatGroup } = require("./wechatController");
-const { loadHistory, saveHistoryEntry } = require("./sendHistory");
+const { loadHistory, saveHistoryEntry, clearHistory } = require("./sendHistory");
 
 /**
  * 导入规则 Excel 并保存为 JSON
@@ -268,4 +268,5 @@ module.exports = {
   saveSmtpConfig,
   executeSend,
   loadHistory,
+  clearHistory,
 };

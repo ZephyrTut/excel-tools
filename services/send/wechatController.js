@@ -24,7 +24,17 @@ async function sendToWechatGroup(groupName, filePath) {
     const result = JSON.parse(stdout.trim());
     return result;
   } catch (err) {
-    return { success: false, error: err.message || "Python 脚本执行失败" };
+    // 尝试从 stdout 提取 JSON 错误信息（Python 脚本可能输出了友好错误后正常退出）
+    let errorMsg = err.message || "Python 脚本执行失败";
+    if (err.stdout) {
+      try {
+        const parsed = JSON.parse(err.stdout.trim());
+        if (parsed && parsed.error) {
+          errorMsg = parsed.error;
+        }
+      } catch { /* ignore parse failure */ }
+    }
+    return { success: false, error: errorMsg };
   }
 }
 

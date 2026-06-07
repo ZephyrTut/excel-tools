@@ -5,6 +5,48 @@ function sanitizeForIpc(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeSendRule(rule) {
+  if (!rule) return null;
+  const safeRule = sanitizeForIpc(rule) || {};
+  return {
+    originalName: safeRule.originalName || "",
+    mappedName: safeRule.mappedName || "",
+    channels: Array.isArray(safeRule.channels)
+      ? safeRule.channels.map((item) => String(item))
+      : [],
+    wechatGroup: safeRule.wechatGroup || null,
+    emailSubject: safeRule.emailSubject || null,
+    emailTo: Array.isArray(safeRule.emailTo)
+      ? safeRule.emailTo.map((item) => String(item))
+      : [],
+    emailCc: Array.isArray(safeRule.emailCc)
+      ? safeRule.emailCc.map((item) => String(item))
+      : [],
+  };
+}
+
+function normalizeSendPayload(payload) {
+  const safePayload = sanitizeForIpc(payload) || {};
+  const matched = Array.isArray(safePayload.matched) ? safePayload.matched : [];
+
+  return {
+    matched: matched.map((item) => {
+      const safeItem = sanitizeForIpc(item) || {};
+      return {
+        originalName: safeItem.originalName || "",
+        mappedName: safeItem.mappedName || "",
+        resolvedSubject: safeItem.resolvedSubject || "",
+        channels: Array.isArray(safeItem.channels)
+          ? safeItem.channels.map((channel) => String(channel))
+          : [],
+        filePath: safeItem.filePath || "",
+        rule: normalizeSendRule(safeItem.rule),
+      };
+    }),
+    wechatFirst: safePayload.wechatFirst !== false,
+  };
+}
+
 const api = {
   selectInputFile: () => ipcRenderer.invoke("dialog:select-input-file"),
   selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
@@ -59,13 +101,15 @@ const api = {
   matchSendFiles: (folderPath) =>
     ipcRenderer.invoke("send:match-files", folderPath),
   sendItems: (payload) =>
-    ipcRenderer.invoke("send:send", sanitizeForIpc(payload)),
+    ipcRenderer.invoke("send:send", normalizeSendPayload(payload)),
   getSendHistory: () => ipcRenderer.invoke("send:get-history"),
+  clearSendHistory: () => ipcRenderer.invoke("send:clear-history"),
   getSmtpConfig: () => ipcRenderer.invoke("send:get-smtp-config"),
   saveSmtpConfig: (config) =>
     ipcRenderer.invoke("send:save-smtp-config", sanitizeForIpc(config)),
   selectSendFolder: () => ipcRenderer.invoke("dialog:select-send-folder"),
   listFolderFiles: (folderPath) => ipcRenderer.invoke("send:list-folder-files", folderPath),
+  exportSendResults: (data) => ipcRenderer.invoke("send:export-results", sanitizeForIpc(data)),
 };
 
 contextBridge.exposeInMainWorld("excelTools", api);
