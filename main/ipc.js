@@ -8,6 +8,7 @@ const updater = require("./updater");
 const { loadRules, saveRules } = require("../services/split/ruleManager");
 const templateStore = require("../services/templateStore");
 const { resolveSheetName } = require("../services/split/sheetNameMatcher");
+const sendService = require("../services/send/sendService");
 
 /** Lazy getters — these modules are heavy and only needed on first IPC call. */
 function excelReader() { return require("../services/split/excelReader"); }
@@ -109,6 +110,15 @@ function registerIpcHandlers() {
     const result = await dialog.showOpenDialog({
       title: "选择输出目录",
       properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle("dialog:select-send-folder", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "选择待发送文件所在文件夹",
+      properties: ["openDirectory"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
@@ -502,6 +512,45 @@ function registerIpcHandlers() {
     if (result.canceled || !result.filePath) return null;
     await fs.copyFile(tempPath, result.filePath);
     return result.filePath;
+  });
+
+  // ── Send Tool ──────────────────────────────────────────────────────
+
+  ipcMain.handle("send:import-rules", async (_, filePath) => {
+    return sendService.importRules(filePath, app.getPath("userData"));
+  });
+
+  ipcMain.handle("send:get-rules", async () => {
+    return sendService.getRules(app.getPath("userData"));
+  });
+
+  ipcMain.handle("send:match-files", async (_, folderPath) => {
+    return sendService.matchFolderFiles(folderPath, app.getPath("userData"));
+  });
+
+  ipcMain.handle("send:send", async (_, payload) => {
+    const { matched, wechatFirst } = payload || {};
+    return sendService.executeSend({
+      matched,
+      wechatFirst,
+      userDataPath: app.getPath("userData"),
+      onProgress: (event) => {
+        broadcast({ ...event, taskId: "send" });
+      },
+    });
+  });
+
+  ipcMain.handle("send:get-history", async () => {
+    return sendService.loadHistory(app.getPath("userData"));
+  });
+
+  ipcMain.handle("send:get-smtp-config", async () => {
+    return sendService.getSmtpConfig(app.getPath("userData"));
+  });
+
+  ipcMain.handle("send:save-smtp-config", async (_, config) => {
+    await sendService.saveSmtpConfig(app.getPath("userData"), config);
+    return { success: true };
   });
 }
 

@@ -45,7 +45,17 @@ const api = {
     const listener = (_, event) => handler(event);
     ipcRenderer.on("update:event", listener);
     return () => ipcRenderer.removeListener("update:event", listener);
-  }
+  },
+
+  // ── 发送工具 ──────────────────────────────────────────────────
+  importSendRules: (filePath) => ipcRenderer.invoke("send:import-rules", filePath),
+  getSendRules: () => ipcRenderer.invoke("send:get-rules"),
+  matchSendFiles: (folderPath) => ipcRenderer.invoke("send:match-files", folderPath),
+  sendItems: (payload) => ipcRenderer.invoke("send:send", sanitizeForIpc(payload)),
+  getSendHistory: () => ipcRenderer.invoke("send:get-history"),
+  getSmtpConfig: () => ipcRenderer.invoke("send:get-smtp-config"),
+  saveSmtpConfig: (config) => ipcRenderer.invoke("send:save-smtp-config", sanitizeForIpc(config)),
+  selectSendFolder: () => ipcRenderer.invoke("dialog:select-send-folder"),
 };
 
 contextBridge.exposeInMainWorld("excelTools", api);

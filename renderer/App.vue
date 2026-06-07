@@ -92,6 +92,7 @@ import HomeView from "./views/HomeView.vue";
 import SplitView from "./views/SplitView.vue";
 import MergeView from "./views/MergeView.vue";
 import OptimizeView from "./views/OptimizeView.vue";
+import SendView from "./views/SendView.vue";
 
 const active = ref("home");
 
@@ -100,6 +101,7 @@ const tabs = [
   { name: "split",  label: "Excel 拆分" },
   { name: "merge",  label: "合并汇总" },
   { name: "optimize", label: "模板优化" },
+  { name: "send",   label: "发送工具" },
 ];
 
 const viewMap = {
@@ -107,6 +109,7 @@ const viewMap = {
   split: SplitView,
   merge: MergeView,
   optimize: OptimizeView,
+  send: SendView,
 };
 
 const currentView = computed(() => viewMap[active.value]);
