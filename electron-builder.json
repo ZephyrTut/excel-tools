@@ -5,7 +5,8 @@
     "output": "dist/installers"
   },
   "asarUnpack": [
-    "node_modules/exceljs/**"
+    "node_modules/exceljs/**",
+    "services/send/*.py"
   ],
   "electronLanguages": [
     "en-US",
