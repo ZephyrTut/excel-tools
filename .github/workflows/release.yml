@@ -157,106 +157,91 @@ jobs:
 
           Write-Host "OSS sync complete."
 
-  # ── Cloudflare 下载页部署（独立 ubuntu job，与 Windows build 并行） ──
-  deploy-cloudflare:
-    name: Deploy download page
-    needs: build-and-release
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      GH_TOKEN: ${{ github.token }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Generate and deploy download page
-        shell: bash
+      # ── 部署下载页到 Cloudflare Pages ──────────────────────
+      - name: Deploy download page to Cloudflare Pages
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "CLOUDFLARE_API_TOKEN is empty, skip Cloudflare Pages deploy."
+          if (-not $env:CLOUDFLARE_API_TOKEN) {
+            Write-Host "CLOUDFLARE_API_TOKEN is empty, skip Cloudflare Pages deploy."
             exit 0
-          fi
+          }
 
-          currentVersion=$(git describe --tags --abbrev=0)
+          $currentVersion = "${{ env.CURRENT_TAG }}"
 
           # Fetch all releases with body from GitHub, sorted newest first
-          allReleases=$(gh release list --limit 100 --exclude-drafts --json tagName,body | jq -c '.[]')
+          $allReleases = gh release list --limit 100 --exclude-drafts --json tagName,body | ConvertFrom-Json | Sort-Object tagName -Descending
 
           # Build version list HTML
-          versionItems=""
-          while IFS= read -r release; do
-            ver=$(echo "$release" | jq -r '.tagName')
-            body=$(echo "$release" | jq -r '.body')
-            [ "$ver" = "null" ] && continue
+          $versionItems = ""
+          foreach ($release in $allReleases) {
+            $ver = $release.tagName
+            $body = $release.body
+            $badge = if ($ver -eq $currentVersion) { ' <span class="badge">★ 最新</span>' } else { '' }
 
-            badge=""
-            [ "$ver" = "$currentVersion" ] && badge=' <span class="badge">★ 最新</span>'
+            # Extract changelog content between "### 更新内容" and next "###" or end
+            $changelog = ""
+            if ($body -match '(?s)### 更新内容\s*\n(.+?)(?=\n###|\z)') {
+              $changelog = $matches[1].Trim()
+              $changelog = $changelog -replace '(?m)^\- ', '<li>'
+              $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'
+              $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'
+              $changelog = "<ul>$changelog</ul>"
+            }
 
-            # Extract changelog between "### 更新内容" and next "###" or end
-            changelog=""
-            if echo "$body" | grep -q '### 更新内容'; then
-              changelog=$(echo "$body" | sed -n '/### 更新内容/,/^###/p' | tail -n +2 | head -n -1)
-              if [ -n "$changelog" ]; then
-                changelog=$(echo "$changelog" | sed 's/^- /<li>/; s/$/<\/li>/')
-                changelog="<details><summary>更新内容</summary><ul>${changelog}</ul></details>"
-              fi
-            fi
+            $versionItems += '<li>'
+            $versionItems += '<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $ver + '.exe">' + $ver + '</a>' + $badge
+            if ($changelog) {
+              $versionItems += '<details><summary>更新内容</summary>' + $changelog + '</details>'
+            }
+            $versionItems += '</li>'
+          }
 
-            versionItems="${versionItems}<li><a href=\"https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-${ver}.exe\">${ver}</a>${badge}${changelog}</li>"
-          done <<< "$allReleases"
+          $lines = @(
+            '<!DOCTYPE html>',
+            '<html lang="zh-CN">',
+            '<head>',
+            '<meta charset="UTF-8">',
+            '<meta name="viewport" content="width=device-width,initial-scale=1.0">',
+            '<title>Excel Tools 下载</title>',
+            '<style>',
+            'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:60px auto;padding:0 20px;text-align:center}',
+            'h1{font-size:2em}',
+            '.btn{display:inline-block;padding:14px 36px;background:#409eff;color:#fff;border-radius:8px;text-decoration:none;font-size:1.1em;margin:1em 0}',
+            '.btn:hover{background:#337ecc}',
+            'ul{list-style:none;padding:0;text-align:left}',
+            'li{padding:8px 12px;border-bottom:1px solid #eee}',
+            'li a{color:#409eff;text-decoration:none}',
+            'li a:hover{text-decoration:underline}',
+            '.badge{color:#e6a23c;font-weight:bold}',
+            'details{margin:4px 0 4px 16px;font-size:0.85em;color:#666}',
+            'details summary{cursor:pointer;color:#999}',
+            'details ul{padding-left:20px;margin:4px 0}',
+            'details li{margin:2px 0;border:none;padding:2px}',
+            '.meta{color:#999;font-size:0.85em;margin-top:2em}',
+            '</style>',
+            '</head>',
+            '<body>',
+            '<h1>Excel Tools</h1>',
+            '<p>Excel 自动化处理工具</p>',
+            '<a class="btn" href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $currentVersion + '.exe">立即下载最新版</a>',
+            '<h2>所有版本</h2>',
+            '<ul>',
+            $versionItems,
+            '</ul>',
+            '<p class="meta">版本信息：<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml">latest.yml</a></p>',
+            '</body>',
+            '</html>'
+          )
 
-          # Build index.html
-          tmpDir="$RUNNER_TEMP/cloudflare-pages"
-          mkdir -p "$tmpDir"
+          $tmpDir = Join-Path $env:RUNNER_TEMP "cloudflare-pages"
+          mkdir -Force $tmpDir | Out-Null
+          Set-Content -Path "$tmpDir/index.html" -Value $lines -Encoding UTF8
 
-          cat > "$tmpDir/index.html" << HTMLEOF
-          <!DOCTYPE html>
-          <html lang="zh-CN">
-          <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1.0">
-          <title>Excel Tools 下载</title>
-          <style>
-          body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:60px auto;padding:0 20px;text-align:center}
-          h1{font-size:2em}
-          .btn{display:inline-block;padding:14px 36px;background:#409eff;color:#fff;border-radius:8px;text-decoration:none;font-size:1.1em;margin:1em 0}
-          .btn:hover{background:#337ecc}
-          ul{list-style:none;padding:0;text-align:left}
-          li{padding:8px 12px;border-bottom:1px solid #eee}
-          li a{color:#409eff;text-decoration:none}
-          li a:hover{text-decoration:underline}
-          .badge{color:#e6a23c;font-weight:bold}
-          details{margin:4px 0 4px 16px;font-size:0.85em;color:#666}
-          details summary{cursor:pointer;color:#999}
-          details ul{padding-left:20px;margin:4px 0}
-          details li{margin:2px 0;border:none;padding:2px}
-          .meta{color:#999;font-size:0.85em;margin-top:2em}
-          </style>
-          </head>
-          <body>
-          <h1>Excel Tools</h1>
-          <p>Excel 自动化处理工具</p>
-          <a class="btn" href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-${currentVersion}.exe">立即下载最新版</a>
-          <h2>所有版本</h2>
-          <ul>${versionItems}</ul>
-          <p class="meta">版本信息：<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml">latest.yml</a></p>
-          </body>
-          </html>
-          HTMLEOF
-
-          echo "Deploying to Cloudflare Pages..."
-          wrangler pages deploy "$tmpDir" --project-name excel-tools --branch main
-          echo "Cloudflare Pages deploy complete."
+          Write-Host "Deploying to Cloudflare Pages..."
+          pnpm exec wrangler pages deploy "$tmpDir" --project-name excel-tools --branch main
+          Write-Host "Cloudflare Pages deploy complete."
