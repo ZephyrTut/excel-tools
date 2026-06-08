@@ -136,3 +136,31 @@ node --test .\services\split\ruleManager.test.js
 4. [docs/MERGE_LOGIC.md](./docs/MERGE_LOGIC.md)
 5. [docs/COMPATIBILITY_FIXES.md](./docs/COMPATIBILITY_FIXES.md)
 6. [docs/BUILD.md](./docs/BUILD.md)
+
+## 下载与更新
+
+### 国内用户（无需 VPN）
+
+安装包通过阿里云 OSS 国内镜像分发：
+
+- **下载页：** [excel-tools-release.oss-cn-hangzhou.aliyuncs.com](https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/)
+- **版本信息：** [latest.yml](https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml)
+- **最新版 exe：** `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
+
+应用内自动更新会优先从镜像检查，失败后回退 GitHub。
+
+### 海外 / 有 VPN
+
+直接从 [GitHub Releases](https://github.com/ZephyrTut/excel-tools/releases) 下载。
+
+## 更新机制
+
+```
+国内用户 → OSS 镜像 (阿里云) → 找到 latest.yml → 下载安装包
+                                               ↓ 失败
+海外用户 → GitHub Releases → 找到 latest.yml → 下载安装包
+```
+
+核心文件：[main/updater.js](./main/updater.js) — 双源回退策略：
+1. 先尝试阿里云 OSS（generic provider）
+2. 回退 GitHub（github provider）

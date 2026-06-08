@@ -29,6 +29,7 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | 功能 | 文件 | IPC 入口 |
 |------|------|---------|
 | 自动更新 | [updater.js](main/updater.js) | `update:{check,download,install}` |
+| 国内更新镜像 | [阿里云 OSS](https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/) | 国内用户免 VPN 自动更新 |
 | 规则管理 | [ruleManager.js](services/split/ruleManager.js) | `rules:{load,save,get-defaults}` |
 | 模板管理 | [ipc.js](main/ipc.js) (template:* handlers) | `template:{list,import,delete}` |
 
@@ -132,7 +133,7 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | [window.js](main/window.js) | BrowserWindow 创建 | 32 行 |
 | [workerRunner.js](main/workerRunner.js) | Worker 线程管理 | 80 行 |
 | [taskWorker.js](main/taskWorker.js) | Worker 任务处理 | 45 行 |
-| [updater.js](main/updater.js) | 自动更新 | 63 行 |
+| [updater.js](main/updater.js) | 自动更新（OSS 镜像 → GitHub 回退） | 63 行 |
 
 ## 数据流架构
 

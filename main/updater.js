@@ -59,7 +59,7 @@ async function checkForUpdates() {
   const updater = getAutoUpdater();
   let lastError = null;
 
-  // ① 尝试 Gitee 镜像（国内直连，无需 VPN）
+  // ① 尝试 OSS 镜像（国内直连，无需 VPN）
   try {
     updater.setFeedURL({
       provider: "generic",

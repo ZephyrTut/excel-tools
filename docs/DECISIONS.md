@@ -45,3 +45,51 @@
 - 不再把一个模板概念同时用于拆分和合并
 - 不再默认信任 ExcelJS 条件格式 round-trip
 - 不再把 Office 修复问题主要归因为外链或普通单元格值
+
+---
+
+## 国内更新分发方案
+
+**决策：** 使用阿里云 OSS 作为国内更新镜像，electron-updater 双源回退。
+
+**背景：** GitHub 被墙，国内用户无法直接检查更新。最初尝试 Gitee git push 同步，但跨洋上传 ~100MB 安装包需要 5-15 分钟，速度不可接受。
+
+**方案演进：**
+1. ❌ Gitee git push — 慢（5-15 min），放弃
+2. ❌ 腾讯云 COS（coscmd）— 方案设计完成，后迁移至阿里云
+3. ✅ **阿里云 OSS（ossutil）** — 当前方案
+
+**架构：**
+
+```
+GitHub Actions (release.yml)
+  ├── 构建安装包 ✓
+  ├── 上传 GitHub Release ✓
+  └── ossutil 同步到 OSS ✓
+                          ↓
+  OSS URL: https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
+  ├── index.html（静态网站下载页）
+  ├── latest.yml（electron-updater 元数据）
+  ├── Excel-Tools-Setup-{version}.exe
+  └── Excel-Tools-Setup-{version}.exe.blockmap
+                          ↓
+  updater.js（双源回退）：
+    ① OSS mirror（generic provider）
+    ② GitHub（github provider fallback）
+```
+
+**关键配置：**
+- OSS Bucket：`excel-tools-release`，区域 `oss-cn-hangzhou`，公有读私有写
+- 开启了静态网站托管，`index.html` 自动展示下载页面
+- CI 使用 `softprops/action-gh-release` 上传 GitHub Release
+- OSS 同步步骤 `continue-on-error: true`，失败不阻塞发布
+- GitHub Secrets：`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_BUCKET`、`OSS_REGION`
+
+**涉及文件：**
+- `main/updater.js` — MIRROR_URL 指向 OSS
+- `.github/workflows/release.yml` — OSS 同步步骤
+- `scripts/oss-index.html` — OSS 静态网站首页
+
+**验证方法：**
+- `curl https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml`（无需认证）
+- `curl https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/`（返回下载页）

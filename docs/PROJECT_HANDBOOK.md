@@ -361,7 +361,56 @@ node --test .\services\optimize\zipUtils.test.js
 node --test .\services\split\ruleManager.test.js
 ```
 
-## 11. 推荐排障顺序
+## 11. 自动更新机制
+
+### 整体架构
+
+国内用户免 VPN 更新的关键：**阿里云 OSS 镜像 + GitHub 回退**。
+
+```
+应用启动 → updater.js checkForUpdates()
+             │
+             ├─① OSS mirror（generic provider）
+             │  https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
+             │  ├─ 成功 → 下载安装包
+             │  └─ 失败 → ② GitHub 回退
+             │              └─ https://github.com/ZephyrTut/excel-tools/releases
+             │                 ├─ 成功 → 下载安装包
+             │                 └─ 失败 → 报错
+```
+
+### 关键文件
+
+- [main/updater.js](./main/updater.js) — 更新逻辑核心
+- [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 自动同步到 OSS
+- [scripts/oss-index.html](../scripts/oss-index.html) — OSS 下载页
+
+### OSS 资源
+
+- 下载页：https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
+- 版本信息：https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
+- 安装包：`https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
+
+### 发布流程
+
+```
+git tag v1.2.x && git push origin v1.2.x
+  → GitHub Actions（release.yml）
+      ├── 构建安装包（electron-builder）
+      ├── 上传 GitHub Release
+      └── ossutil 同步到 OSS ✓
+```
+
+> OSS 同步步骤 `continue-on-error: true`，失败不影响 GitHub 发布。
+
+### 新增发行版注意事项
+
+如果需要在 CI 中新增需同步的文件类型（如 `.zip`），同步修改两处：
+
+1. `.github/workflows/release.yml` — 添加对应的 `ossutil cp` 命令
+2. 确保 OSS bucket 的静态网站能正常访问新文件类型
+
+## 12. 推荐排障顺序
 
 拿到一个问题时，建议按这个顺序走：
 
@@ -372,7 +421,7 @@ node --test .\services\split\ruleManager.test.js
 5. 涉及预读取或按钮触发异常时，直接同时看 `preload.js`、`ipc.js`、`ipcPayload.js`。
 6. 涉及 sheet 名不一致时，先检查 `sheetNameAliases`，不要先改业务代码。
 
-## 12. 最近最值得记住的坑
+## 13. 最近最值得记住的坑
 
 后续排障时，优先记住这些经验：
 
@@ -383,7 +432,7 @@ node --test .\services\split\ruleManager.test.js
 - 拆分模板和合并模板已经拆开，不要再用一个模板概念理解两条链路。
 - 规则数组现在分成 `splitSheetRules` 和 `mergeSheetRules`，排障时先确认看的就是这两个字段。
 
-## 13. 阅读建议
+## 14. 阅读建议
 
 如果你是第一次接手这个项目，建议阅读顺序：
 

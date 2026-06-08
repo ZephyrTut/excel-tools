@@ -98,6 +98,23 @@ Renderer
 - `optimize:*`
 - `dialog:*`
 
+### 自动更新
+
+更新逻辑位于 [main/updater.js](./main/updater.js)，采用双源回退策略：
+
+```text
+checkForUpdates()
+  ├── ① 阿里云 OSS（generic provider）
+  │    └─ https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
+  │       ├── 成功 → 返回更新信息
+  │       └── 失败 → ② GitHub（github provider）
+  │                  └─ https://github.com/ZephyrTut/excel-tools/releases
+  │                     ├── 成功 → 返回更新信息
+  │                     └── 失败 → 抛出错误
+```
+
+国内用户无需 VPN 即可通过 OSS 镜像检查更新。构建产物在 [release.yml](.github/workflows/release.yml) 中由 `ossutil` 自动同步到 OSS。
+
 ## 4. 关键入口
 
 ### 应用入口
