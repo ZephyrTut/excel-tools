@@ -29,7 +29,7 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | 功能 | 文件 | IPC 入口 |
 |------|------|---------|
 | 自动更新 | [updater.js](main/updater.js) | `update:{check,download,install}` |
-| 国内更新镜像 | [阿里云 OSS](https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/) + [Gitee](https://gitee.com/ZephyrTut/excel-tools) | 国内用户免 VPN 更新 |
+| 国内更新镜像 | [阿里云 OSS](https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/) + [Cloudflare Pages](https://excel-tools.pages.dev/) | 国内用户免 VPN 访问下载页 |
 | 规则管理 | [ruleManager.js](services/split/ruleManager.js) | `rules:{load,save,get-defaults}` |
 | 模板管理 | [ipc.js](main/ipc.js) (template:* handlers) | `template:{list,import,delete}` |
 

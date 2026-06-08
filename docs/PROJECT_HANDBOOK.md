@@ -382,18 +382,18 @@ node --test .\services\split\ruleManager.test.js
 ### 关键文件
 
 - [main/updater.js](./main/updater.js) — 更新逻辑核心
-- [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 自动同步到 OSS 和 Gitee
+- [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 自动同步到 OSS 和部署下载页到 Cloudflare Pages
 
 ### OSS 资源
 
 - 版本信息：https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
 - 安装包：`https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
 
-### Gitee 仓库
+### Cloudflare Pages 下载页
 
-国内用户访问 Gitee 仓库查看 README 获取下载链接（无需 VPN）：
+国内用户访问 Cloudflare Pages 下载页面获取下载链接（无需 VPN）：
 
-- https://gitee.com/ZephyrTut/excel-tools
+- https://excel-tools.pages.dev/
 
 ### 发布流程
 
@@ -403,17 +403,17 @@ git tag v1.2.x && git push origin v1.2.x
       ├── 构建安装包（electron-builder）
       ├── 上传 GitHub Release
       ├── ossutil 同步到 OSS ✓
-      └── git push 源码到 Gitee ✓
+      └── wrangler 部署下载页到 Cloudflare Pages ✓
 ```
 
-> OSS 和 Gitee 同步步骤均为 `continue-on-error: true`，失败不影响 GitHub 发布。
+> OSS 和 Cloudflare Pages 部署步骤均为 `continue-on-error: true`，失败不影响 GitHub 发布。
 
 ### 新增发行版注意事项
 
 如果需要在 CI 中新增需同步的文件类型（如 `.zip`），同步修改以下位置：
 
 1. `.github/workflows/release.yml` — 添加对应的 `ossutil cp` 命令
-2. 如果需 Gitee 同步新文件，确保不在 `.gitignore` 中排除
+2. 如果需 Cloudflare Pages 部署页新增内容，同步修改 `release.yml` 中的 HTML 模板
 
 ## 12. 推荐排障顺序
 

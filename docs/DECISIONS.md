@@ -66,15 +66,15 @@ GitHub Actions (release.yml)
   ├── 构建安装包 ✓
   ├── 上传 GitHub Release ✓
   ├── ossutil 同步到 OSS ✓
-  └── git push 源码到 Gitee ✓
+  └── wrangler 部署下载页到 Cloudflare Pages ✓
                           ↓
   OSS: https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
   ├── latest.yml（electron-updater 元数据）
   ├── Excel-Tools-Setup-{version}.exe
   └── Excel-Tools-Setup-{version}.exe.blockmap
                           ↓
-  Gitee: https://gitee.com/ZephyrTut/excel-tools
-  └── README 显示下载链接，国内用户免 VPN 访问
+  Cloudflare Pages: https://excel-tools.pages.dev/
+  └── index.html 显示下载链接，国内用户免 VPN 访问
                           ↓
   updater.js（双源回退）：
     ① OSS mirror（generic provider）
@@ -86,11 +86,11 @@ GitHub Actions (release.yml)
 - CI 使用 `softprops/action-gh-release` 上传 GitHub Release
 - OSS 同步步骤 `continue-on-error: true`，失败不阻塞发布
 - GitHub Secrets：`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_BUCKET`、`OSS_REGION`
-- Gitee 同步步骤同步源码（不含 dist/ 二进制），国内用户访问 Gitee 查看下载说明
+- Cloudflare Pages 步骤部署下载页面（index.html），国内用户访问 Pages 查看下载说明
 
 **涉及文件：**
 - `main/updater.js` — MIRROR_URL 指向 OSS
-- `.github/workflows/release.yml` — OSS 同步步骤
+- `.github/workflows/release.yml` — OSS 同步和 Cloudflare Pages 部署步骤
 - `scripts/oss-index.html` — OSS 静态网站首页
 
 **验证方法：**

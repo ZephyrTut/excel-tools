@@ -88,10 +88,6 @@ function resolveSequenceColumn(sourceSheet, headerRows) {
   return seqCol;
 }
 
-function buildRuleContexts(workbook, rules) {
-  return buildRuleContextsWithTemplate(workbook, rules, null, null, null);
-}
-
 function buildRuleContextsWithTemplate(
   workbook,
   rules,

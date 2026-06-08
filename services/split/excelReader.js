@@ -144,10 +144,7 @@ async function getMultipleSheetHeaders(filePath, sheetConfigs) {
 module.exports = {
   readWorkbook,
   getSheetNames,
-  getSheetHeaders,
-  getSheetHeadersWithPosition,
   getMultipleSheetHeaders,
   getHeadersFromWorksheet,
   textValue,
-  normalizeHeaderName,
 };

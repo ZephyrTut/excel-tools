@@ -38,5 +38,4 @@ function resolveOutputFilePath({
 module.exports = {
   sanitizeWindowsFileName,
   ensureDirectory,
-  resolveOutputFilePath
 };

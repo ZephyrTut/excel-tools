@@ -139,9 +139,9 @@ node --test .\services\split\ruleManager.test.js
 
 ## 下载与更新
 
-国内用户（无需 VPN）从 Gitee 仓库查看下载指引：
+国内用户（无需 VPN）访问 Cloudflare Pages 下载页面：
 
-- **Gitee 仓库：** https://gitee.com/ZephyrTut/excel-tools
+- **下载页面：** https://excel-tools.pages.dev/
 - **最新版安装包：** `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
 - **版本信息：** https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
 

@@ -297,7 +297,6 @@ function copySingleRowMerges(
 
 module.exports = {
   copyWorksheetMeta,
-  copyRowAndCells,
   copyRowAndCellsWithOptions,
   copyHeaderRowsWithMerges,
   copySingleRowMerges,
