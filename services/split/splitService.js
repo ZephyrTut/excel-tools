@@ -8,8 +8,8 @@ const { resolveSheetName } = require("./sheetNameMatcher");
 const { runSplitEngine } = require("./splitEngine");
 const { loadRules } = require("./ruleManager");
 const {
-  readWorkbookSheetEntries,
   readXlsxEntries,
+  extractWorkbookSheetEntries,
   extractDifferentialStylesNode,
   stripExternalLinks,
 } = require("../optimize/zipUtils");
@@ -50,8 +50,8 @@ async function runSplitTask(request, { logger, reportProgress }) {
   reportProgress(8, "Reading workbook");
   const workbook = await readWorkbook(request.inputFile);
   const actualSheetNames = workbook.worksheets.map((sheet) => sheet.name);
-  const sourceSheetXmlMap = await readWorkbookSheetEntries(request.inputFile).catch(() => new Map());
   const sourceEntries = await readXlsxEntries(request.inputFile).catch(() => new Map());
+  const sourceSheetXmlMap = extractWorkbookSheetEntries(sourceEntries);
   const sourceDifferentialStylesNode = extractDifferentialStylesNode(sourceEntries.get("xl/styles.xml"));
   reportProgress(9, "Workbook loaded");
   let templateWorkbook = null;
@@ -62,7 +62,9 @@ async function runSplitTask(request, { logger, reportProgress }) {
       const templatePath = path.isAbsolute(rulesConfig.split.templateFile)
         ? rulesConfig.split.templateFile
         : path.resolve(request.projectRoot || process.cwd(), rulesConfig.split.templateFile);
-      templateSheetXmlMap = await readWorkbookSheetEntries(templatePath).catch(() => new Map());
+      templateSheetXmlMap = extractWorkbookSheetEntries(
+        await readXlsxEntries(templatePath).catch(() => new Map())
+      );
       reportProgress(9, "Loading template workbook");
       try {
         tempTemplatePath = buildTempXlsxPath("split_template");

@@ -327,10 +327,9 @@ async function saveAliasDialog() {
 
 async function loadTemplateSheetNames() {
   const tplPath = currentTemplatePath.value;
-  if (!tplPath) { state.templateSheetNames = []; await refreshSourceSheetNames(); return; }
+  if (!tplPath) { state.templateSheetNames = []; return; }
   try { state.templateSheetNames = await getApi().getSheetNames(tplPath); }
   catch { state.templateSheetNames = []; }
-  await refreshSourceSheetNames();
 }
 
 async function refreshSourceSheetNames() {
@@ -362,7 +361,10 @@ async function loadRules() {
   const seed = state.rules.mergeSheetRules || [];
   state.mergeSheetRules = seed.map((r) => normalizeMergeRule(r));
   await loadTemplateSheetNames();
-  await refreshSourceSheetNames();
+
+  // sourceSheetNames intentionally NOT loaded here — deferred to when
+  // the user picks an input directory or template, avoiding a full
+  // directory scan on every mount.
 }
 
 async function saveMergeRules() {
