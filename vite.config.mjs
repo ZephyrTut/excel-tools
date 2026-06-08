@@ -1,40 +1,43 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
-  root: path.resolve(process.cwd(), "renderer"),
+  root: path.join(configDir, "renderer"),
   base: "./",
   plugins: [
     vue(),
-    // Element Plus 按需引入（tree-shaking，只打包用到的组件）
+    // Tree-shake Element Plus components used by the renderer.
     AutoImport({
-      resolvers: [ElementPlusResolver()]
+      resolvers: [ElementPlusResolver()],
     }),
     Components({
-      resolvers: [ElementPlusResolver()]
-    })
+      resolvers: [ElementPlusResolver()],
+    }),
   ],
   build: {
-    outDir: path.resolve(process.cwd(), "dist", "renderer"),
+    outDir: path.join(configDir, "dist", "renderer"),
     emptyOutDir: true,
-    // 生产构建关闭 source map，减小体积
+    // Disable source maps in production to keep the renderer bundle small.
     sourcemap: false,
     rollupOptions: {
       output: {
-        // 代码分割：将 Vue、Element Plus 等 vendor 拆到独立 chunk
+        // Split the largest framework bundles into separate chunks.
         manualChunks: {
           "vendor-vue": ["vue"],
-          "vendor-element-plus": ["element-plus"]
-        }
-      }
-    }
+          "vendor-element-plus": ["element-plus"],
+        },
+      },
+    },
   },
   server: {
     port: 5173,
-    strictPort: true
-  }
+    strictPort: true,
+  },
 });
