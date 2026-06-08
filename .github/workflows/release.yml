@@ -109,9 +109,11 @@ jobs:
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Upload GitHub release assets: $($end - $start)s"
 
       # ── 同步安装包到 Gitee（国内用户免 VPN 更新） ──────────────
+      # 上传大文件到国内服务器可能较慢（~分钟级），--progress 可查看进度
       - name: Sync installers to Gitee mirror
         shell: bash
         continue-on-error: true
+        timeout-minutes: 15
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
@@ -138,4 +140,5 @@ jobs:
           printf 'echo "$GITEE_TOKEN"\n' >> "$ASKPASS"
           chmod +x "$ASKPASS"
 
-          GIT_ASKPASS="$ASKPASS" git push gitee release --force
+          echo "Uploading installer to Gitee (this may take a few minutes)..."
+          GIT_ASKPASS="$ASKPASS" git push gitee release --force --progress
