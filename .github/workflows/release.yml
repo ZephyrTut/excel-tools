@@ -141,6 +141,6 @@ jobs:
           }
 
           Write-Host "Uploading index.html for static website..."
-          .\ossutil-v1.7.19-windows-amd64\ossutil cp scripts/oss-index.html "oss://$env:OSS_BUCKET/index.html" -f --meta Content-Type:text/html
+          .\ossutil-v1.7.19-windows-amd64\ossutil cp scripts/oss-index.html "oss://$env:OSS_BUCKET/index.html" -f --meta Content-Type:text/html;charset=utf-8#Content-Disposition:inline
 
           Write-Host "OSS sync complete."
