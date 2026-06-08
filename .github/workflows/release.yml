@@ -157,5 +157,5 @@ jobs:
 
           git remote add gitee "https://oauth2:$env:GITEE_TOKEN@gitee.com/ZephyrTut/excel-tools.git"
           Write-Host "Pushing source code to Gitee..."
-          git push gitee main --force --progress
+          git push gitee HEAD:main --force --progress
           Write-Host "Gitee sync complete."
