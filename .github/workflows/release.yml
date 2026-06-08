@@ -57,7 +57,7 @@ jobs:
       # downloading it via npx (which is slow on Windows + Chinese network).
       - name: Install wrangler (one-time, cached globally)
         shell: pwsh
-        run: pnpm add -g wrangler
+        run: npm install -g wrangler
 
       - name: Install dependencies
         shell: pwsh
