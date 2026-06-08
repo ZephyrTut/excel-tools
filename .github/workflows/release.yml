@@ -125,7 +125,9 @@ jobs:
           git checkout -b release
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add .
+
+          # 只添加安装包和更新元数据，跳过 win-unpacked/ 等构建产物
+          git add *.exe *.exe.blockmap latest.yml
           git commit -m "sync ${{ github.ref_name }}"
           git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
 
