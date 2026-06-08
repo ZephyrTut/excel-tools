@@ -8,7 +8,11 @@ const { optimizeOne } = require("./compressEngine");
  */
 async function walkDir(dir, excludeDir) {
   const results = [];
-  const excludePath = excludeDir ? path.resolve(excludeDir) : null;
+  const resolvedDir = path.resolve(dir);
+  const resolvedExclude = excludeDir ? path.resolve(excludeDir) : null;
+  // Only exclude outputDir when it's different from inputDir, otherwise
+  // ALL files would be skipped (every file's path starts with the input dir).
+  const excludePath = (resolvedExclude && resolvedExclude !== resolvedDir) ? resolvedExclude : null;
   const entries = await fsp.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
