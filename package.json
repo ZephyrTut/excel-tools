@@ -1,6 +1,6 @@
 {
   "name": "excel-tools",
-  "version": "1.2.21",
+  "version": "1.2.22",
   "description": "Excel automation desktop tools built with Electron + Vue + ExcelJS",
   "main": "main/main.js",
   "author": "excel-tools",
