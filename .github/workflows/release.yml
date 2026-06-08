@@ -42,7 +42,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
       - name: Refresh app-builder-bin
-        run: pnpm add -D app-builder-bin@latest
+        run: pnpm add -Dw app-builder-bin@latest
 
       - name: Build renderer
         run: pnpm build:renderer
