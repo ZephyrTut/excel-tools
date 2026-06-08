@@ -91,8 +91,13 @@ jobs:
           git commit -m "sync ${{ env.RELEASE_TAG }}"
           git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
 
-          # GIT_ASKPASS 提供 token，避免 URL 中特殊字符被错误解析
-          echo '#!/bin/sh' > .askpass
-          echo 'echo "$GITEE_TOKEN"' >> .askpass
-          chmod +x .askpass
-          GIT_ASKPASS=.askpass git push gitee release --force
+          # 禁用 Git Credential Manager 对 Gitee 的干扰
+          git config --local credential.https://gitee.com.helper ""
+
+          # 用绝对路径写 askpass 脚本（避免 Windows 上相对路径找不到）
+          ASKPASS="$(pwd)/.gitee-askpass"
+          printf '#!/bin/sh\n' > "$ASKPASS"
+          printf 'echo "$GITEE_TOKEN"\n' >> "$ASKPASS"
+          chmod +x "$ASKPASS"
+
+          GIT_ASKPASS="$ASKPASS" git push gitee release --force
