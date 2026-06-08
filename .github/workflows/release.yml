@@ -92,17 +92,17 @@ jobs:
             $log = "Initial release."
           }
 
-          $body = @"
-## Excel Tools $currentTag
-
-### 更新内容
-$log
-
-### Windows
-- `Excel-Tools-Setup-$currentTag.exe` — 安装包
-
-Built automatically by GitHub Actions.
-"@
+          $body = @(
+            "## Excel Tools $currentTag",
+            "",
+            "### 更新内容",
+            $log,
+            "",
+            "### Windows",
+            "- ``Excel-Tools-Setup-$currentTag.exe`` — 安装包",
+            "",
+            "Built automatically by GitHub Actions."
+          ) -join "`r`n"
           Set-Content -Path "$env:RUNNER_TEMP/release-body.md" -Value $body -Encoding UTF8
 
       - name: Mark release upload start
