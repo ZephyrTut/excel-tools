@@ -64,7 +64,8 @@ git tag v1.2.x && git push origin v1.2.x
   ├── pnpm build:renderer
   ├── electron-builder 打包
   ├── 上传 GitHub Release（softprops/action-gh-release）
-  └── ossutil 同步到阿里云 OSS（国内镜像）
+  ├── ossutil 同步到阿里云 OSS（国内镜像）
+  └── git push 源码到 Gitee（国内用户查看下载说明）
 ```
 
 ### OSS 镜像同步
@@ -73,10 +74,16 @@ git tag v1.2.x && git push origin v1.2.x
 
 - **Bucket：** `excel-tools-release`
 - **区域：** `oss-cn-hangzhou`
-- **下载页：** https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
 - **latest.yml：** https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
+- **安装包：** `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-{version}.exe`
 
-OSS 同步步骤 `continue-on-error: true`，上传失败不影响 GitHub Release。
+### Gitee 源码同步
+
+每次发布自动同步源码到 Gitee（仅源码，不含 dist/ 二进制），国内用户访问 Gitee 仓库查看 README 获取下载链接：
+
+- **Gitee 仓库：** https://gitee.com/ZephyrTut/excel-tools
+
+OSS 和 Gitee 同步步骤均为 `continue-on-error: true`，失败不影响 GitHub Release。
 
 ## electron-builder 配置
 

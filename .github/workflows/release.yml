@@ -140,7 +140,22 @@ jobs:
             .\ossutil-v1.7.19-windows-amd64\ossutil cp $_.FullName "oss://$env:OSS_BUCKET/$($_.Name)" -f
           }
 
-          Write-Host "Uploading index.html for static website..."
-          .\ossutil-v1.7.19-windows-amd64\ossutil cp scripts/oss-index.html "oss://$env:OSS_BUCKET/index.html" -f --meta Content-Type:text/html;charset=utf-8#Content-Disposition:inline
-
           Write-Host "OSS sync complete."
+
+      # ── 同步源码到 Gitee（国内用户查看 README 获取下载链接） ────
+      - name: Sync source code to Gitee
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        shell: pwsh
+        run: |
+          if (-not $env:GITEE_TOKEN) {
+            Write-Host "GITEE_TOKEN is empty, skip Gitee sync."
+            exit 0
+          }
+
+          git remote add gitee "https://oauth2:$env:GITEE_TOKEN@gitee.com/ZephyrTut/excel-tools.git"
+          Write-Host "Pushing source code to Gitee..."
+          git push gitee main --force --progress
+          Write-Host "Gitee sync complete."

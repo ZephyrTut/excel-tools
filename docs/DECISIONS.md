@@ -65,13 +65,16 @@
 GitHub Actions (release.yml)
   ├── 构建安装包 ✓
   ├── 上传 GitHub Release ✓
-  └── ossutil 同步到 OSS ✓
+  ├── ossutil 同步到 OSS ✓
+  └── git push 源码到 Gitee ✓
                           ↓
-  OSS URL: https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
-  ├── index.html（静态网站下载页）
+  OSS: https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
   ├── latest.yml（electron-updater 元数据）
   ├── Excel-Tools-Setup-{version}.exe
   └── Excel-Tools-Setup-{version}.exe.blockmap
+                          ↓
+  Gitee: https://gitee.com/ZephyrTut/excel-tools
+  └── README 显示下载链接，国内用户免 VPN 访问
                           ↓
   updater.js（双源回退）：
     ① OSS mirror（generic provider）
@@ -80,10 +83,10 @@ GitHub Actions (release.yml)
 
 **关键配置：**
 - OSS Bucket：`excel-tools-release`，区域 `oss-cn-hangzhou`，公有读私有写
-- 开启了静态网站托管，`index.html` 自动展示下载页面
 - CI 使用 `softprops/action-gh-release` 上传 GitHub Release
 - OSS 同步步骤 `continue-on-error: true`，失败不阻塞发布
 - GitHub Secrets：`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_BUCKET`、`OSS_REGION`
+- Gitee 同步步骤同步源码（不含 dist/ 二进制），国内用户访问 Gitee 查看下载说明
 
 **涉及文件：**
 - `main/updater.js` — MIRROR_URL 指向 OSS

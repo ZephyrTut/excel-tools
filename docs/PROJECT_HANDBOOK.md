@@ -382,14 +382,18 @@ node --test .\services\split\ruleManager.test.js
 ### 关键文件
 
 - [main/updater.js](./main/updater.js) — 更新逻辑核心
-- [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 自动同步到 OSS
-- [scripts/oss-index.html](../scripts/oss-index.html) — OSS 下载页
+- [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 自动同步到 OSS 和 Gitee
 
 ### OSS 资源
 
-- 下载页：https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
 - 版本信息：https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
 - 安装包：`https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
+
+### Gitee 仓库
+
+国内用户访问 Gitee 仓库查看 README 获取下载链接（无需 VPN）：
+
+- https://gitee.com/ZephyrTut/excel-tools
 
 ### 发布流程
 
@@ -398,17 +402,18 @@ git tag v1.2.x && git push origin v1.2.x
   → GitHub Actions（release.yml）
       ├── 构建安装包（electron-builder）
       ├── 上传 GitHub Release
-      └── ossutil 同步到 OSS ✓
+      ├── ossutil 同步到 OSS ✓
+      └── git push 源码到 Gitee ✓
 ```
 
-> OSS 同步步骤 `continue-on-error: true`，失败不影响 GitHub 发布。
+> OSS 和 Gitee 同步步骤均为 `continue-on-error: true`，失败不影响 GitHub 发布。
 
 ### 新增发行版注意事项
 
-如果需要在 CI 中新增需同步的文件类型（如 `.zip`），同步修改两处：
+如果需要在 CI 中新增需同步的文件类型（如 `.zip`），同步修改以下位置：
 
 1. `.github/workflows/release.yml` — 添加对应的 `ossutil cp` 命令
-2. 确保 OSS bucket 的静态网站能正常访问新文件类型
+2. 如果需 Gitee 同步新文件，确保不在 `.gitignore` 中排除
 
 ## 12. 推荐排障顺序
 
