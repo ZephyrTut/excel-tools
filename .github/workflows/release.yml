@@ -1,10 +1,3 @@
-# =============================================================================
-# GitHub Actions — 自动构建 & 发布到 GitHub Releases
-#
-# 触发方式: 推送形如 v0.1.0、v1.2.3 的 tag 时自动执行
-# 也可手动触发: Actions 页面 → Release → Run workflow
-# =============================================================================
-
 name: Release
 
 on:
@@ -31,36 +24,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 先安装 pnpm（后续 setup-node cache 需要 pnpm 在 PATH 中）
-      - uses: pnpm/action-setup@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 9
           run_install: false
 
-      # 设置 Node.js + 自动缓存 pnpm store（一次搞定，不再重复调用）
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: "pnpm"
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
-      # 重新安装 app-builder-bin，避免 Windows 运行器上 Go 二进制崩溃
-      - run: pnpm remove app-builder-bin && pnpm add -D app-builder-bin@latest
+      - name: Refresh app-builder-bin
+        run: pnpm add -D app-builder-bin@latest
 
-      - run: pnpm build:renderer
+      - name: Build renderer
+        run: pnpm build:renderer
 
-      # --publish never: electron-builder 不自行发布，由下面 softprops 统一上传
-      - run: pnpm exec electron-builder --config electron-builder.json --publish never
+      - name: Build installer
+        run: pnpm exec electron-builder --config electron-builder.json --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
           CSC_KEY_PASSWORD: ""
 
-      # 上传构建产物到 GitHub Release（只传安装包和 blockmap，避免 win-unpacked 进入 assets）
-      - uses: softprops/action-gh-release@v2
+      - name: Upload GitHub release assets
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: Excel Tools ${{ env.RELEASE_TAG }}
@@ -68,8 +63,7 @@ jobs:
             ## Excel Tools ${{ env.RELEASE_TAG }}
 
             ### Windows
-            - `Excel-Tools-Setup-${{ env.RELEASE_TAG }}.exe` — 安装包（推荐）
-
+            - `Excel-Tools-Setup-${{ env.RELEASE_TAG }}.exe` - 安装包（推荐）
             ---
             自动发布自 GitHub Actions。
           files: |
@@ -80,7 +74,6 @@ jobs:
           prerelease: false
           generate_release_notes: false
 
-      # ── 同步安装包到 Gitee（国内用户免 VPN 更新） ──────────────
       - name: Sync installers to Gitee mirror
         shell: bash
         env:
@@ -95,10 +88,8 @@ jobs:
           git commit -m "sync ${{ env.RELEASE_TAG }}"
           git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
 
-          # 禁用 Git Credential Manager 对 Gitee 的干扰
           git config --local credential.https://gitee.com.helper ""
 
-          # 用绝对路径写 askpass 脚本（避免 Windows 上相对路径找不到）
           ASKPASS="$(pwd)/.gitee-askpass"
           printf '#!/bin/sh\n' > "$ASKPASS"
           printf 'echo "$GITEE_TOKEN"\n' >> "$ASKPASS"
