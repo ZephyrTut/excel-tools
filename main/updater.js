@@ -3,7 +3,7 @@ const { BrowserWindow } = require("electron");
 let _autoUpdater = null;
 
 // ── 国内更新镜像 ──────────────────────────────────────────
-const MIRROR_URL = "https://excel-tools-release.cos.ap-guangzhou.myqcloud.com/";
+const MIRROR_URL = "https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/";
 
 /** Lazy-init autoUpdater — electron-updater is 1.3MB and blocks startup. */
 function getAutoUpdater() {
