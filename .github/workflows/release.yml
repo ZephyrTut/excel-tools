@@ -140,4 +140,7 @@ jobs:
             .\ossutil-v1.7.19-windows-amd64\ossutil cp $_.FullName "oss://$env:OSS_BUCKET/$($_.Name)" -f
           }
 
+          Write-Host "Uploading index.html for static website..."
+          .\ossutil-v1.7.19-windows-amd64\ossutil cp scripts/oss-index.html "oss://$env:OSS_BUCKET/index.html" -f
+
           Write-Host "OSS sync complete."
