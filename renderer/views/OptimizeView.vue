@@ -3,40 +3,48 @@
     <!-- Header -->
     <div class="ov-header animate-fade-in-up">
       <div class="ov-header-accent"></div>
-      <h2 class="ov-title">XLSX 批量压缩</h2>
-      <p class="ov-desc">选择文件夹，批量压缩所有 .xlsx 文件（保留目录结构，输出 _min.xlsx）</p>
+      <h2 class="ov-title">XLSX 文件压缩</h2>
+      <p class="ov-desc">拖拽文件或文件夹，ZIP 级别深度压缩（输出 _min.xlsx）</p>
     </div>
 
-    <!-- Input: Folder drop zone -->
+    <!-- Input: Drop zone (file + folder) -->
     <section class="ov-section animate-fade-in-up">
-      <div class="section-label">选择文件夹</div>
+      <div class="section-label">选择输入</div>
       <div class="drop-zone ov-dropzone"
-        :class="{ 'drop-zone--active': sourceDrop.isDragOver, 'ov-dropzone--has-dir': !!state.inputDir }"
+        :class="{ 'drop-zone--active': sourceDrop.isDragOver, 'ov-dropzone--has-input': !!state.inputPath }"
         @dragover.prevent="sourceDrop.onDragOver"
         @dragenter="sourceDrop.onDragEnter"
         @dragleave="sourceDrop.onDragLeave"
-        @drop="onDirDrop"
+        @drop="onDrop"
       >
         <div class="ov-dropzone-inner">
-          <div v-if="!state.inputDir" class="ov-dropzone-empty">
-            <span class="ov-dropzone-icon">📁</span>
-            <span class="ov-dropzone-text">拖拽<strong>文件夹</strong>到此处</span>
+          <div v-if="!state.inputPath" class="ov-dropzone-empty">
+            <span class="ov-dropzone-icon">📂</span>
+            <span class="ov-dropzone-text">拖拽 <strong>.xlsx</strong> 文件或<strong>文件夹</strong>到此处</span>
             <span class="ov-dropzone-or">或</span>
-            <el-button type="primary" plain @click="pickDir">选择文件夹</el-button>
+            <div class="ov-dropzone-actions">
+              <el-button type="primary" plain @click="pickFile">选择文件</el-button>
+              <el-button plain @click="pickDir">选择文件夹</el-button>
+            </div>
           </div>
           <div v-else class="ov-dropzone-filled">
-            <span class="ov-file-icon">📁</span>
+            <span class="ov-file-icon">{{ state.mode === 'dir' ? '📁' : '📊' }}</span>
             <div class="ov-file-info">
-              <span class="ov-file-name">{{ state.inputDir }}</span>
-              <span class="ov-file-size" v-if="state.fileList.length">{{ state.fileList.length }} 个 .xlsx 文件</span>
+              <span class="ov-file-name">{{ state.mode === 'dir' ? state.inputPath : state.fileName }}</span>
+              <span class="ov-file-size" v-if="state.fileList.length">
+                {{ state.fileList.length }} 个 .xlsx 文件
+              </span>
+              <span class="ov-file-size" v-else-if="state.fileSize">
+                {{ formatSize(state.fileSize) }}
+              </span>
             </div>
-            <el-button text type="primary" size="small" @click="pickDir">更换</el-button>
+            <el-button text type="primary" size="small" @click="resetInput">更换</el-button>
           </div>
         </div>
       </div>
 
-      <!-- File list preview -->
-      <div v-if="state.fileList.length > 0 && !state.running && !state.result" class="ov-file-preview">
+      <!-- File list preview (folder mode) -->
+      <div v-if="state.mode === 'dir' && state.fileList.length > 0 && !state.running && !state.result" class="ov-file-preview">
         <div class="ov-file-preview-header">
           <span>找到 {{ state.fileList.length }} 个文件</span>
           <el-button text size="small" @click="scanDir">重新扫描</el-button>
@@ -59,7 +67,7 @@
       <div class="ov-action-card">
         <div class="ov-action-row">
           <el-button type="primary" size="large"
-            :disabled="!state.fileList.length || state.running"
+            :disabled="!state.inputPath || !state.hasFiles || state.running"
             :loading="state.running"
             class="ov-start-btn"
             @click="runCompress"
@@ -128,7 +136,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive } from "vue";
+import { onMounted, onUnmounted, reactive, computed } from "vue";
 import { ElMessage } from "element-plus";
 import LogPanel from "../components/LogPanel.vue";
 import { useDropZone } from "../composables/useDropZone";
@@ -136,13 +144,21 @@ import { useDropZone } from "../composables/useDropZone";
 const sourceDrop = reactive(useDropZone());
 
 const state = reactive({
-  inputDir: "",
+  mode: "",        // "file" | "dir"
+  inputPath: "",
+  fileName: "",
+  fileSize: 0,
   fileList: [],
   running: false,
   progress: 0,
   currentFile: "",
   result: null,
   logs: [],
+});
+
+const hasFiles = computed(() => {
+  if (state.mode === "dir") return state.fileList.length > 0;
+  return !!state.inputPath;
 });
 
 function getApi() {
@@ -156,6 +172,23 @@ function pushLog(line) {
   if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
 }
 
+function resetInput() {
+  state.mode = "";
+  state.inputPath = "";
+  state.fileName = "";
+  state.fileSize = 0;
+  state.fileList = [];
+  state.result = null;
+  state.logs = [];
+}
+
+async function pickFile() {
+  try {
+    const info = await getApi().pickCompressFile();
+    if (info) applyFile(info);
+  } catch (err) { ElMessage.error(err.message); }
+}
+
 async function pickDir() {
   try {
     const info = await getApi().pickCompressDir();
@@ -163,32 +196,50 @@ async function pickDir() {
   } catch (err) { ElMessage.error(err.message); }
 }
 
-async function onDirDrop(e) {
-  const dirPath = sourceDrop.onDrop(e);
-  if (!dirPath) return;
-  applyDir({ path: dirPath, name: dirPath.split(/[/\\]/).pop() });
+async function onDrop(e) {
+  const droppedPath = sourceDrop.onDrop(e);
+  if (!droppedPath) return;
+
+  const info = await getApi().statCompressPath(droppedPath);
+  if (!info) {
+    ElMessage.warning("无法识别的路径");
+    return;
+  }
+  if (info.type === "file") {
+    if (!/\.xlsx$/i.test(info.name)) {
+      ElMessage.warning("请选择 .xlsx 格式的文件");
+      return;
+    }
+    applyFile(info);
+  } else {
+    applyDir(info);
+  }
+}
+
+function applyFile(info) {
+  resetInput();
+  state.mode = "file";
+  state.inputPath = info.path;
+  state.fileName = info.name;
+  state.fileSize = info.size;
 }
 
 async function applyDir(info) {
-  state.inputDir = info.path;
-  state.result = null;
-  state.logs = [];
-  state.fileList = [];
+  resetInput();
+  state.mode = "dir";
+  state.inputPath = info.path;
   await scanDir();
 }
 
 async function scanDir() {
   try {
-    const api = getApi();
-    if (api.listDirXlsx) {
-      const files = await api.listDirXlsx(state.inputDir);
-      state.fileList = files;
-    }
+    const files = await getApi().listDirXlsx(state.inputPath);
+    state.fileList = files;
   } catch { /* fallback */ }
 }
 
 async function runCompress() {
-  if (!state.inputDir || state.fileList.length === 0) return;
+  if (!state.inputPath || !hasFiles.value) return;
   state.running = true;
   state.progress = 0;
   state.currentFile = "";
@@ -196,7 +247,10 @@ async function runCompress() {
   state.logs = [];
 
   try {
-    await getApi().runCompress({ inputDir: state.inputDir });
+    const payload = state.mode === "dir"
+      ? { inputDir: state.inputPath }
+      : { inputPath: state.inputPath };
+    await getApi().runCompress(payload);
   } catch (err) {
     state.running = false;
     ElMessage.error(`启动压缩失败：${err.message}`);
@@ -297,7 +351,7 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   padding: 20px;
 }
-.ov-dropzone--has-dir {
+.ov-dropzone--has-input {
   min-height: 80px;
   padding: 16px 20px;
 }
@@ -325,6 +379,10 @@ onUnmounted(() => {
 .ov-dropzone-or {
   font-size: 12px;
   color: var(--text-muted);
+}
+.ov-dropzone-actions {
+  display: flex;
+  gap: 8px;
 }
 .ov-dropzone-filled {
   display: flex;

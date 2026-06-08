@@ -23,15 +23,57 @@ async function walkDir(dir, excludeDir) {
 }
 
 /**
- * Run compress task for an entire directory.
+ * Run compress task for files or a directory.
  *
- * Input: { inputDir, outputDir? }
- *   inputDir  — root directory to scan for .xlsx
- *   outputDir — output root (mirror structure). Defaults to inputDir.
+ * Input: { inputDir, outputDir? }  — folder mode, scan for .xlsx
+ *   or   { inputPath }             — single file mode
  *
  * Output: { totalFiles, totalOriginalSize, totalOptimizedSize, savingsPercent, fileResults }
  */
 async function runCompressTask(request, { logger, reportProgress }) {
+  const isSingleFile = !!request.inputPath;
+
+  if (isSingleFile) {
+    return runSingleFile(request, { logger, reportProgress });
+  }
+
+  return runDirectoryMode(request, { logger, reportProgress });
+}
+
+async function runSingleFile(request, { logger, reportProgress }) {
+  const filePath = path.resolve(request.inputPath);
+  const stat = await fsp.stat(filePath).catch(() => null);
+  if (!stat || !stat.isFile()) {
+    throw new Error(`File does not exist: ${filePath}`);
+  }
+
+  logger.info("Compress single file started.", { filePath });
+
+  const dirName = path.dirname(filePath);
+  const ext = path.extname(filePath);
+  const baseName = path.basename(filePath, ext);
+  const outputPath = path.join(dirName, `${baseName}_min${ext}`);
+
+  reportProgress(10, `压缩: ${path.basename(filePath)}`);
+  const result = await optimizeOne(filePath, outputPath);
+  reportProgress(100, "压缩完成");
+
+  logger.info("Compress single file completed.", {
+    originalSize: result.originalSize,
+    optimizedSize: result.optimizedSize,
+    savingsPercent: result.savingsPercent,
+  });
+
+  return {
+    totalFiles: 1,
+    totalOriginalSize: result.originalSize,
+    totalOptimizedSize: result.optimizedSize,
+    savingsPercent: result.savingsPercent,
+    fileResults: [result],
+  };
+}
+
+async function runDirectoryMode(request, { logger, reportProgress }) {
   const { inputDir } = request;
   const outputDir = request.outputDir || inputDir;
 

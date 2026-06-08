@@ -76,6 +76,8 @@ const api = {
   deleteTemplate: (scope, name) =>
     ipcRenderer.invoke("template:delete", scope, name),
   pickCompressDir: () => ipcRenderer.invoke("compress:pick-dir"),
+  pickCompressFile: () => ipcRenderer.invoke("compress:pick-file"),
+  statCompressPath: (targetPath) => ipcRenderer.invoke("compress:stat-path", targetPath),
   runCompress: (request) => ipcRenderer.invoke("compress:run", sanitizeForIpc(request)),
   listDirXlsx: (dirPath) => ipcRenderer.invoke("compress:list-dir", dirPath),
   onTaskEvent: (handler) => {

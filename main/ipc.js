@@ -524,6 +524,34 @@ function registerIpcHandlers() {
     return { path: dirPath, name: path.basename(dirPath) };
   });
 
+  ipcMain.handle("compress:pick-file", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "选择要压缩的 Excel 文件",
+      properties: ["openFile"],
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const stat = await fs.stat(filePath);
+    return { path: filePath, name: path.basename(filePath), size: stat.size };
+  });
+
+  ipcMain.handle("compress:stat-path", async (_, targetPath) => {
+    const nodeFs = require("node:fs");
+    try {
+      const stat = nodeFs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        return { type: "dir", path: targetPath, name: path.basename(targetPath) };
+      }
+      if (stat.isFile()) {
+        return { type: "file", path: targetPath, name: path.basename(targetPath), size: stat.size };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
   ipcMain.handle("compress:run", async (_, request) => {
     const taskId = crypto.randomUUID();
 
