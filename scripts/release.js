@@ -94,6 +94,7 @@ async function main() {
     execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
     execSync(`git tag ${tag}`, { stdio: "inherit" });
     console.log(`✓ 本地 tag ${tag} 已创建`);
+    execSync(`git push origin main`, { stdio: "inherit" });
     execSync(`git push origin ${tag}`, { stdio: "inherit" });
     console.log(`✓ tag ${tag} 已推送，CI 将自动构建`);
   } catch (err) {

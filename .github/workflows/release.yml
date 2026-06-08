@@ -53,6 +53,12 @@ jobs:
           pnpm config set fetch-retries 5
           pnpm config set fetch-retry-maxtimeout 120000
 
+      # Pre-install wrangler globally so deploy step doesn't waste time
+      # downloading it via npx (which is slow on Windows + Chinese network).
+      - name: Install wrangler (one-time, cached globally)
+        shell: pwsh
+        run: pnpm add -g wrangler
+
       - name: Install dependencies
         shell: pwsh
         run: |
@@ -86,8 +92,9 @@ jobs:
           $prevTag = git tag --sort=-version:refname | Where-Object { $_ -ne $currentTag } | Select-Object -First 1
 
           if ($prevTag) {
-            $log = git log "$prevTag..$currentTag" --oneline --no-decorate --format="- %s" `
+            $lines = git log "$prevTag..$currentTag" --oneline --no-decorate --format="- %s" `
               | Where-Object { $_ -notmatch '^\- release: v' }
+            $log = $lines -join "`r`n"
           } else {
             $log = "Initial release."
           }
@@ -250,5 +257,5 @@ jobs:
           Set-Content -Path "$tmpDir/index.html" -Value $lines -Encoding UTF8
 
           Write-Host "Deploying to Cloudflare Pages..."
-          npx wrangler pages deploy "$tmpDir" --project-name excel-tools --branch main
+          wrangler pages deploy "$tmpDir" --project-name excel-tools --branch main
           Write-Host "Cloudflare Pages deploy complete."
