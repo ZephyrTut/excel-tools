@@ -67,6 +67,7 @@ jobs:
 
       # ── 同步安装包到 Gitee（国内用户免 VPN 更新） ──────────────
       - name: Sync installers to Gitee mirror
+        shell: bash
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
@@ -77,5 +78,10 @@ jobs:
           git config user.email "actions@github.com"
           git add .
           git commit -m "sync ${{ github.ref_name }}"
-          git remote add gitee https://ZephyrTut:${GITEE_TOKEN}@gitee.com/ZephyrTut/excel-tools.git
-          git push gitee release --force
+          git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
+
+          # GIT_ASKPASS 提供 token，避免 URL 中特殊字符被错误解析
+          echo '#!/bin/sh' > .askpass
+          echo 'echo "$GITEE_TOKEN"' >> .askpass
+          chmod +x .askpass
+          GIT_ASKPASS=.askpass git push gitee release --force
