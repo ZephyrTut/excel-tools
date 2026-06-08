@@ -12,6 +12,13 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.2.3)"
+        required: true
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build-and-release:
@@ -51,12 +58,13 @@ jobs:
       # 上传构建产物到 GitHub Release（只传安装包和 blockmap，避免 win-unpacked 进入 assets）
       - uses: softprops/action-gh-release@v2
         with:
-          name: Excel Tools ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Excel Tools ${{ env.RELEASE_TAG }}
           body: |
-            ## Excel Tools ${{ github.ref_name }}
+            ## Excel Tools ${{ env.RELEASE_TAG }}
 
             ### Windows
-            - `Excel-Tools-Setup-${{ github.ref_name }}.exe` — 安装包（推荐）
+            - `Excel-Tools-Setup-${{ env.RELEASE_TAG }}.exe` — 安装包（推荐）
 
             ---
             自动发布自 GitHub Actions。
@@ -80,7 +88,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "sync ${{ github.ref_name }}"
+          git commit -m "sync ${{ env.RELEASE_TAG }}"
           git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
 
           # GIT_ASKPASS 提供 token，避免 URL 中特殊字符被错误解析
