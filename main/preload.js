@@ -51,8 +51,6 @@ const api = {
   selectInputFile: () => ipcRenderer.invoke("dialog:select-input-file"),
   selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
   selectOutputDir: () => ipcRenderer.invoke("dialog:select-output-dir"),
-  selectOptimizeFile: () => ipcRenderer.invoke("dialog:select-optimize-file"),
-  getFileInfo: (filePath) => ipcRenderer.invoke("file:get-info", filePath),
   getSheetNames: (filePath) =>
     ipcRenderer.invoke("file:get-sheet-names", filePath),
   getDirectorySheetNames: (inputDir, excludedPaths = []) =>
@@ -77,9 +75,9 @@ const api = {
     ipcRenderer.invoke("template:import", scope, sourcePath),
   deleteTemplate: (scope, name) =>
     ipcRenderer.invoke("template:delete", scope, name),
-  runOptimize: (filePath) => ipcRenderer.invoke("optimize:run", filePath),
-  saveOptimizedFile: (tempPath) =>
-    ipcRenderer.invoke("optimize:save", tempPath),
+  pickCompressDir: () => ipcRenderer.invoke("compress:pick-dir"),
+  runCompress: (request) => ipcRenderer.invoke("compress:run", sanitizeForIpc(request)),
+  listDirXlsx: (dirPath) => ipcRenderer.invoke("compress:list-dir", dirPath),
   onTaskEvent: (handler) => {
     const listener = (_, event) => handler(event);
     ipcRenderer.on("task:event", listener);

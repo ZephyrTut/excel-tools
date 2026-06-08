@@ -1,114 +1,103 @@
 <template>
   <div class="ov">
-    <!-- 页面标题 -->
+    <!-- Header -->
     <div class="ov-header animate-fade-in-up">
       <div class="ov-header-accent"></div>
-      <h2 class="ov-title">XLSX 文件压缩</h2>
-      <p class="ov-desc">ZIP 级别深度压缩，清理空单元格、冗余 XML 与隐藏元数据</p>
+      <h2 class="ov-title">XLSX 批量压缩</h2>
+      <p class="ov-desc">选择文件夹，批量压缩所有 .xlsx 文件（保留目录结构，输出 _min.xlsx）</p>
     </div>
 
-    <!-- §1 文件输入区 -->
+    <!-- Input: Folder drop zone -->
     <section class="ov-section animate-fade-in-up">
-      <div class="section-label">文件输入</div>
-      <div
-        class="drop-zone ov-dropzone"
-        :class="{ 'drop-zone--active': sourceDrop.isDragOver, 'ov-dropzone--has-file': !!state.fileInfo.path }"
+      <div class="section-label">选择文件夹</div>
+      <div class="drop-zone ov-dropzone"
+        :class="{ 'drop-zone--active': sourceDrop.isDragOver, 'ov-dropzone--has-dir': !!state.inputDir }"
         @dragover.prevent="sourceDrop.onDragOver"
         @dragenter="sourceDrop.onDragEnter"
         @dragleave="sourceDrop.onDragLeave"
-        @drop="onSourceFileDrop"
+        @drop="onDirDrop"
       >
         <div class="ov-dropzone-inner">
-          <div v-if="!state.fileInfo.path" class="ov-dropzone-empty">
-            <span class="ov-dropzone-icon">📄</span>
-            <span class="ov-dropzone-text">拖拽 <strong>.xlsx</strong> 文件到此处</span>
+          <div v-if="!state.inputDir" class="ov-dropzone-empty">
+            <span class="ov-dropzone-icon">📁</span>
+            <span class="ov-dropzone-text">拖拽<strong>文件夹</strong>到此处</span>
             <span class="ov-dropzone-or">或</span>
-            <el-button type="primary" plain @click="pickFile">选择文件</el-button>
+            <el-button type="primary" plain @click="pickDir">选择文件夹</el-button>
           </div>
           <div v-else class="ov-dropzone-filled">
-            <span class="ov-file-icon">📊</span>
+            <span class="ov-file-icon">📁</span>
             <div class="ov-file-info">
-              <span class="ov-file-name">{{ state.fileInfo.name }}</span>
-              <span class="ov-file-size">{{ formatSize(state.fileInfo.size) }}</span>
+              <span class="ov-file-name">{{ state.inputDir }}</span>
+              <span class="ov-file-size" v-if="state.fileList.length">{{ state.fileList.length }} 个 .xlsx 文件</span>
             </div>
-            <el-button text type="primary" size="small" @click="pickFile">更换文件</el-button>
+            <el-button text type="primary" size="small" @click="pickDir">更换</el-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- File list preview -->
+      <div v-if="state.fileList.length > 0 && !state.running && !state.result" class="ov-file-preview">
+        <div class="ov-file-preview-header">
+          <span>找到 {{ state.fileList.length }} 个文件</span>
+          <el-button text size="small" @click="scanDir">重新扫描</el-button>
+        </div>
+        <div class="ov-file-preview-list">
+          <div v-for="(f, i) in state.fileList.slice(0, 20)" :key="i" class="ov-file-preview-item">
+            <span class="ov-fpi-name">{{ f.relative }}</span>
+            <span class="ov-fpi-size">{{ formatSize(f.size) }}</span>
+          </div>
+          <div v-if="state.fileList.length > 20" class="ov-file-preview-more">
+            ...还有 {{ state.fileList.length - 20 }} 个文件
           </div>
         </div>
       </div>
     </section>
 
-    <!-- §2 执行区 -->
+    <!-- Action -->
     <section class="ov-section animate-fade-in-up">
       <div class="section-label">执行压缩</div>
       <div class="ov-action-card">
         <div class="ov-action-row">
-          <el-button
-            type="primary"
-            size="large"
-            :disabled="!state.fileInfo.path || state.optimizing"
-            :loading="state.optimizing"
+          <el-button type="primary" size="large"
+            :disabled="!state.fileList.length || state.running"
+            :loading="state.running"
             class="ov-start-btn"
-            @click="runOptimize"
+            @click="runCompress"
           >
-            <template #icon>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-            </template>
-            {{ state.optimizing ? '压缩中...' : '开始压缩' }}
+            {{ state.running ? '压缩中...' : '开始压缩' }}
           </el-button>
-          <div v-if="state.optimizing || state.result" class="ov-progress-wrap">
-            <el-progress
-              :percentage="state.progress"
-              :stroke-width="8"
-              :status="state.progress === 100 ? 'success' : undefined"
-              class="ov-progress"
-            />
+          <div v-if="state.running" class="ov-progress-wrap">
+            <el-progress :percentage="state.progress" :stroke-width="8" class="ov-progress" />
             <span class="ov-progress-label">{{ state.progress }}%</span>
           </div>
         </div>
-
-        <!-- 压缩预估对比条 (仅在选中文件后显示) -->
-        <div v-if="state.fileInfo.path && !state.optimizing && !state.result" class="ov-preview">
-          <div class="ov-preview-bar">
-            <span class="ov-preview-bar-label">原始</span>
-            <div class="ov-preview-track">
-              <div class="ov-preview-fill ov-preview-fill--raw" :style="{ width: '100%' }"></div>
-            </div>
-            <span class="ov-preview-bar-value">{{ formatSize(state.fileInfo.size) }}</span>
-          </div>
-          <div class="ov-preview-bar">
-            <span class="ov-preview-bar-label">压缩后</span>
-            <div class="ov-preview-track">
-              <div class="ov-preview-fill ov-preview-fill--opt" :style="{ width: '0%' }"></div>
-            </div>
-            <span class="ov-preview-bar-value ov-preview-bar-value--muted">等待压缩</span>
-          </div>
+        <div v-if="state.running && state.currentFile" class="ov-current-file">
+          当前文件：{{ state.currentFile }}
         </div>
       </div>
     </section>
 
-    <!-- §3 日志 -->
+    <!-- Logs -->
     <section class="ov-section animate-fade-in-up">
       <LogPanel :lines="state.logs" @clear="state.logs = []" />
     </section>
 
-    <!-- §4 结果区 -->
+    <!-- Results -->
     <section v-if="state.result" class="ov-section ov-result-section animate-slide-up">
       <div class="section-label">压缩结果</div>
-
-      <!-- 统计卡片 -->
-      <div class="ov-result-stats">
+      <div class="ov-result-summary">
+        <div class="stat-card">
+          <div class="stat-label">处理文件</div>
+          <div class="stat-value">{{ state.result.totalFiles }}</div>
+        </div>
         <div class="stat-card">
           <div class="stat-label">原始大小</div>
-          <div class="stat-value">{{ formatSize(state.result.originalSize) }}</div>
+          <div class="stat-value">{{ formatSize(state.result.totalOriginalSize) }}</div>
         </div>
-        <div class="ov-result-arrow">→</div>
         <div class="stat-card">
-          <div class="stat-label">压缩后大小</div>
-          <div class="stat-value primary">{{ formatSize(state.result.optimizedSize) }}</div>
+          <div class="stat-label">压缩后</div>
+          <div class="stat-value primary">{{ formatSize(state.result.totalOptimizedSize) }}</div>
         </div>
-        <div class="ov-result-arrow">→</div>
         <div class="stat-card stat-card--savings">
           <div class="stat-label">压缩率</div>
           <div class="stat-value success">{{ state.result.savingsPercent }}%</div>
@@ -120,48 +109,19 @@
         </div>
       </div>
 
-      <!-- Sheet 明细表 -->
       <div class="ov-result-table-wrap">
-        <el-table :data="state.result.sheets" stripe size="small" class="ov-table" style="width: 100%">
-          <el-table-column label="Sheet 名称" prop="name" min-width="180" />
-          <el-table-column label="压缩前" align="right" width="140">
-            <template #default="{ row }">
-              {{ formatSize(row.originalSize) }}
-            </template>
+        <el-table :data="state.result.fileResults" stripe size="small" style="width:100%">
+          <el-table-column label="文件名" prop="fileName" min-width="200" />
+          <el-table-column label="原始" align="right" width="120">
+            <template #default="{ row }">{{ formatSize(row.originalSize) }}</template>
           </el-table-column>
-          <el-table-column label="压缩后" align="right" width="140">
-            <template #default="{ row }">
-              <span class="text-success">{{ formatSize(row.optimizedSize) }}</span>
-            </template>
+          <el-table-column label="压缩后" align="right" width="120">
+            <template #default="{ row }"><span class="text-success">{{ formatSize(row.optimizedSize) }}</span></template>
           </el-table-column>
-          <el-table-column label="压缩率" align="right" width="120">
-            <template #default="{ row }">
-              <span class="ov-compress-pct">{{ row.originalSize > 0 ? ((1 - row.optimizedSize / row.originalSize) * 100).toFixed(1) + '%' : '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="" width="80">
-            <template #default="{ row }">
-              <div v-if="row.originalSize > 0" class="ov-minibar">
-                <div class="ov-minibar-fill" :style="{ width: ((1 - row.optimizedSize / row.originalSize) * 100).toFixed(0) + '%' }"></div>
-              </div>
-            </template>
+          <el-table-column label="压缩率" align="right" width="100">
+            <template #default="{ row }">{{ row.savingsPercent }}%</template>
           </el-table-column>
         </el-table>
-      </div>
-
-      <!-- 保存 -->
-      <div class="ov-save-row">
-        <el-button type="success" size="large" class="ov-save-btn" @click="saveFile" :icon="Download">
-          {{ state.savedPath ? '保存另一份' : '保存压缩后的文件' }}
-        </el-button>
-        <transition name="fade">
-          <span v-if="state.savedPath" class="ov-saved-hint">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; color: var(--success)">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            已保存：{{ state.savedPath }}
-          </span>
-        </transition>
       </div>
     </section>
   </div>
@@ -170,112 +130,96 @@
 <script setup>
 import { onMounted, onUnmounted, reactive } from "vue";
 import { ElMessage } from "element-plus";
-import { Download } from "@element-plus/icons-vue";
 import LogPanel from "../components/LogPanel.vue";
 import { useDropZone } from "../composables/useDropZone";
 
 const sourceDrop = reactive(useDropZone());
 
 const state = reactive({
-  fileInfo: { path: "", name: "", size: 0 },
-  optimizing: false,
+  inputDir: "",
+  fileList: [],
+  running: false,
   progress: 0,
+  currentFile: "",
   result: null,
-  savedPath: "",
   logs: [],
 });
 
-let unsubTask = null;
-const MAX_LOG_LINES = 500;
-
-function pushLog(line) {
-  state.logs.push(`[${new Date().toLocaleTimeString()}] ${line}`);
-  if (state.logs.length > MAX_LOG_LINES) {
-    state.logs.splice(0, state.logs.length - MAX_LOG_LINES);
-  }
-}
-
 function getApi() {
   const api = window.excelTools;
-  if (!api) {
-    throw new Error("桌面桥接未就绪：window.excelTools 不存在。请通过 Electron 窗口运行。");
-  }
+  if (!api) throw new Error("桌面桥接未就绪");
   return api;
 }
 
-async function pickFile() {
-  try {
-    const info = await getApi().selectOptimizeFile();
-    if (info) applyFile(info);
-  } catch (err) {
-    ElMessage.error(err.message);
-  }
+function pushLog(line) {
+  state.logs.push(`[${new Date().toLocaleTimeString()}] ${line}`);
+  if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
 }
 
-function applyFile(info) {
-  state.fileInfo = info;
+async function pickDir() {
+  try {
+    const info = await getApi().pickCompressDir();
+    if (info) applyDir(info);
+  } catch (err) { ElMessage.error(err.message); }
+}
+
+async function onDirDrop(e) {
+  const dirPath = sourceDrop.onDrop(e);
+  if (!dirPath) return;
+  applyDir({ path: dirPath, name: dirPath.split(/[/\\]/).pop() });
+}
+
+async function applyDir(info) {
+  state.inputDir = info.path;
   state.result = null;
-  state.savedPath = "";
   state.logs = [];
+  state.fileList = [];
+  await scanDir();
 }
 
-async function onSourceFileDrop(e) {
-  const filePath = sourceDrop.onDrop(e);
-  if (!filePath) return;
-  if (!filePath.toLowerCase().endsWith('.xlsx')) {
-    ElMessage.warning('请拖入 .xlsx 格式的文件');
-    return;
-  }
+async function scanDir() {
   try {
-    const info = await getApi().getFileInfo(filePath);
-    applyFile(info);
-  } catch (err) {
-    ElMessage.error(err.message);
-  }
-}
-
-async function runOptimize() {
-  if (!state.fileInfo.path) return;
-  state.optimizing = true;
-  state.progress = 0;
-  state.result = null;
-  state.savedPath = "";
-  state.logs = [];
-  try {
-    const result = await getApi().runOptimize(state.fileInfo.path);
-    state.progress = 100;
-    state.result = result;
-    ElMessage.success(`压缩完成！压缩率 ${result.savingsPercent}%`);
-  } catch (err) {
-    state.progress = 0;
-    ElMessage.error(`压缩失败：${err.message}`);
-  } finally {
-    state.optimizing = false;
-  }
-}
-
-async function saveFile() {
-  if (!state.result?.tempPath) return;
-  try {
-    const savedPath = await getApi().saveOptimizedFile(state.result.tempPath);
-    if (savedPath) {
-      state.savedPath = savedPath;
-      ElMessage.success(`文件已保存到：${savedPath}`);
+    const api = getApi();
+    if (api.listDirXlsx) {
+      const files = await api.listDirXlsx(state.inputDir);
+      state.fileList = files;
     }
+  } catch { /* fallback */ }
+}
+
+async function runCompress() {
+  if (!state.inputDir || state.fileList.length === 0) return;
+  state.running = true;
+  state.progress = 0;
+  state.currentFile = "";
+  state.result = null;
+  state.logs = [];
+
+  try {
+    await getApi().runCompress({ inputDir: state.inputDir });
   } catch (err) {
-    ElMessage.error(`保存失败：${err.message}`);
+    state.running = false;
+    ElMessage.error(`启动压缩失败：${err.message}`);
   }
 }
 
 function handleTaskEvent(event) {
-  if (!state.optimizing) return;
-  if (event.type === "log") {
+  if (event.type === "log" && event.level && event.message) {
     pushLog(`${event.level.toUpperCase()} ${event.message}`);
-  } else if (event.type === "progress") {
+  } else if (event.type === "progress" && event.stage) {
     state.progress = event.progress;
-    pushLog(`进度 ${event.progress}% - ${event.stage}`);
+    state.currentFile = event.stage;
+  } else if (event.type === "done" && event.result) {
+    state.running = false;
+    state.progress = 100;
+    state.currentFile = "";
+    state.result = event.result;
+    pushLog(`压缩完成：${event.result.totalFiles} 个文件`);
+    ElMessage.success(`压缩完成！共处理 ${event.result.totalFiles} 个文件，压缩率 ${event.result.savingsPercent}%`);
   } else if (event.type === "error") {
+    state.running = false;
     pushLog(`失败：${event.message}`);
+    ElMessage.error(event.message);
   }
 }
 
@@ -286,10 +230,10 @@ function formatSize(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 2 : 0) + " " + units[i];
 }
 
+let unsubTask = null;
 onMounted(() => {
   unsubTask = getApi().onTaskEvent(handleTaskEvent);
 });
-
 onUnmounted(() => {
   if (unsubTask) unsubTask();
 });
@@ -353,7 +297,7 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   padding: 20px;
 }
-.ov-dropzone--has-file {
+.ov-dropzone--has-dir {
   min-height: 80px;
   padding: 16px 20px;
 }
@@ -408,6 +352,60 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
+/* ── File list preview ── */
+.ov-file-preview {
+  margin-top: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+}
+.ov-file-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+.ov-file-preview-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.ov-file-preview-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.ov-file-preview-item:nth-child(odd) {
+  background: var(--bg-surface);
+}
+.ov-fpi-name {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 12px;
+}
+.ov-fpi-size {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.ov-file-preview-more {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  border-top: 1px solid var(--border-light);
+}
+
 /* ── 执行区卡片 ── */
 .ov-action-card {
   background: var(--bg-card);
@@ -442,73 +440,26 @@ onUnmounted(() => {
   color: var(--text-secondary);
   min-width: 36px;
 }
-
-/* ── 压缩预估对比条 ── */
-.ov-preview {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-light);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.ov-preview-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.ov-preview-bar-label {
+.ov-current-file {
+  margin-top: 12px;
   font-size: 12px;
-  font-weight: 500;
   color: var(--text-muted);
-  width: 48px;
-  flex-shrink: 0;
-}
-.ov-preview-track {
-  flex: 1;
-  height: 8px;
-  background: var(--bg-surface);
-  border-radius: 4px;
   overflow: hidden;
-}
-.ov-preview-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.6s ease;
-}
-.ov-preview-fill--raw {
-  background: linear-gradient(90deg, var(--text-muted), #94a3b8);
-}
-.ov-preview-fill--opt {
-  background: linear-gradient(90deg, var(--primary), var(--primary-light));
-}
-.ov-preview-bar-value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  width: 80px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.ov-preview-bar-value--muted {
-  color: var(--text-muted);
-  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── 结果区 ── */
 .ov-result-section {
   margin-bottom: 32px;
 }
-
-/* 统计卡片行 */
-.ov-result-stats {
+.ov-result-summary {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 20px;
 }
-.ov-result-stats .stat-card {
+.ov-result-summary .stat-card {
   flex: 1;
   text-align: center;
   padding: 20px 16px;
@@ -532,83 +483,14 @@ onUnmounted(() => {
   border-radius: 2px;
   transition: width 0.8s ease;
 }
-.ov-result-arrow {
-  font-size: 18px;
-  color: var(--text-muted);
-  font-weight: 300;
-  flex-shrink: 0;
-}
-
-/* 表格 */
 .ov-result-table-wrap {
   margin-bottom: 20px;
-}
-.ov-table :deep(.el-table__header th) {
-  background: var(--bg-surface);
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.ov-compress-pct {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--success);
-}
-.ov-minibar {
-  width: 60px;
-  height: 6px;
-  background: var(--border-light);
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 0 auto;
-}
-.ov-minibar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--success), #34d399);
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
-/* 保存行 */
-.ov-save-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.ov-save-btn {
-  min-width: 180px;
-  font-weight: 600;
-}
-.ov-saved-hint {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  color: var(--success);
-  max-width: 400px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 淡入过渡 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 /* ── 响应式 ── */
 @media (max-width: 640px) {
-  .ov-result-stats {
+  .ov-result-summary {
     flex-direction: column;
-  }
-  .ov-result-arrow {
-    transform: rotate(90deg);
   }
   .ov-action-row {
     flex-direction: column;

@@ -76,6 +76,10 @@ class WorkerRunner extends EventEmitter {
     this.startTask(taskId, request, "merge");
   }
 
+  startCompressTask(taskId, request) {
+    this.startTask(taskId, request, "compress");
+  }
+
   async cancelTask(taskId) {
     const worker = this.tasks.get(taskId);
     if (!worker) return false;

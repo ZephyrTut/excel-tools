@@ -14,9 +14,6 @@ const sendService = require("../services/send/sendService");
 function excelReader() {
   return require("../services/split/excelReader");
 }
-function templateOptimizer() {
-  return require("../services/optimize/templateOptimizer");
-}
 
 /**
  * 递归净化数据，移除所有不可 structuredClone 的值
@@ -515,124 +512,57 @@ function registerIpcHandlers() {
     updater.installUpdate();
   });
 
-  // ── Template optimizer ────────────────────────────────────────────
+  // ── Compress (XLSX ZIP/XML level optimization) ────────────────────
 
-  ipcMain.handle("dialog:select-optimize-file", async () => {
+  ipcMain.handle("compress:pick-dir", async () => {
     const result = await dialog.showOpenDialog({
-      title: "选择要优化的 Excel 文件",
-      properties: ["openFile"],
-      filters: [{ name: "Excel", extensions: ["xlsx"] }],
+      title: "选择包含 Excel 文件的文件夹",
+      properties: ["openDirectory"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    const filePath = result.filePaths[0];
-    const stat = await fs.stat(filePath);
-    return { path: filePath, name: path.basename(filePath), size: stat.size };
+    const dirPath = result.filePaths[0];
+    return { path: dirPath, name: path.basename(dirPath) };
   });
 
-  ipcMain.handle("optimize:run", async (_, filePath) => {
+  ipcMain.handle("compress:run", async (_, request) => {
     const taskId = crypto.randomUUID();
-    const tmpPath = path.join(
-      os.tmpdir(),
-      `template_opt_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2, 8)}.xlsx`
-    );
 
-    broadcast({
-      type: "log",
-      taskId,
-      level: "info",
-      message: "开始优化文件...",
-    });
-    broadcast({
-      type: "progress",
-      taskId,
-      progress: 5,
-      stage: "正在分析文件结构...",
-    });
+    broadcast({ type: "log", taskId, level: "info", message: "压缩任务已提交至后台处理" });
 
-    const optResult = await templateOptimizer().optimizeTemplate(
-      filePath,
-      tmpPath,
-      (pct) => {
-        broadcast({
-          type: "progress",
-          taskId,
-          progress: 5 + Math.round(pct * 85),
-          stage: "正在优化...",
-        });
-      }
-    );
+    // Start Worker
+    runner.startCompressTask(taskId, request);
 
-    broadcast({
-      type: "progress",
-      taskId,
-      progress: 90,
-      stage: "正在计算统计信息...",
-    });
-
-    // Read sheet-level stats from the optimized file
-    const AdmZip = require("adm-zip");
-    const origZip = new AdmZip(filePath);
-    const optZip = new AdmZip(tmpPath);
-
-    const origSheets = {};
-    const optSheets = {};
-    for (const e of origZip.getEntries()) {
-      if (
-        e.entryName.startsWith("xl/worksheets/sheet") &&
-        e.entryName.endsWith(".xml")
-      ) {
-        origSheets[e.entryName] = e.getData().length;
-      }
-    }
-    for (const e of optZip.getEntries()) {
-      if (
-        e.entryName.startsWith("xl/worksheets/sheet") &&
-        e.entryName.endsWith(".xml")
-      ) {
-        optSheets[e.entryName] = e.getData().length;
-      }
-    }
-
-    const sheetNames = [
-      ...new Set([...Object.keys(origSheets), ...Object.keys(optSheets)]),
-    ].sort();
-    const sheets = sheetNames.map((name) => {
-      const shortName = name.replace("xl/worksheets/", "").replace(".xml", "");
-      return {
-        name: shortName,
-        originalSize: origSheets[name] || 0,
-        optimizedSize: optSheets[name] || 0,
-      };
-    });
-
-    broadcast({
-      type: "log",
-      taskId,
-      level: "info",
-      message: `优化完成，压缩率 ${optResult.savingsPercent}%`,
-    });
-    broadcast({ type: "progress", taskId, progress: 100, stage: "优化完成" });
-
-    return {
-      originalSize: optResult.originalSize,
-      optimizedSize: optResult.optimizedSize,
-      savingsPercent: optResult.savingsPercent,
-      sheets,
-      tempPath: tmpPath,
-    };
+    // Return taskId immediately; results come via task:event
+    return { taskId };
   });
 
-  ipcMain.handle("optimize:save", async (_, tempPath) => {
-    const result = await dialog.showSaveDialog({
-      title: "保存优化后的文件",
-      defaultPath: "optimized_template.xlsx",
-      filters: [{ name: "Excel", extensions: ["xlsx"] }],
-    });
-    if (result.canceled || !result.filePath) return null;
-    await fs.copyFile(tempPath, result.filePath);
-    return result.filePath;
+  ipcMain.handle("compress:list-dir", async (_, dirPath) => {
+    const walkDir = require("node:fs");
+    const results = [];
+
+    function walk(dir) {
+      for (const entry of walkDir.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results.push(...walk(fullPath));
+        } else if (entry.isFile() && /\.xlsx$/i.test(entry.name)) {
+          const stat = walkDir.statSync(fullPath);
+          results.push({
+            path: fullPath,
+            name: entry.name,
+            relative: path.relative(dirPath, fullPath),
+            size: stat.size,
+          });
+        }
+      }
+      return results;
+    }
+
+    try {
+      return walk(dirPath);
+    } catch (err) {
+      return [];
+    }
   });
 
   // ── Send Tool ──────────────────────────────────────────────────────

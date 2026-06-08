@@ -1,6 +1,7 @@
 const { parentPort, workerData } = require("node:worker_threads");
 const { runSplitTask } = require("../services/split/splitService");
 const { runMergeTask } = require("../services/merge/mergeService");
+const { runCompressTask } = require("../services/compress/compressService");
 
 const emit = (payload) => parentPort.postMessage(payload);
 
@@ -23,7 +24,9 @@ async function run() {
   };
 
   try {
-    const taskRunner = taskType === "merge" ? runMergeTask : runSplitTask;
+    const taskRunner = taskType === "merge" ? runMergeTask
+      : taskType === "compress" ? runCompressTask
+      : runSplitTask;
     const result = await taskRunner(request, { logger, reportProgress });
     emit({ type: "done", taskId, result });
   } catch (error) {
