@@ -30,7 +30,7 @@
   ],
   "win": {
     "icon": "assets/logo.png",
-    "artifactName": "Excel-Tools-Setup-${version}.${ext}",
+    "artifactName": "Excel-Tools-Setup-v${version}.${ext}",
     "target": [
       {
         "target": "nsis",

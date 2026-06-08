@@ -32,8 +32,8 @@ pnpm exec electron-builder --win  # NSIS 打包
 
 | 文件 | 说明 |
 |------|------|
-| `Excel-Tools-Setup-{version}.exe` | NSIS 安装包 |
-| `Excel-Tools-Setup-{version}.exe.blockmap` | 增量更新映射 |
+| `Excel-Tools-Setup-v{version}.exe` | NSIS 安装包 |
+| `Excel-Tools-Setup-v{version}.exe.blockmap` | 增量更新映射 |
 | `latest.yml` | electron-updater 元数据 |
 
 ## 发布流程
@@ -75,7 +75,7 @@ git tag v1.2.x && git push origin v1.2.x
 - **Bucket：** `excel-tools-release`
 - **区域：** `oss-cn-hangzhou`
 - **latest.yml：** https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml
-- **安装包：** `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-{version}.exe`
+- **安装包：** `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
 
 ### Cloudflare Pages 下载页
 

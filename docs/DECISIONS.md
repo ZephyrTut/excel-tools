@@ -70,8 +70,8 @@ GitHub Actions (release.yml)
                           ↓
   OSS: https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/
   ├── latest.yml（electron-updater 元数据）
-  ├── Excel-Tools-Setup-{version}.exe
-  └── Excel-Tools-Setup-{version}.exe.blockmap
+  ├── Excel-Tools-Setup-v{version}.exe
+  └── Excel-Tools-Setup-v{version}.exe.blockmap
                           ↓
   Cloudflare Pages: https://excel-tools.pages.dev/
   └── index.html 显示下载链接，国内用户免 VPN 访问
