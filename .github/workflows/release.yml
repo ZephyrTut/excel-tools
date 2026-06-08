@@ -108,37 +108,37 @@ jobs:
           $start = [int64]$env:RELEASE_UPLOAD_START
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Upload GitHub release assets: $($end - $start)s"
 
-      # ── 同步安装包到 Gitee（国内用户免 VPN 更新） ──────────────
-      # 上传大文件到国内服务器可能较慢（~分钟级），--progress 可查看进度
-      - name: Sync installers to Gitee mirror
-        shell: bash
+      # ── 同步安装包到 Tencent COS（国内用户免 VPN 更新） ────────
+      - name: Sync installers to Tencent COS mirror
         continue-on-error: true
         timeout-minutes: 15
         env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        shell: pwsh
         run: |
-          if [ -z "$GITEE_TOKEN" ]; then
-            echo "GITEE_TOKEN is empty, skip Gitee sync."
+          if (-not $env:COS_SECRET_ID) {
+            Write-Host "COS_SECRET_ID is empty, skip COS sync."
             exit 0
-          fi
+          }
 
-          cd dist/installers
-          git init
-          git checkout -b release
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          Write-Host "Installing coscmd..."
+          pip install coscmd -q
 
-          # 只添加安装包和更新元数据，跳过 win-unpacked/ 等构建产物
-          git add *.exe *.exe.blockmap latest.yml
-          git commit -m "sync ${{ github.ref_name }}"
-          git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
+          Write-Host "Configuring coscmd..."
+          coscmd config -a "$env:COS_SECRET_ID" -s "$env:COS_SECRET_KEY" -b "$env:COS_BUCKET" -r "$env:COS_REGION"
 
-          git config --local credential.https://gitee.com.helper ""
+          Write-Host "Uploading latest.yml..."
+          coscmd upload dist/installers/latest.yml /latest.yml
 
-          ASKPASS="$(pwd)/.gitee-askpass"
-          printf '#!/bin/sh\n' > "$ASKPASS"
-          printf 'echo "$GITEE_TOKEN"\n' >> "$ASKPASS"
-          chmod +x "$ASKPASS"
+          Write-Host "Uploading installer and blockmap..."
+          Get-ChildItem -Path dist/installers -Filter "*.exe" | ForEach-Object {
+            coscmd upload $_.FullName /$($_.Name)
+          }
+          Get-ChildItem -Path dist/installers -Filter "*.exe.blockmap" | ForEach-Object {
+            coscmd upload $_.FullName /$($_.Name)
+          }
 
-          echo "Uploading installer to Gitee (this may take a few minutes)..."
-          GIT_ASKPASS="$ASKPASS" git push gitee release --force --progress
+          Write-Host "COS sync complete."
