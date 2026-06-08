@@ -24,36 +24,69 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 先安装 pnpm（后续 setup-node cache 需要 pnpm 在 PATH 中）
-      - uses: pnpm/action-setup@v4
+      - name: Init timing summary
+        shell: pwsh
+        run: |
+          @"
+          # Release Timing Summary
+
+          - Workflow: ${{ github.workflow }}
+          - Ref: ${{ github.ref_name }}
+          - Runner: windows-latest
+          "@ | Set-Content -Path $env:GITHUB_STEP_SUMMARY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 9
           run_install: false
 
-      # 设置 Node.js + 自动缓存 pnpm store（一次搞定，不再重复调用）
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "pnpm"
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          pnpm install --frozen-lockfile
+          $sw.Stop()
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Install dependencies: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
 
-      - run: pnpm build:renderer
+      - name: Build renderer
+        shell: pwsh
+        run: |
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          pnpm build:renderer
+          $sw.Stop()
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build renderer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
 
-      # --publish never: electron-builder 不自行发布，由下面 softprops 统一上传
-      - run: pnpm exec electron-builder --config electron-builder.json --publish never
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          pnpm exec electron-builder --config electron-builder.json --publish never
+          $sw.Stop()
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build installer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # 上传构建产物到 GitHub Release（只传安装包和 blockmap，避免 win-unpacked 进入 assets）
-      - uses: softprops/action-gh-release@v2
+      - name: Mark release upload start
+        shell: pwsh
+        run: |
+          "RELEASE_UPLOAD_START=$(Get-Date -UFormat %s)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload GitHub release assets
+        uses: softprops/action-gh-release@v2
         with:
           name: Excel Tools ${{ github.ref_name }}
           body: |
             ## Excel Tools ${{ github.ref_name }}
 
             ### Windows
-            - `Excel-Tools-Setup-${{ github.ref_name }}.exe` — 安装包（推荐）
+            - `Excel-Tools-Setup-${{ github.ref_name }}.exe` - 安装包（推荐）
 
             ---
             自动发布自 GitHub Actions。
@@ -65,27 +98,9 @@ jobs:
           prerelease: false
           generate_release_notes: false
 
-      # 同步安装包到 Gitee（国内用户免 VPN 更新）
-      - name: Sync installers to Gitee mirror
-        if: success() && env.GITEE_TOKEN != ''
-        shell: bash
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      - name: Record release upload timing
+        shell: pwsh
         run: |
-          cd dist/installers
-          git init
-          git checkout -b release
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add .
-          git commit -m "sync ${GITHUB_REF_NAME}"
-          git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
-
-          git config --local credential.https://gitee.com.helper ""
-
-          ASKPASS="$(pwd)/.gitee-askpass"
-          printf '#!/bin/sh\n' > "$ASKPASS"
-          printf 'echo "$GITEE_TOKEN"\n' >> "$ASKPASS"
-          chmod +x "$ASKPASS"
-
-          GIT_ASKPASS="$ASKPASS" git push gitee release --force
+          $end = [int64][double](Get-Date -UFormat %s)
+          $start = [int64]$env:RELEASE_UPLOAD_START
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Upload GitHub release assets: $($end - $start)s"

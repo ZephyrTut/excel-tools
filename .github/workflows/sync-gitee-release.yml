@@ -1,0 +1,62 @@
+name: Sync Gitee Release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  sync-gitee:
+    name: Sync installers to Gitee
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Skip when GITEE_TOKEN is missing
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "GITEE_TOKEN is empty, skip Gitee sync."
+            exit 0
+          fi
+
+      - name: Download release assets from GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist/installers
+          gh release download "${{ github.event.release.tag_name }}" \
+            --dir dist/installers \
+            --pattern "*.exe" \
+            --pattern "*.exe.blockmap" \
+            --pattern "latest.yml"
+
+      - name: Sync installers to Gitee mirror
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            exit 0
+          fi
+
+          cd dist/installers
+          git init
+          git checkout -b release
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "sync ${{ github.event.release.tag_name }}"
+          git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
+
+          git config --local credential.https://gitee.com.helper ""
+
+          ASKPASS="$(pwd)/.gitee-askpass"
+          printf '#!/bin/sh\n' > "$ASKPASS"
+          printf 'echo "$GITEE_TOKEN"\n' >> "$ASKPASS"
+          chmod +x "$ASKPASS"
+
+          GIT_ASKPASS="$ASKPASS" git push gitee release --force

@@ -7,6 +7,10 @@
   "asarUnpack": [
     "node_modules/exceljs/**"
   ],
+  "electronLanguages": [
+    "en-US",
+    "zh-CN"
+  ],
   "publish": {
     "provider": "github",
     "owner": "ZephyrTut",
@@ -17,7 +21,12 @@
     "services/**/*",
     "dist/renderer/**/*",
     "config/**/*",
-    "package.json"
+    "package.json",
+    "!main/**/*.test.*",
+    "!services/**/*.test.*",
+    "!services/**/__pycache__/**",
+    "!services/**/*.pyc",
+    "!services/send/test_*.py"
   ],
   "win": {
     "icon": "assets/logo.png",

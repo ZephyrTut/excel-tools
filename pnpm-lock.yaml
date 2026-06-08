@@ -14,18 +14,12 @@ importers:
       electron-updater:
         specifier: ^6.8.3
         version: 6.8.3
-      element-plus:
-        specifier: ^2.10.0
-        version: 2.14.0(vue@3.5.34(typescript@5.9.3))
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
       nodemailer:
         specifier: ^8.0.10
         version: 8.0.10
-      vue:
-        specifier: ^3.5.13
-        version: 3.5.34(typescript@5.9.3)
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^5.2.4
@@ -45,6 +39,9 @@ importers:
       electron-builder:
         specifier: ^24.13.3
         version: 24.13.3(electron-builder-squirrel-windows@24.13.3)
+      element-plus:
+        specifier: ^2.10.0
+        version: 2.14.0(vue@3.5.34(typescript@5.9.3))
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
@@ -60,6 +57,9 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.8.0)(jsdom@29.1.1)
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.34(typescript@5.9.3)
       wait-on:
         specifier: ^8.0.1
         version: 8.0.5
