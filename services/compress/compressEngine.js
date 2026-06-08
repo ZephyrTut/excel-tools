@@ -18,6 +18,7 @@ const {
 
 function colLetterToNum(col) {
   let n = 0;
+  col = col.toUpperCase();
   for (let i = 0; i < col.length; i++) n = n * 26 + (col.charCodeAt(i) - 64);
   return n;
 }
@@ -87,13 +88,18 @@ function optimizeWorksheetXml(xml) {
   }
 
   if (maxDataRow === 0 || maxDataCol === 0) {
-    return xml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, "<sheetData/>");
+    return xml
+      .replace(/<sheetData>[\s\S]*?<\/sheetData>/, "<sheetData/>")
+      .replace(/<dimension[^/]*\/>/, '<dimension ref="A1"/>');
   }
 
-  // Remove self-closing styled cells beyond maxDataCol
+  // Remove self-closing styled cells beyond maxDataCol or maxDataRow
   let newSheetData = sheetData.replace(
     /<c\s+r="([A-Z]+)(\d+)"[^>]*\/>/g,
-    (full, colLetter) => (colLetterToNum(colLetter) > maxDataCol ? "" : full)
+    (full, colLetter, rowStr) =>
+      colLetterToNum(colLetter) > maxDataCol || parseInt(rowStr, 10) > maxDataRow
+        ? ""
+        : full
   );
 
   // Remove rows beyond maxDataRow that have NO data cells
@@ -174,10 +180,13 @@ async function optimizeOne(inputPath, outputPath, onProgress) {
 
   const entries = await readXlsxEntries(inputPath);
   const optimized = new Map();
+  const totalEntries = entries.size;
+  let processedEntries = 0;
 
   for (const [fileName, data] of entries) {
     if (shouldRemovePath(fileName)) continue;
-    if (onProgress) onProgress(0);
+    processedEntries++;
+    if (onProgress) onProgress(Math.round((processedEntries / totalEntries) * 100));
 
     if (isWorksheet(fileName) && typeof data === "string") {
       optimized.set(fileName, optimizeWorksheetXml(data));
@@ -192,7 +201,7 @@ async function optimizeOne(inputPath, outputPath, onProgress) {
     optimized.set(
       "[Content_Types].xml",
       ct.replace(
-        /<Override PartName="\/xl\/externalLinks\/[^"]*"[^/]*\/>\s*/g,
+        /<Override PartName="\/xl\/externalLinks\/[^"]*"[^>]*\/>\s*/g,
         ""
       )
     );
@@ -203,7 +212,7 @@ async function optimizeOne(inputPath, outputPath, onProgress) {
   if (rels && typeof rels === "string") {
     optimized.set(
       "xl/_rels/workbook.xml.rels",
-      rels.replace(/<Relationship[^>]*externalLinks[^>]*\/>\s*/g, "")
+      rels.replace(/<Relationship[^>]*Target="\/xl\/externalLinks\/[^"]*"[^>]*\/>\s*/g, "")
     );
   }
 
