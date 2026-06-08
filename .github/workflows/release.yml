@@ -47,8 +47,8 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
-      # 重建 app-builder-bin，避免 Windows 运行器上 Go 二进制崩溃
-      - run: pnpm rebuild app-builder-bin
+      # 重新安装 app-builder-bin，避免 Windows 运行器上 Go 二进制崩溃
+      - run: pnpm remove app-builder-bin && pnpm add -D app-builder-bin@latest
 
       - run: pnpm build:renderer
 
@@ -56,6 +56,8 @@ jobs:
       - run: pnpm exec electron-builder --config electron-builder.json --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ""
+          CSC_KEY_PASSWORD: ""
 
       # 上传构建产物到 GitHub Release（只传安装包和 blockmap，避免 win-unpacked 进入 assets）
       - uses: softprops/action-gh-release@v2
