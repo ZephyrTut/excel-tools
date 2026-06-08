@@ -1,3 +1,10 @@
+# =============================================================================
+# GitHub Actions — 自动构建 & 发布到 GitHub Releases
+#
+# 触发方式: 推送形如 v0.1.0、v1.2.3 的 tag 时自动执行
+# 也可手动触发: Actions 页面 → Release → Run workflow
+# =============================================================================
+
 name: Release
 
 on:
@@ -5,13 +12,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v1.2.3)"
-        required: true
-
-env:
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build-and-release:
@@ -24,46 +24,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      # 先安装 pnpm（后续 setup-node cache 需要 pnpm 在 PATH 中）
+      - uses: pnpm/action-setup@v4
         with:
           version: 9
           run_install: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # 设置 Node.js + 自动缓存 pnpm store（一次搞定，不再重复调用）
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "pnpm"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - run: pnpm install --frozen-lockfile
 
-      - name: Refresh app-builder-bin
-        run: pnpm add -Dw app-builder-bin@latest
+      - run: pnpm build:renderer
 
-      - name: Build renderer
-        run: pnpm build:renderer
-
-      - name: Build installer
-        run: pnpm exec electron-builder --config electron-builder.json --publish never
+      # --publish never: electron-builder 不自行发布，由下面 softprops 统一上传
+      - run: pnpm exec electron-builder --config electron-builder.json --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          CSC_LINK: ""
-          CSC_KEY_PASSWORD: ""
 
-      - name: Upload GitHub release assets
-        uses: softprops/action-gh-release@v2
+      # 上传构建产物到 GitHub Release（只传安装包和 blockmap，避免 win-unpacked 进入 assets）
+      - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: Excel Tools ${{ env.RELEASE_TAG }}
+          name: Excel Tools ${{ github.ref_name }}
           body: |
-            ## Excel Tools ${{ env.RELEASE_TAG }}
+            ## Excel Tools ${{ github.ref_name }}
 
             ### Windows
-            - `Excel-Tools-Setup-${{ env.RELEASE_TAG }}.exe` - 安装包（推荐）
+            - `Excel-Tools-Setup-${{ github.ref_name }}.exe` — 安装包（推荐）
+
             ---
             自动发布自 GitHub Actions。
           files: |
@@ -74,7 +65,9 @@ jobs:
           prerelease: false
           generate_release_notes: false
 
+      # 同步安装包到 Gitee（国内用户免 VPN 更新）
       - name: Sync installers to Gitee mirror
+        if: success() && env.GITEE_TOKEN != ''
         shell: bash
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
@@ -85,7 +78,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "sync ${{ env.RELEASE_TAG }}"
+          git commit -m "sync ${GITHUB_REF_NAME}"
           git remote add gitee https://ZephyrTut@gitee.com/ZephyrTut/excel-tools.git
 
           git config --local credential.https://gitee.com.helper ""
