@@ -359,6 +359,69 @@ function capConditionalFormattingRefs(xml, providedMaxRow) {
   );
 }
 
+function findWorksheetDimensionRange(xml) {
+  const dimensionMatch = /<dimension\b[^>]*\bref="([^"]+)"/.exec(String(xml || ""));
+  if (!dimensionMatch) return null;
+  return parseRangeToken(dimensionMatch[1]);
+}
+
+function clipSqrefTokenToRange(token, range) {
+  const parsed = parseRangeToken(token);
+  if (!parsed || !range) return [];
+  if (parsed.startRow > range.endRow || columnToNumber(parsed.startCol) > columnToNumber(range.endCol)) {
+    return [];
+  }
+
+  const endRow = Math.min(parsed.endRow, range.endRow);
+  const endColNumber = Math.min(columnToNumber(parsed.endCol), columnToNumber(range.endCol));
+  const startColNumber = columnToNumber(parsed.startCol);
+  if (endColNumber < startColNumber) return [];
+
+  return [
+    formatRangeToken(
+      parsed.startCol,
+      parsed.startRow,
+      numberToColumn(endColNumber),
+      endRow
+    ),
+  ];
+}
+
+function capDataValidationRefs(xml) {
+  const range = findWorksheetDimensionRange(xml);
+  if (!range) return xml;
+
+  return String(xml || "").replace(
+    /<dataValidations\b[^>]*>[\s\S]*?<\/dataValidations>|<dataValidations\b[^>]*\/>/g,
+    (blockXml) => {
+      const rebuiltNodes = [];
+      const validationNodeRe = /<dataValidation\b[^>]*\/>|<dataValidation\b[^>]*>[\s\S]*?<\/dataValidation>/g;
+
+      for (const match of blockXml.matchAll(validationNodeRe)) {
+        const nodeXml = match[0];
+        const sqrefMatch = /\bsqref="([^"]+)"/.exec(nodeXml);
+        if (!sqrefMatch) continue;
+
+        const capped = sqrefMatch[1]
+          .split(/\s+/)
+          .filter(Boolean)
+          .flatMap((token) => clipSqrefTokenToRange(token, range));
+        const uniqueTokens = [...new Set(capped)];
+        if (uniqueTokens.length === 0) continue;
+
+        rebuiltNodes.push(replaceSqrefAttribute(nodeXml, uniqueTokens.join(" ")));
+      }
+
+      if (rebuiltNodes.length === 0) return "";
+
+      const openTagMatch = /^<dataValidations\b[^>]*>/.exec(blockXml);
+      let openTag = openTagMatch ? openTagMatch[0] : "<dataValidations>";
+      openTag = setOrReplaceAttribute(openTag, "count", String(rebuiltNodes.length));
+      return `${openTag}${rebuiltNodes.join("")}</dataValidations>`;
+    }
+  );
+}
+
 function collectProtectedRowRanges(xml) {
   const ranges = [];
 
@@ -369,6 +432,15 @@ function collectProtectedRowRanges(xml) {
   }
 
   for (const match of String(xml || "").matchAll(/<conditionalFormatting\b[^>]*\bsqref="([^"]+)"/g)) {
+    const tokens = String(match[1]).split(/\s+/).filter(Boolean);
+    for (const token of tokens) {
+      const parsed = parseRangeToken(token);
+      if (!parsed) continue;
+      ranges.push([parsed.startRow, parsed.endRow]);
+    }
+  }
+
+  for (const match of String(xml || "").matchAll(/<dataValidation\b[^>]*\bsqref="([^"]+)"/g)) {
     const tokens = String(match[1]).split(/\s+/).filter(Boolean);
     for (const token of tokens) {
       const parsed = parseRangeToken(token);
@@ -574,6 +646,7 @@ function applyWorksheetTransform(sheetXml, transform) {
   }
 
   cleaned = capConditionalFormattingRefs(cleaned, maxRow);
+  cleaned = capDataValidationRefs(cleaned);
 
   if (transform?.normalizeView) {
     const normalizeOptions =
@@ -594,7 +667,9 @@ function cleanupXmlText(xmlText, { isWorksheet = false, worksheetTransform = nul
   cleaned = cleaned.replace(/\s+x14ac:dyDescent\s*=\s*"[^"]*"/g, "");
   cleaned = cleaned.replace(/\s+x14ac:knownFonts\s*=\s*"[^"]*"/g, "");
   if (isWorksheet) {
-    cleaned = worksheetTransform ? applyWorksheetTransform(cleaned, worksheetTransform) : capConditionalFormattingRefs(cleaned);
+    cleaned = worksheetTransform
+      ? applyWorksheetTransform(cleaned, worksheetTransform)
+      : capDataValidationRefs(capConditionalFormattingRefs(cleaned));
   }
   return cleaned;
 }

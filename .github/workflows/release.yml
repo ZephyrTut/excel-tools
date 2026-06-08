@@ -21,6 +21,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Init timing summary
         shell: pwsh
@@ -77,6 +79,32 @@ jobs:
           $sw.Stop()
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build installer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
 
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $currentTag = "${{ github.ref_name }}"
+          $prevTag = git tag --sort=-version:refname | Where-Object { $_ -ne $currentTag } | Select-Object -First 1
+
+          if ($prevTag) {
+            $log = git log "$prevTag..$currentTag" --oneline --no-decorate --format="- %s" `
+              | Where-Object { $_ -notmatch '^\- release: v' }
+          } else {
+            $log = "Initial release."
+          }
+
+          $body = @"
+## Excel Tools $currentTag
+
+### 更新内容
+$log
+
+### Windows
+- `Excel-Tools-Setup-$currentTag.exe` — 安装包
+
+Built automatically by GitHub Actions.
+"@
+          Set-Content -Path "$env:RUNNER_TEMP/release-body.md" -Value $body -Encoding UTF8
+
       - name: Mark release upload start
         shell: pwsh
         run: |
@@ -86,13 +114,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: Excel Tools ${{ github.ref_name }}
-          body: |
-            ## Excel Tools ${{ github.ref_name }}
-
-            ### Windows
-            - `Excel-Tools-Setup-${{ github.ref_name }}.exe` - Installer
-
-            Built automatically by GitHub Actions.
+          body_path: ${{ runner.temp }}/release-body.md
           files: |
             dist/installers/*.exe
             dist/installers/*.exe.blockmap
@@ -158,14 +180,32 @@ jobs:
 
           $currentVersion = "${{ github.ref_name }}"
 
-          # Fetch all releases from GitHub, sorted newest first
-          $allVersions = gh release list --limit 100 --exclude-drafts --json tagName --jq '.[].tagName' | Sort-Object -Descending
+          # Fetch all releases with body from GitHub, sorted newest first
+          $allReleases = gh release list --limit 100 --exclude-drafts --json tagName,body | ConvertFrom-Json | Sort-Object tagName -Descending
 
           # Build version list HTML
           $versionItems = ""
-          foreach ($ver in $allVersions) {
+          foreach ($release in $allReleases) {
+            $ver = $release.tagName
+            $body = $release.body
             $badge = if ($ver -eq $currentVersion) { ' <span class="badge">★ 最新</span>' } else { '' }
-            $versionItems += '<li><a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $ver + '.exe">' + $ver + '</a>' + $badge + '</li>'
+
+            # Extract changelog content between "### 更新内容" and next "###" or end
+            $changelog = ""
+            if ($body -match '(?s)### 更新内容\s*\n(.+?)(?=\n###|\z)') {
+              $changelog = $matches[1].Trim()
+              $changelog = $changelog -replace '(?m)^\- ', '<li>'
+              $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'
+              $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'
+              $changelog = "<ul>$changelog</ul>"
+            }
+
+            $versionItems += '<li>'
+            $versionItems += '<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $ver + '.exe">' + $ver + '</a>' + $badge
+            if ($changelog) {
+              $versionItems += '<details><summary>更新内容</summary>' + $changelog + '</details>'
+            }
+            $versionItems += '</li>'
           }
 
           $lines = @(
@@ -185,6 +225,10 @@ jobs:
             'li a{color:#409eff;text-decoration:none}',
             'li a:hover{text-decoration:underline}',
             '.badge{color:#e6a23c;font-weight:bold}',
+            'details{margin:4px 0 4px 16px;font-size:0.85em;color:#666}',
+            'details summary{cursor:pointer;color:#999}',
+            'details ul{padding-left:20px;margin:4px 0}',
+            'details li{margin:2px 0;border:none;padding:2px}',
             '.meta{color:#999;font-size:0.85em;margin-top:2em}',
             '</style>',
             '</head>',

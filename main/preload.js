@@ -80,6 +80,7 @@ const api = {
   statCompressPath: (targetPath) => ipcRenderer.invoke("compress:stat-path", targetPath),
   runCompress: (request) => ipcRenderer.invoke("compress:run", sanitizeForIpc(request)),
   listDirXlsx: (dirPath) => ipcRenderer.invoke("compress:list-dir", dirPath),
+  openCompressFile: (filePath) => ipcRenderer.invoke("compress:open-file", sanitizeForIpc(filePath)),
   onTaskEvent: (handler) => {
     const listener = (_, event) => handler(event);
     ipcRenderer.on("task:event", listener);

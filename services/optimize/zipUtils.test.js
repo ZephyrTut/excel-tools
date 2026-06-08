@@ -316,6 +316,109 @@ test("cleanupXlsxEntries does not trim trailing rows that are still referenced b
   assert.equal(sheetXml.includes('<dimension ref="A1:D6"/>'), true);
 });
 
+test("cleanupXlsxEntries preserves trailing rows referenced by data validation", () => {
+  const entries = new Map([
+    [
+      "xl/workbook.xml",
+      [
+        '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+        "<sheets>",
+        '<sheet name="Data" sheetId="1" r:id="rId1"/>',
+        "</sheets>",
+        "</workbook>",
+      ].join(""),
+    ],
+    [
+      "xl/_rels/workbook.xml.rels",
+      [
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>',
+        "</Relationships>",
+      ].join(""),
+    ],
+    [
+      "xl/worksheets/sheet1.xml",
+      [
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+        '<dimension ref="A1:B10"/>',
+        "<sheetData>",
+        '<row r="1"><c r="A1"><v>1</v></c></row>',
+        '<row r="10"><c r="B10"/></row>',
+        "</sheetData>",
+        '<dataValidations count="1"><dataValidation type="list" allowBlank="1" sqref="B2:B10"><formula1>"A,B"</formula1></dataValidation></dataValidations>',
+        "</worksheet>",
+      ].join(""),
+    ],
+  ]);
+
+  const cleaned = cleanupXlsxEntries(entries, {
+    sheetTransforms: {
+      Data: {
+        trimTrailingRows: true,
+      },
+    },
+  });
+
+  const sheetXml = cleaned.get("xl/worksheets/sheet1.xml");
+
+  assert.match(sheetXml, /<row r="10">/);
+  assert.match(sheetXml, /sqref="B2:B10"/);
+  assert.match(sheetXml, /<dimension ref="A1:B10"\/>/);
+});
+
+test("cleanupXlsxEntries caps data validation refs to the final worksheet range", () => {
+  const entries = new Map([
+    [
+      "xl/workbook.xml",
+      [
+        '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+        "<sheets>",
+        '<sheet name="Data" sheetId="1" r:id="rId1"/>',
+        "</sheets>",
+        "</workbook>",
+      ].join(""),
+    ],
+    [
+      "xl/_rels/workbook.xml.rels",
+      [
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>',
+        "</Relationships>",
+      ].join(""),
+    ],
+    [
+      "xl/worksheets/sheet1.xml",
+      [
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+        '<dimension ref="A1:F12"/>',
+        "<sheetData>",
+        '<row r="1"><c r="A1"><v>1</v></c></row>',
+        '<row r="12"><c r="F12"><v>12</v></c></row>',
+        "</sheetData>",
+        '<dataValidations count="2">',
+        '<dataValidation type="list" allowBlank="1" sqref="F14:F1048576"><formula1>"A,B"</formula1></dataValidation>',
+        '<dataValidation type="list" allowBlank="1" sqref="E2:E1048576"><formula1>"C,D"</formula1></dataValidation>',
+        "</dataValidations>",
+        "</worksheet>",
+      ].join(""),
+    ],
+  ]);
+
+  const cleaned = cleanupXlsxEntries(entries, {
+    sheetTransforms: {
+      Data: {
+        trimTrailingRows: true,
+      },
+    },
+  });
+
+  const sheetXml = cleaned.get("xl/worksheets/sheet1.xml");
+
+  assert.equal(sheetXml.includes("F14:F1048576"), false);
+  assert.equal(sheetXml.includes('sqref="E2:E12"'), true);
+  assert.equal(sheetXml.includes('<dataValidations count="1">'), true);
+});
+
 test("findWorksheetDeclaredMaxRow prefers worksheet dimension over sparse row records", () => {
   const xml = [
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',

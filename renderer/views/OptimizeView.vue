@@ -1,133 +1,143 @@
 <template>
-  <div class="ov">
-    <!-- Header -->
-    <div class="ov-header animate-fade-in-up">
-      <div class="ov-header-accent"></div>
-      <h2 class="ov-title">XLSX 文件压缩</h2>
-      <p class="ov-desc">拖拽文件或文件夹，ZIP 级别深度压缩（输出 _min.xlsx）</p>
-    </div>
+  <div class="compress-page">
+    <header class="compress-hero">
+      <div>
+        <p class="eyebrow">Office 兼容压缩</p>
+        <h2>XLSX 文件压缩</h2>
+        <p class="hero-copy">
+          压缩会清理冗余 XML 与空样式，同时保留公式、数据验证、条件格式等 Office 关键结构。
+        </p>
+      </div>
+      <div class="hero-meter" v-if="state.result">
+        <span>本次节省</span>
+        <strong>{{ state.result.savingsPercent }}%</strong>
+      </div>
+    </header>
 
-    <!-- Input: Drop zone (file + folder) -->
-    <section class="ov-section animate-fade-in-up">
-      <div class="section-label">选择输入</div>
-      <div class="drop-zone ov-dropzone"
-        :class="{ 'drop-zone--active': sourceDrop.isDragOver, 'ov-dropzone--has-input': !!state.inputPath }"
+    <section class="compress-panel">
+      <div class="panel-title">
+        <span>输入文件</span>
+        <el-button v-if="state.inputPath" text type="primary" @click="resetInput">重新选择</el-button>
+      </div>
+
+      <div
+        class="drop-zone compress-dropzone"
+        :class="{ 'drop-zone--active': sourceDrop.isDragOver, 'has-input': !!state.inputPath }"
         @dragover.prevent="sourceDrop.onDragOver"
         @dragenter="sourceDrop.onDragEnter"
         @dragleave="sourceDrop.onDragLeave"
         @drop="onDrop"
       >
-        <div class="ov-dropzone-inner">
-          <div v-if="!state.inputPath" class="ov-dropzone-empty">
-            <span class="ov-dropzone-icon">📂</span>
-            <span class="ov-dropzone-text">拖拽 <strong>.xlsx</strong> 文件或<strong>文件夹</strong>到此处</span>
-            <span class="ov-dropzone-or">或</span>
-            <div class="ov-dropzone-actions">
-              <el-button type="primary" plain @click="pickFile">选择文件</el-button>
-              <el-button plain @click="pickDir">选择文件夹</el-button>
-            </div>
+        <div v-if="!state.inputPath" class="drop-empty">
+          <span class="drop-empty-icon">📂</span>
+          <div class="drop-text">
+            <strong>拖拽 .xlsx 文件或文件夹到这里</strong>
+            <span>单文件会输出同目录 `_min.xlsx`，文件夹会批量处理全部 Excel 文件。</span>
           </div>
-          <div v-else class="ov-dropzone-filled">
-            <span class="ov-file-icon">{{ state.mode === 'dir' ? '📁' : '📊' }}</span>
-            <div class="ov-file-info">
-              <span class="ov-file-name">{{ state.mode === 'dir' ? state.inputPath : state.fileName }}</span>
-              <span class="ov-file-size" v-if="state.fileList.length">
-                {{ state.fileList.length }} 个 .xlsx 文件
-              </span>
-              <span class="ov-file-size" v-else-if="state.fileSize">
-                {{ formatSize(state.fileSize) }}
-              </span>
-            </div>
-            <el-button text type="primary" size="small" @click="resetInput">更换</el-button>
+          <div class="drop-actions">
+            <el-button type="primary" @click="pickFile">选择文件</el-button>
+            <el-button @click="pickDir">选择文件夹</el-button>
+          </div>
+        </div>
+
+        <div v-else class="drop-filled">
+          <span class="file-kind-icon">{{ state.mode === "dir" ? "📁" : "📊" }}</span>
+          <div class="file-meta">
+            <strong>{{ state.mode === "dir" ? state.inputPath : state.fileName }}</strong>
+            <span v-if="state.mode === 'dir'">{{ state.fileList.length }} 个 .xlsx 文件</span>
+            <span v-else>{{ formatSize(state.fileSize) }}</span>
           </div>
         </div>
       </div>
 
-      <!-- File list preview (folder mode) -->
-      <div v-if="state.mode === 'dir' && state.fileList.length > 0 && !state.running && !state.result" class="ov-file-preview">
-        <div class="ov-file-preview-header">
-          <span>找到 {{ state.fileList.length }} 个文件</span>
+      <div v-if="state.mode === 'dir' && state.fileList.length > 0 && !state.result" class="file-preview">
+        <div class="file-preview-head">
+          <span>已扫描到 {{ state.fileList.length }} 个文件</span>
           <el-button text size="small" @click="scanDir">重新扫描</el-button>
         </div>
-        <div class="ov-file-preview-list">
-          <div v-for="(f, i) in state.fileList.slice(0, 20)" :key="i" class="ov-file-preview-item">
-            <span class="ov-fpi-name">{{ f.relative }}</span>
-            <span class="ov-fpi-size">{{ formatSize(f.size) }}</span>
+        <div class="file-preview-list">
+          <div v-for="(file, index) in state.fileList.slice(0, 20)" :key="index" class="file-preview-row">
+            <span>{{ file.relative }}</span>
+            <em>{{ formatSize(file.size) }}</em>
           </div>
-          <div v-if="state.fileList.length > 20" class="ov-file-preview-more">
-            ...还有 {{ state.fileList.length - 20 }} 个文件
+          <div v-if="state.fileList.length > 20" class="file-preview-more">
+            还有 {{ state.fileList.length - 20 }} 个文件未显示
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Action -->
-    <section class="ov-section animate-fade-in-up">
-      <div class="section-label">执行压缩</div>
-      <div class="ov-action-card">
-        <div class="ov-action-row">
-          <el-button type="primary" size="large"
-            :disabled="!state.inputPath || !state.hasFiles || state.running"
-            :loading="state.running"
-            class="ov-start-btn"
-            @click="runCompress"
-          >
-            {{ state.running ? '压缩中...' : '开始压缩' }}
-          </el-button>
-          <div v-if="state.running" class="ov-progress-wrap">
-            <el-progress :percentage="state.progress" :stroke-width="8" class="ov-progress" />
-            <span class="ov-progress-label">{{ state.progress }}%</span>
-          </div>
-        </div>
-        <div v-if="state.running && state.currentFile" class="ov-current-file">
-          当前文件：{{ state.currentFile }}
+    <section class="compress-panel action-panel">
+      <div class="run-row">
+        <el-button
+          type="primary"
+          size="large"
+          :disabled="!state.inputPath || !hasFiles || state.running"
+          :loading="state.running"
+          class="run-button"
+          @click="runCompress"
+        >
+          {{ state.running ? "压缩中..." : "开始压缩" }}
+        </el-button>
+        <div v-if="state.running" class="progress-area">
+          <el-progress :percentage="state.progress" :stroke-width="9" />
+          <span>{{ state.progress }}%</span>
         </div>
       </div>
+      <p v-if="state.running && state.currentFile" class="current-file">{{ state.currentFile }}</p>
     </section>
 
-    <!-- Logs -->
-    <section class="ov-section animate-fade-in-up">
+    <section class="compress-panel">
       <LogPanel :lines="state.logs" @clear="state.logs = []" />
     </section>
 
-    <!-- Results -->
-    <section v-if="state.result" class="ov-section ov-result-section animate-slide-up">
-      <div class="section-label">压缩结果</div>
-      <div class="ov-result-summary">
-        <div class="stat-card">
-          <div class="stat-label">处理文件</div>
-          <div class="stat-value">{{ state.result.totalFiles }}</div>
+    <section v-if="state.result" class="result-shell">
+      <div class="result-head">
+        <div>
+          <p class="eyebrow">压缩结果</p>
+          <h3>已完成 {{ state.result.totalFiles }} 个文件</h3>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">原始大小</div>
-          <div class="stat-value">{{ formatSize(state.result.totalOriginalSize) }}</div>
+        <el-button v-if="firstOutputPath" type="primary" plain @click="openFile(firstOutputPath)">
+          打开压缩文件
+        </el-button>
+      </div>
+
+      <div class="result-stats">
+        <div class="result-stat">
+          <span>原始大小</span>
+          <strong>{{ formatSize(state.result.totalOriginalSize) }}</strong>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">压缩后</div>
-          <div class="stat-value primary">{{ formatSize(state.result.totalOptimizedSize) }}</div>
+        <div class="result-stat">
+          <span>压缩后</span>
+          <strong>{{ formatSize(state.result.totalOptimizedSize) }}</strong>
         </div>
-        <div class="stat-card stat-card--savings">
-          <div class="stat-label">压缩率</div>
-          <div class="stat-value success">{{ state.result.savingsPercent }}%</div>
-          <div class="stat-savings-bar-wrap">
-            <div class="stat-savings-bar">
-              <div class="stat-savings-fill" :style="{ width: Math.min(state.result.savingsPercent, 100) + '%' }"></div>
-            </div>
+        <div class="result-stat accent">
+          <span>压缩率</span>
+          <strong>{{ state.result.savingsPercent }}%</strong>
+          <div class="saving-track">
+            <div :style="{ width: savingsWidth }"></div>
           </div>
         </div>
       </div>
 
-      <div class="ov-result-table-wrap">
-        <el-table :data="state.result.fileResults" stripe size="small" style="width:100%">
-          <el-table-column label="文件名" prop="fileName" min-width="200" />
+      <div class="result-table">
+        <el-table :data="state.result.fileResults" size="small" style="width: 100%">
+          <el-table-column prop="fileName" label="文件名" min-width="220" />
           <el-table-column label="原始" align="right" width="120">
             <template #default="{ row }">{{ formatSize(row.originalSize) }}</template>
           </el-table-column>
           <el-table-column label="压缩后" align="right" width="120">
-            <template #default="{ row }"><span class="text-success">{{ formatSize(row.optimizedSize) }}</span></template>
+            <template #default="{ row }">{{ formatSize(row.optimizedSize) }}</template>
           </el-table-column>
           <el-table-column label="压缩率" align="right" width="100">
             <template #default="{ row }">{{ row.savingsPercent }}%</template>
+          </el-table-column>
+          <el-table-column label="操作" align="right" width="120">
+            <template #default="{ row }">
+              <el-button text type="primary" :disabled="!row.outputPath" @click="openFile(row.outputPath)">
+                打开
+              </el-button>
+            </template>
           </el-table-column>
         </el-table>
       </div>
@@ -144,7 +154,7 @@ import { useDropZone } from "../composables/useDropZone";
 const sourceDrop = reactive(useDropZone());
 
 const state = reactive({
-  mode: "",        // "file" | "dir"
+  mode: "",
   inputPath: "",
   fileName: "",
   fileSize: 0,
@@ -158,12 +168,19 @@ const state = reactive({
 
 const hasFiles = computed(() => {
   if (state.mode === "dir") return state.fileList.length > 0;
-  return !!state.inputPath;
+  return Boolean(state.inputPath);
+});
+
+const firstOutputPath = computed(() => state.result?.fileResults?.find((item) => item.outputPath)?.outputPath || "");
+
+const savingsWidth = computed(() => {
+  const value = Number(state.result?.savingsPercent || 0);
+  return `${Math.max(0, Math.min(value, 100))}%`;
 });
 
 function getApi() {
   const api = window.excelTools;
-  if (!api) throw new Error("桌面桥接未就绪");
+  if (!api) throw new Error("桌面桥接未就绪，请重启 Electron 窗口后重试。");
   return api;
 }
 
@@ -186,34 +203,38 @@ async function pickFile() {
   try {
     const info = await getApi().pickCompressFile();
     if (info) applyFile(info);
-  } catch (err) { ElMessage.error(err.message); }
+  } catch (err) {
+    ElMessage.error(err.message);
+  }
 }
 
 async function pickDir() {
   try {
     const info = await getApi().pickCompressDir();
     if (info) applyDir(info);
-  } catch (err) { ElMessage.error(err.message); }
+  } catch (err) {
+    ElMessage.error(err.message);
+  }
 }
 
-async function onDrop(e) {
-  const droppedPath = sourceDrop.onDrop(e);
+async function onDrop(event) {
+  const droppedPath = sourceDrop.onDrop(event);
   if (!droppedPath) return;
 
   const info = await getApi().statCompressPath(droppedPath);
   if (!info) {
-    ElMessage.warning("无法识别的路径");
+    ElMessage.warning("无法识别拖入路径。");
     return;
   }
   if (info.type === "file") {
     if (!/\.xlsx$/i.test(info.name)) {
-      ElMessage.warning("请选择 .xlsx 格式的文件");
+      ElMessage.warning("请选择 .xlsx 格式的文件。");
       return;
     }
     applyFile(info);
-  } else {
-    applyDir(info);
+    return;
   }
+  applyDir(info);
 }
 
 function applyFile(info) {
@@ -233,9 +254,11 @@ async function applyDir(info) {
 
 async function scanDir() {
   try {
-    const files = await getApi().listDirXlsx(state.inputPath);
-    state.fileList = files;
-  } catch { /* fallback */ }
+    state.fileList = await getApi().listDirXlsx(state.inputPath);
+  } catch (err) {
+    state.fileList = [];
+    ElMessage.warning(`扫描文件夹失败：${err.message}`);
+  }
 }
 
 async function runCompress() {
@@ -247,13 +270,23 @@ async function runCompress() {
   state.logs = [];
 
   try {
-    const payload = state.mode === "dir"
-      ? { inputDir: state.inputPath }
-      : { inputPath: state.inputPath };
+    const payload = state.mode === "dir" ? { inputDir: state.inputPath } : { inputPath: state.inputPath };
     await getApi().runCompress(payload);
   } catch (err) {
     state.running = false;
     ElMessage.error(`启动压缩失败：${err.message}`);
+  }
+}
+
+async function openFile(filePath) {
+  if (!filePath) return;
+  try {
+    const result = await getApi().openCompressFile(filePath);
+    if (result && result.ok === false) {
+      ElMessage.error(`打开失败：${result.message}`);
+    }
+  } catch (err) {
+    ElMessage.error(`打开失败：${err.message}`);
   }
 }
 
@@ -269,7 +302,7 @@ function handleTaskEvent(event) {
     state.currentFile = "";
     state.result = event.result;
     pushLog(`压缩完成：${event.result.totalFiles} 个文件`);
-    ElMessage.success(`压缩完成！共处理 ${event.result.totalFiles} 个文件，压缩率 ${event.result.savingsPercent}%`);
+    ElMessage.success(`压缩完成，共处理 ${event.result.totalFiles} 个文件。`);
   } else if (event.type === "error") {
     state.running = false;
     pushLog(`失败：${event.message}`);
@@ -280,8 +313,8 @@ function handleTaskEvent(event) {
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 2 : 0) + " " + units[i];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, index)).toFixed(index > 0 ? 2 : 0)} ${units[index]}`;
 }
 
 let unsubTask = null;
@@ -294,267 +327,336 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ── 页面结构 ── */
-.ov {
-  max-width: 800px;
+.compress-page {
+  max-width: 960px;
   margin: 0 auto;
+  padding-bottom: 32px;
 }
 
-/* ── 页面标题 ── */
-.ov-header {
-  text-align: center;
-  margin-bottom: 32px;
-  padding: 16px 0 8px;
-}
-.ov-header-accent {
-  width: 40px;
-  height: 3px;
-  background: linear-gradient(90deg, var(--primary), var(--primary-light));
-  border-radius: 2px;
-  margin: 0 auto 16px;
-}
-.ov-title {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 6px;
-}
-.ov-desc {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-/* ── Section 通用 ── */
-.ov-section {
-  margin-bottom: 20px;
-}
-.section-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 10px;
-  padding-left: 2px;
-}
-
-/* ── Drop Zone ── */
-.ov-dropzone {
-  transition: all 0.25s ease;
-  min-height: 120px;
+.compress-hero {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-surface);
-  border-radius: var(--radius-sm);
-  padding: 20px;
-}
-.ov-dropzone--has-input {
-  min-height: 80px;
-  padding: 16px 20px;
-}
-.ov-dropzone-inner {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.ov-dropzone-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.ov-dropzone-icon {
-  font-size: 40px;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-.ov-dropzone-text {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-.ov-dropzone-or {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.ov-dropzone-actions {
-  display: flex;
-  gap: 8px;
-}
-.ov-dropzone-filled {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-}
-.ov-file-icon {
-  font-size: 28px;
-  line-height: 1;
-}
-.ov-file-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ov-file-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-.ov-file-size {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ── File list preview ── */
-.ov-file-preview {
-  margin-top: 12px;
-  background: var(--bg-card);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-  overflow: hidden;
-}
-.ov-file-preview-header {
-  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-light);
-  background: var(--bg-surface);
+  gap: 24px;
+  margin-bottom: 18px;
+  padding: 20px 0 8px;
 }
-.ov-file-preview-list {
-  max-height: 240px;
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compress-hero h2,
+.result-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+
+.compress-hero h2 {
+  font-size: 28px;
+}
+
+.hero-copy {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.hero-meter {
+  min-width: 148px;
+  padding: 14px 18px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  text-align: right;
+}
+
+.hero-meter span,
+.result-stat span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hero-meter strong {
+  display: block;
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 26px;
+}
+
+.compress-panel,
+.result-shell {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.panel-title,
+.file-preview-head,
+.result-head,
+.run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-title {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.compress-dropzone {
+  min-height: 156px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.76)),
+    repeating-linear-gradient(135deg, rgba(15, 23, 42, 0.04) 0 1px, transparent 1px 12px);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.compress-dropzone.drop-zone--active {
+  transform: translateY(-1px);
+  border-color: var(--primary);
+}
+
+.compress-dropzone.has-input {
+  min-height: 90px;
+}
+
+.drop-empty,
+.drop-filled {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.drop-empty {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.drop-empty-icon,
+.file-kind-icon {
+  flex: 0 0 auto;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.file-kind-icon {
+  font-size: 30px;
+}
+
+.drop-text,
+.file-meta {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drop-text strong,
+.file-meta strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.drop-text span,
+.file-meta span,
+.current-file {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.drop-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.file-preview {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.file-preview-head {
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.file-preview-list {
+  max-height: 230px;
   overflow-y: auto;
 }
-.ov-file-preview-item {
+
+.file-preview-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 6px 14px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  color: var(--text-primary);
   font-size: 13px;
 }
-.ov-file-preview-item:nth-child(odd) {
+
+.file-preview-row:nth-child(even) {
   background: var(--bg-surface);
 }
-.ov-fpi-name {
-  color: var(--text-primary);
+
+.file-preview-row span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-right: 12px;
-}
-.ov-fpi-size {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.ov-file-preview-more {
-  padding: 8px 14px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-  border-top: 1px solid var(--border-light);
 }
 
-/* ── 执行区卡片 ── */
-.ov-action-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  padding: 24px;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
+.file-preview-row em {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-style: normal;
 }
-.ov-action-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
+
+.file-preview-more {
+  padding: 9px 12px;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12px;
 }
-.ov-start-btn {
-  min-width: 148px;
-  font-weight: 600;
+
+.action-panel {
+  padding: 16px 18px;
 }
-.ov-progress-wrap {
+
+.run-button {
+  min-width: 142px;
+  font-weight: 700;
+}
+
+.progress-area {
   flex: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 46px;
   align-items: center;
   gap: 10px;
 }
-.ov-progress {
-  flex: 1;
-  min-width: 120px;
-}
-.ov-progress-label {
+
+.progress-area span {
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 36px;
+  font-weight: 700;
 }
-.ov-current-file {
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--text-muted);
+
+.current-file {
+  margin: 12px 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ── 结果区 ── */
-.ov-result-section {
-  margin-bottom: 32px;
-}
-.ov-result-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-.ov-result-summary .stat-card {
-  flex: 1;
-  text-align: center;
-  padding: 20px 16px;
-}
-.stat-card--savings .stat-value {
-  font-size: 32px;
-}
-.stat-savings-bar-wrap {
-  margin-top: 8px;
-  padding: 0 12px;
-}
-.stat-savings-bar {
-  height: 4px;
-  background: var(--border-light);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.stat-savings-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--success), #34d399);
-  border-radius: 2px;
-  transition: width 0.8s ease;
-}
-.ov-result-table-wrap {
-  margin-bottom: 20px;
+.result-shell {
+  padding: 20px;
 }
 
-/* ── 响应式 ── */
-@media (max-width: 640px) {
-  .ov-result-summary {
-    flex-direction: column;
-  }
-  .ov-action-row {
-    flex-direction: column;
+.result-head {
+  margin-bottom: 16px;
+}
+
+.result-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.result-stat {
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.result-stat strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 20px;
+}
+
+.result-stat.accent strong {
+  color: var(--success);
+  font-size: 24px;
+}
+
+.saving-track {
+  height: 5px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border-light);
+}
+
+.saving-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+}
+
+.result-table {
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 720px) {
+  .compress-hero,
+  .result-head,
+  .run-row {
     align-items: stretch;
+    flex-direction: column;
   }
-  .ov-start-btn {
+
+  .hero-meter {
+    text-align: left;
+  }
+
+  .result-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .drop-empty,
+  .drop-filled {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .drop-actions,
+  .run-button {
     width: 100%;
   }
 }

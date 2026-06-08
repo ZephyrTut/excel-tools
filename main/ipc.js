@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -562,6 +562,13 @@ function registerIpcHandlers() {
 
     // Return taskId immediately; results come via task:event
     return { taskId };
+  });
+
+  ipcMain.handle("compress:open-file", async (_, filePath) => {
+    if (!filePath) return { ok: false, message: "缺少文件路径" };
+    const errorMessage = await shell.openPath(filePath);
+    if (errorMessage) return { ok: false, message: errorMessage };
+    return { ok: true };
   });
 
   ipcMain.handle("compress:list-dir", async (_, dirPath) => {

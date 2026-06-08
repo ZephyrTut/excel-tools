@@ -33,6 +33,64 @@ function colNumToLetter(n) {
   return s;
 }
 
+function parseCellRef(cellRef) {
+  const match = /^([A-Z]+)(\d+)$/i.exec(String(cellRef || "").trim());
+  if (!match) return null;
+  return {
+    col: colLetterToNum(match[1]),
+    row: parseInt(match[2], 10),
+  };
+}
+
+function parseRangeToken(token) {
+  const [startToken, endToken] = String(token || "").split(":");
+  const start = parseCellRef(startToken);
+  const end = parseCellRef(endToken || startToken);
+  if (!start || !end) return null;
+  return {
+    startCol: Math.min(start.col, end.col),
+    endCol: Math.max(start.col, end.col),
+    startRow: Math.min(start.row, end.row),
+    endRow: Math.max(start.row, end.row),
+  };
+}
+
+function collectProtectedRanges(xml) {
+  const ranges = [];
+  const addSqrefRanges = (sqref) => {
+    for (const token of String(sqref || "").split(/\s+/).filter(Boolean)) {
+      const parsed = parseRangeToken(token);
+      if (parsed) ranges.push(parsed);
+    }
+  };
+
+  for (const match of String(xml || "").matchAll(/<mergeCell\b[^>]*\bref="([^"]+)"/g)) {
+    addSqrefRanges(match[1]);
+  }
+  for (const match of String(xml || "").matchAll(/<conditionalFormatting\b[^>]*\bsqref="([^"]+)"/g)) {
+    addSqrefRanges(match[1]);
+  }
+  for (const match of String(xml || "").matchAll(/<dataValidation\b[^>]*\bsqref="([^"]+)"/g)) {
+    addSqrefRanges(match[1]);
+  }
+
+  return ranges;
+}
+
+function isProtectedCell(col, row, protectedRanges) {
+  return protectedRanges.some(
+    (range) =>
+      row >= range.startRow &&
+      row <= range.endRow &&
+      col >= range.startCol &&
+      col <= range.endCol
+  );
+}
+
+function isProtectedRow(row, protectedRanges) {
+  return protectedRanges.some((range) => row >= range.startRow && row <= range.endRow);
+}
+
 // --------------------------------------------------------------------------
 // Entry filtering
 // --------------------------------------------------------------------------
@@ -73,6 +131,7 @@ function optimizeWorksheetXml(xml) {
   const sheetData = dataMatch[1];
   const beforeData = xml.slice(0, dataMatch.index);
   const afterData = xml.slice(dataMatch.index + dataMatch[0].length);
+  const protectedRanges = collectProtectedRanges(xml);
 
   // Find data bounding box from cells with VALUES (non-self-closing)
   let maxDataRow = 0;
@@ -96,10 +155,12 @@ function optimizeWorksheetXml(xml) {
   // Remove self-closing styled cells beyond maxDataCol or maxDataRow
   let newSheetData = sheetData.replace(
     /<c\s+r="([A-Z]+)(\d+)"[^>]*\/>/g,
-    (full, colLetter, rowStr) =>
-      colLetterToNum(colLetter) > maxDataCol || parseInt(rowStr, 10) > maxDataRow
-        ? ""
-        : full
+    (full, colLetter, rowStr) => {
+      const col = colLetterToNum(colLetter);
+      const row = parseInt(rowStr, 10);
+      if (isProtectedCell(col, row, protectedRanges)) return full;
+      return col > maxDataCol || row > maxDataRow ? "" : full;
+    }
   );
 
   // Remove rows beyond maxDataRow that have NO data cells
@@ -108,6 +169,7 @@ function optimizeWorksheetXml(xml) {
     (full, rowNumStr, content) => {
       const rowNum = parseInt(rowNumStr, 10);
       if (rowNum <= maxDataRow) return full;
+      if (isProtectedRow(rowNum, protectedRanges)) return full;
       const withoutStyled = content.replace(/<c\s[^>]*\/>/g, "").trim();
       if (withoutStyled.length > 0) {
         maxDataRow = rowNum;
@@ -125,10 +187,13 @@ function optimizeWorksheetXml(xml) {
   );
   if (remainingMaxCol > 0) maxDataCol = remainingMaxCol;
 
-  const rowCount = (newSheetData.match(/<\/row>/g) || []).length;
+  const remainingMaxRow = [...newSheetData.matchAll(/<row\s[^>]*r="(\d+)"/g)].reduce(
+    (max, m) => Math.max(max, parseInt(m[1], 10) || 0),
+    0
+  );
   const dimStr =
-    maxDataCol > 0 && rowCount > 0
-      ? `A1:${colNumToLetter(maxDataCol)}${rowCount}`
+    maxDataCol > 0 && remainingMaxRow > 0
+      ? `A1:${colNumToLetter(maxDataCol)}${remainingMaxRow}`
       : "A1";
 
   let result =
@@ -243,6 +308,7 @@ async function optimizeOne(inputPath, outputPath, onProgress) {
 
   return {
     fileName: path.basename(inputPath),
+    outputPath,
     originalSize,
     optimizedSize: outStat.size,
     savingsPercent,
