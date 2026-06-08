@@ -4,10 +4,7 @@
   "directories": {
     "output": "dist/installers"
   },
-  "asarUnpack": [
-    "node_modules/exceljs/**",
-    "services/send/*.py"
-  ],
+  "asar": false,
   "electronLanguages": [
     "en-US",
     "zh-CN"
