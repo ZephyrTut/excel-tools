@@ -25,7 +25,7 @@
         <h3 class="feature-title">Excel 拆分</h3>
         <p class="feature-desc">按规则对多个 sheet 执行分组拆分，支持模板样式保留、文件后缀自定义、空值过滤。</p>
         <div class="feature-actions">
-          <el-button type="primary" size="small" round @click="emit('navigate', 'split')">
+          <el-button type="primary" size="medium" round @click="emit('navigate', 'split')">
             开始拆分 →
           </el-button>
         </div>
@@ -40,7 +40,7 @@
         <h3 class="feature-title">合并汇总</h3>
         <p class="feature-desc">多文件多 sheet 智能合并，供应商排序、列映射、透传、头部行对齐。</p>
         <div class="feature-actions">
-          <el-button type="success" size="small" round @click="emit('navigate', 'merge')">
+          <el-button type="success" size="medium" round @click="emit('navigate', 'merge')">
             开始合并 →
           </el-button>
         </div>
@@ -55,7 +55,7 @@
         <h3 class="feature-title">文件压缩</h3>
         <p class="feature-desc">XLSX ZIP 级别深度压缩——清理空单元格、冗余 XML、隐藏元数据，显著减小文件体积，兼容 Office。</p>
         <div class="feature-actions">
-          <el-button type="warning" size="small" round @click="emit('navigate', 'optimize')">
+          <el-button type="warning" size="medium" round @click="emit('navigate', 'optimize')">
             开始压缩 →
           </el-button>
         </div>
@@ -70,7 +70,7 @@
         <h3 class="feature-title">发送工具</h3>
         <p class="feature-desc">按规则表将文件通过微信或邮件自动分发，支持混搭通道、文件夹扫描、变量替换。</p>
         <div class="feature-actions">
-          <el-button type="primary" size="small" round @click="emit('navigate', 'send')">
+          <el-button type="primary" size="medium" round @click="emit('navigate', 'send')">
             开始发送 →
           </el-button>
         </div>

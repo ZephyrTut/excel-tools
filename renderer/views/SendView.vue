@@ -12,8 +12,19 @@
           </el-button>
         </el-form-item>
         <el-form-item label="规则模板">
-          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-            <el-button size="small" @click="pickRuleFile">📥 导入规则表{{ rules.length > 0 ? ' ✓' : '' }}</el-button>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px">
+            <div
+              class="drop-btn-wrapper"
+              :class="{ 'drop-btn-wrapper--active': ruleDropActive }"
+              @dragover.prevent="ruleDropActive = true"
+              @dragenter.prevent="ruleDropActive = true"
+              @dragleave="onRuleDragLeave"
+              @drop.prevent="onRuleDrop"
+            >
+              <el-button size="small" @click="pickRuleFile">📥 导入规则表</el-button>
+            </div>
+            <el-tag v-if="rules.length > 0" type="success" size="small">已导入 {{ rules.length }} 条</el-tag>
+            <el-tag v-else type="info" size="small">未导入</el-tag>
             <el-button size="small" text type="primary" @click="downloadTemplate">
               📋 下载空白模板
             </el-button>
@@ -21,20 +32,26 @@
               ❓
             </el-button>
           </div>
-          <el-text v-if="rules.length > 0" size="small" style="margin-top: 6px">
-            已导入 <b>{{ rules.length }}</b> 条规则
-          </el-text>
         </el-form-item>
         <el-form-item label="辅助工具">
-          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-            <el-button size="small" @click="pickFolderForCopy">📁 选取文件夹</el-button>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px">
+            <div
+              class="drop-btn-wrapper"
+              :class="{ 'drop-btn-wrapper--active': toolsDropActive }"
+              @dragover.prevent="toolsDropActive = true"
+              @dragenter.prevent="toolsDropActive = true"
+              @dragleave="onToolsDragLeave"
+              @drop.prevent="onToolsDrop"
+            >
+              <el-button size="small" @click="pickFolderForCopy">📁 选取文件夹</el-button>
+            </div>
             <el-button v-if="clipboardFiles.length > 0" size="small" text type="success" @click="copyFileNames">
               📋 一键复制 {{ clipboardFiles.length }} 个文件名
             </el-button>
+            <el-text v-if="clipboardFiles.length > 0" size="small" type="info">
+              已粘贴到剪贴板，可直接 Ctrl+V 粘贴到 Excel A 列
+            </el-text>
           </div>
-          <el-text v-if="clipboardFiles.length > 0" size="small" type="info" style="margin-top: 6px">
-            已粘贴到剪贴板，可直接 Ctrl+V 粘贴到 Excel A 列
-          </el-text>
         </el-form-item>
       </el-form>
     </el-card>
@@ -47,7 +64,7 @@
         :class="{ 'drop-zone--active': folderDropActive }"
         @dragover.prevent="folderDropActive = true"
         @dragenter.prevent="folderDropActive = true"
-        @dragleave="folderDropActive = false"
+        @dragleave="onFolderDragLeave"
         @drop.prevent="onFolderDrop"
         style="margin-bottom: 12px"
       >
@@ -56,7 +73,6 @@
             <el-button @click="pickFolder">浏览</el-button>
           </template>
         </el-input>
-        <div v-if="folderDropActive" class="drop-hint">📁 释放以选择此文件夹</div>
       </div>
 
       <el-button size="small" type="primary" @click="refreshMatch" :disabled="!folderPath || rules.length === 0">
@@ -91,7 +107,10 @@
         <el-button type="primary" @click="startSend" :disabled="sending || selectedCount === 0">
           📤 开始发送 ({{ selectedCount }}项)
         </el-button>
-        <el-button v-if="sending" type="warning" disabled>发送中...</el-button>
+        <el-button v-if="sending" type="danger" @click="cancelSend" style="margin-left: 8px">
+          ⏹ 中断发送
+        </el-button>
+        <el-text v-if="sending" size="small" type="info" style="margin-left: 8px">按 Esc 可中断</el-text>
       </div>
     </el-card>
 
@@ -199,7 +218,7 @@
     </el-dialog>
 
     <!-- 发送结果弹窗 -->
-    <el-dialog v-model="showResultDialog" title="📊 发送结果" width="480px" :close-on-click-modal="false">
+    <el-dialog v-model="showResultDialog" :title="sendAborted ? '⚠️ 发送已中断' : '📊 发送结果'" width="480px" :close-on-click-modal="false">
       <div class="result-summary" :class="resultFailCount > 0 ? 'result-summary--warn' : 'result-summary--ok'">
         <span class="result-summary-icon">{{ resultFailCount > 0 ? '⚠️' : '✅' }}</span>
         <span>成功 <b>{{ resultSuccessCount }}</b> 项</span>
@@ -233,7 +252,7 @@
       <ul class="rule-template-tips" style="padding-left: 16px">
         <li>📱 <b>分发方式</b> 填 <code>微信</code>、<code>邮件</code> 或 <code>微信,邮件</code></li>
         <li>📝 <code>{{date}}</code> → 当天日期（如 2026-06-07），<code>{{fileName}}</code> → 原始文件名</li>
-        <li>👥 <b>收件人</b>和<b>抄送人</b>有多个时用 <b>英文逗号</b> 分隔</li>
+        <li>📧 <b>收件人</b>和<b>抄送人</b>有多个时用 <b>英文逗号</b> 分隔。支持阿里邮箱复制格式，如 <code>"张三"&lt;zhangsan@company.com&gt;</code></li>
         <li>✅ 只发微信 → 留空邮件列；只发邮件 → 留空微信群列</li>
         <li>📋 用<b>辅助工具</b>拖入文件夹 → 一键复制文件名 → 粘贴到 Excel A 列</li>
       </ul>
@@ -271,12 +290,15 @@ const showSmtpDialog = ref(false);
 const showRuleHelp = ref(false);
 const showResultDialog = ref(false);
 const clipboardFiles = ref([]);
-const folderDropActive = ref(false);
 const sendProgress = ref(0);
+const sendAborted = ref(false);
+const folderDropActive = ref(false);
+const ruleDropActive = ref(false);
+const toolsDropActive = ref(false);
 
 const smtpForm = reactive({
   provider: "",
-  host: "smtp.aliyun.com",
+  host: "smtp.qiye.aliyun.com",
   port: 465,
   secure: true,
   user: "",
@@ -286,7 +308,7 @@ const smtpForm = reactive({
 const PROVIDER_CONFIG = {
   qq:    { host: "smtp.qq.com",       port: 465, secure: true },
   163:   { host: "smtp.163.com",      port: 465, secure: true },
-  aliyun:{ host: "smtp.aliyun.com",   port: 465, secure: true },
+  aliyun:{ host: "smtp.qiye.aliyun.com",   port: 465, secure: true },
 };
 
 function onProviderChange(provider) {
@@ -359,6 +381,21 @@ async function pickFolder() {
   }
 }
 
+function onRuleDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    ruleDropActive.value = false;
+  }
+}
+function onToolsDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    toolsDropActive.value = false;
+  }
+}
+function onFolderDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    folderDropActive.value = false;
+  }
+}
 function onFolderDrop(event) {
   folderDropActive.value = false;
   const items = event.dataTransfer.items;
@@ -482,16 +519,31 @@ async function startSend() {
   if (selected.length === 0) return;
 
   sending.value = true;
+  sendAborted.value = false;
   logs.value = [];
   sendResults.value = [];
   sendProgress.value = 0;
+
+  // Esc 键中断
+  const onKeyDown = (e) => {
+    if (e.key === "Escape" && sending.value) {
+      cancelSend();
+    }
+  };
+  window.addEventListener("keydown", onKeyDown);
 
   try {
     const result = await getApi().sendItems(
       createSendPayload(selected, true)
     );
     sending.value = false;
+    window.removeEventListener("keydown", onKeyDown);
     sendResults.value = result.results || [];
+
+    if (result.aborted) {
+      sendAborted.value = true;
+      addLog("warn", `⚠ 发送已中断（已完成 ${result.successCount} 项）`);
+    }
 
     // 逐行显示每条发送结果
     for (const r of result.results || []) {
@@ -516,7 +568,17 @@ async function startSend() {
     history.value = await getApi().getSendHistory();
   } catch (e) {
     sending.value = false;
+    window.removeEventListener("keydown", onKeyDown);
     addLog("error", `发送异常: ${e.message}`);
+  }
+}
+
+async function cancelSend() {
+  try {
+    await getApi().cancelSend();
+    addLog("warn", "⏹ 用户中断，正在等待当前项完成...");
+  } catch (e) {
+    addLog("error", `中断失败: ${e.message}`);
   }
 }
 
@@ -550,6 +612,51 @@ async function pickFolderForCopy() {
   }
 }
 
+async function onRuleDrop(event) {
+  ruleDropActive.value = false;
+  const file = event.dataTransfer.files[0];
+  if (!file || !file.path) return;
+  if (!file.path.toLowerCase().endsWith(".xlsx")) {
+    addLog("warn", "请拖入 .xlsx 格式的规则表文件");
+    return;
+  }
+  try {
+    const result = await getApi().importSendRules(file.path);
+    rules.value = result.rules;
+    if (result.warnings.length > 0) {
+      addLog("warn", `导入规则时有 ${result.warnings.length} 条警告: ${result.warnings.join("; ")}`);
+    } else {
+      addLog("success", `成功导入 ${result.rules.length} 条规则`);
+    }
+  } catch (e) {
+    addLog("error", `导入失败: ${e.message}`);
+  }
+}
+
+async function onToolsDrop(event) {
+  toolsDropActive.value = false;
+  const file = event.dataTransfer.files[0];
+  if (!file || !file.path) return;
+  try {
+    const result = await getApi().listFolderFiles(file.path);
+    if (result.error) {
+      addLog("warn", result.error);
+      return;
+    }
+    const names = result.files || [];
+    clipboardFiles.value = names;
+    if (names.length > 0) {
+      const text = names.join("\n");
+      await navigator.clipboard.writeText(text);
+      addLog("success", `已复制 ${names.length} 个文件名到剪贴板，可直接粘贴到 Excel A 列`);
+    } else {
+      addLog("warn", "该文件夹下未找到 Excel 文件");
+    }
+  } catch (e) {
+    addLog("error", `读取失败: ${e.message}`);
+  }
+}
+
 function copyFileNames() {
   if (clipboardFiles.value.length === 0) return;
   const text = clipboardFiles.value.join("\n");
@@ -557,9 +664,35 @@ function copyFileNames() {
   addLog("success", `已复制 ${clipboardFiles.value.length} 个文件名`);
 }
 
-function reuseHistory(entry) {
-  addLog("info", `已加载历史记录: ${entry.files.join(", ")}`);
-  // TODO: 后续可以自动填入上次的收件人等信息
+async function reuseHistory(entry) {
+  if (!entry.folderPath) {
+    addLog("warn", "该历史记录没有保存文件夹路径，无法复用");
+    return;
+  }
+
+  // 逐段显示复用过程
+  addLog("info", `📂 正在定位文件夹: ${entry.folderPath}`);
+  folderPath.value = entry.folderPath;
+
+  // 检查文件夹是否存在
+  try {
+    const result = await getApi().listFolderFiles(entry.folderPath);
+    if (result.error) {
+      addLog("error", `文件夹无法访问: ${result.error}`);
+      return;
+    }
+    addLog("success", `📁 文件夹已定位，找到 ${result.files.length} 个 Excel 文件`);
+  } catch {
+    addLog("error", "文件夹不存在或无法访问");
+    return;
+  }
+
+  addLog("info", `🔍 正在匹配文件... (${entry.files.length} 个历史文件)`);
+
+  // 触发刷新匹配
+  await refreshMatch();
+
+  addLog("success", `✅ 复用完成: ${entry.date ? formatDate(entry.date) : ''} 的发送配置已恢复`);
 }
 
 async function clearHistory() {
@@ -795,22 +928,29 @@ function formatDate(iso) {
   border-color: var(--primary);
 }
 
-/* ── 拖拽提示 ── */
-.drop-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 145, 178, 0.08);
-  border: 2px dashed var(--primary);
-  border-radius: var(--radius-md);
-  color: var(--primary);
-  font-size: 14px;
-  font-weight: 600;
-  z-index: 10;
-  pointer-events: none;
+/* ── 拖拽区域 ── */
+.drop-zone {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
+
+.drop-btn-wrapper {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.drop-zone--active,
+.drop-btn-wrapper--active {
+  border-style: dashed;
+  border-color: mediumslateblue;
+  background-color: rgba(167, 139, 250, 0.05);
+}
+
 .rule-template-help {
   margin-top: 8px;
   padding: 12px;

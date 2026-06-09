@@ -23,6 +23,33 @@ function cellText(row, col) {
 }
 
 /**
+ * 标准化单个邮箱地址，支持阿里邮箱复制格式 "name"<email> 和 name<email>
+ * @param {string} raw
+ * @returns {{ name: string|null, address: string }}
+ */
+function normalizeEmailAddress(raw) {
+  if (!raw) return { name: null, address: "" };
+  const s = raw.trim();
+  const match = s.match(/^(.+?)<([^>]+)>$/);
+  if (match) {
+    let name = match[1].trim().replace(/^["']|["']$/g, "").trim();
+    const address = match[2].trim();
+    return { name: name || null, address };
+  }
+  return { name: null, address: s };
+}
+
+/**
+ * 标准化邮箱地址列表
+ * @param {string[]} arr
+ * @returns {Array<{ name: string|null, address: string }>}
+ */
+function normalizeEmailList(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(normalizeEmailAddress).filter((e) => e.address);
+}
+
+/**
  * 将分发方式字符串解析为英文数组，支持中文和英文标识
  * @param {string} str - 分发方式，逗号分隔
  * @returns {string[]} 如 ["wechat", "email"]
@@ -106,12 +133,12 @@ function parseRuleExcel(worksheet) {
       channels,
       wechatGroup: hasWechat ? wechatGroup : null,
       emailSubject: hasEmail ? emailSubject : null,
-      emailTo: splitComma(emailToStr),
-      emailCc: splitComma(emailCcStr),
+      emailTo: normalizeEmailList(splitComma(emailToStr)),
+      emailCc: normalizeEmailList(splitComma(emailCcStr)),
     });
   }
 
   return { rules, warnings };
 }
 
-module.exports = { parseRuleExcel };
+module.exports = { parseRuleExcel, normalizeEmailAddress, normalizeEmailList };

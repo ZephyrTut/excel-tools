@@ -5,6 +5,13 @@
     "output": "dist/installers"
   },
   "asar": false,
+  "extraResources": [
+    {
+      "from": "resources/python",
+      "to": "python",
+      "filter": ["**/*"]
+    }
+  ],
   "electronLanguages": [
     "en-US",
     "zh-CN"

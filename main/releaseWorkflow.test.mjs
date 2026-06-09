@@ -27,6 +27,6 @@ test("package build script uses pnpm end-to-end", () => {
   assert.equal(pkg.scripts["build:renderer"], "node scripts/build-renderer.mjs");
   assert.equal(
     pkg.scripts.build,
-    "pnpm clean && pnpm build:renderer && pnpm exec electron-builder --win",
+    "pnpm clean && pnpm setup:python && pnpm build:renderer && pnpm exec electron-builder --win",
   );
 });

@@ -5,7 +5,21 @@ const ExcelJS = require("exceljs");
 const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
-const { sendToWechatGroup, minimizeWechat } = require("./wechatController");
+const { sendToWechatGroup, minimizeWechat, findPython } = require("./wechatController");
+
+/** 将地址对象或字符串转为显示用字符串 */
+function formatEmail(addr) {
+  if (typeof addr === "string") return addr;
+  if (addr && addr.address) {
+    return addr.name ? `${addr.name} <${addr.address}>` : addr.address;
+  }
+  return "";
+}
+
+/** 将地址数组转为显示用逗号分隔字符串 */
+function formatEmailList(arr) {
+  return (arr || []).map(formatEmail).filter(Boolean).join(", ");
+}
 const {
   loadHistory,
   saveHistoryEntry,
@@ -116,6 +130,7 @@ async function saveSmtpConfig(userDataPath, config) {
  * @param {boolean} params.wechatFirst - 默认 true
  * @param {string} params.userDataPath
  * @param {function} params.onProgress - (event) => void
+ * @param {AbortSignal} [params.signal] - 可选，用于中断发送
  * @returns {Promise<{results: Array, historyEntry: object, successCount: number, failCount: number}>}
  */
 async function executeSend({
@@ -123,6 +138,7 @@ async function executeSend({
   wechatFirst = true,
   userDataPath,
   onProgress,
+  signal,
 }) {
   const smtpConfig = await getSmtpConfig(userDataPath);
   const results = [];
@@ -151,11 +167,42 @@ async function executeSend({
       : 1;
   });
 
+  // 提前检测 Python 环境（微信发送依赖）
+  const hasWechatQueue = queue.some((q) => q.channel === "wechat");
+  if (hasWechatQueue) {
+    const py = await findPython();
+    if (!py) {
+      // 无 Python 时标记所有微信项为错误并从队列移除，不阻塞邮件
+      for (let qi = queue.length - 1; qi >= 0; qi--) {
+        if (queue[qi].channel === "wechat") {
+          const item = queue[qi];
+          results.push({
+            originalName: item.originalName,
+            channel: "wechat",
+            target: item.rule.wechatGroup,
+            success: false,
+            error: "未检测到 Python 环境，跳过微信发送",
+          });
+          historyTargets.push({
+            type: "wechat",
+            name: item.rule.wechatGroup,
+            status: "error",
+            error: "未检测到 Python 环境",
+          });
+          failCount++;
+          queue.splice(qi, 1);
+        }
+      }
+    }
+  }
+
   const total = queue.length;
   let successCount = 0;
   let failCount = 0;
 
   for (let i = 0; i < queue.length; i++) {
+    if (signal && signal.aborted) break;
+
     const item = queue[i];
 
     const progressEvent = {
@@ -167,7 +214,7 @@ async function executeSend({
       target: String(
         item.channel === "wechat"
           ? (item.rule && item.rule.wechatGroup) || ""
-          : ((item.rule && item.rule.emailTo) || []).join(", ")
+          : formatEmailList((item.rule && item.rule.emailTo) || [])
       ),
       status: "sending",
     };
@@ -202,7 +249,7 @@ async function executeSend({
       results.push({
         originalName: item.originalName,
         channel: "email",
-        target: item.rule.emailTo.join(", "),
+        target: formatEmailList(item.rule.emailTo),
         success: result.success,
         error: result.error || null,
       });
@@ -215,7 +262,7 @@ async function executeSend({
         name:
           item.channel === "wechat"
             ? item.rule.wechatGroup
-            : item.rule.emailTo.join(", "),
+            : formatEmailList(item.rule.emailTo),
         status: "success",
       });
     } else {
@@ -225,7 +272,7 @@ async function executeSend({
         name:
           item.channel === "wechat"
             ? item.rule.wechatGroup
-            : item.rule.emailTo.join(", "),
+            : formatEmailList(item.rule.emailTo),
         status: "error",
         error: result.error,
       });
@@ -253,8 +300,15 @@ async function executeSend({
     }
   }
 
+  // 从第一个匹配项推断文件夹路径
+  const folderPath =
+    matched.length > 0 && matched[0].filePath
+      ? path.dirname(matched[0].filePath)
+      : null;
+
   const historyEntry = {
     date: new Date().toISOString(),
+    folderPath,
     files: historyFiles,
     targets: historyTargets,
   };

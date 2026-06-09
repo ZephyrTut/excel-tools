@@ -103,6 +103,7 @@ const api = {
     ipcRenderer.invoke("send:match-files", folderPath),
   sendItems: (payload) =>
     ipcRenderer.invoke("send:send", normalizeSendPayload(payload)),
+  cancelSend: () => ipcRenderer.invoke("send:cancel"),
   getSendHistory: () => ipcRenderer.invoke("send:get-history"),
   clearSendHistory: () => ipcRenderer.invoke("send:clear-history"),
   getSmtpConfig: () => ipcRenderer.invoke("send:get-smtp-config"),

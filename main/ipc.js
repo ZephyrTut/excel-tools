@@ -614,27 +614,44 @@ function registerIpcHandlers() {
     return sendService.matchFolderFiles(folderPath, app.getPath("userData"));
   });
 
+  let sendAbortController = null;
+
   ipcMain.handle("send:send", async (_, payload) => {
     const { matched, wechatFirst } = payload || {};
-    const result = await sendService.executeSend({
-      matched,
-      wechatFirst,
-      userDataPath: app.getPath("userData"),
-      onProgress: (event) => {
-        const safeEvent = deepCloneable({ ...event, taskId: "send" });
-        try {
-          if (typeof structuredClone === "function") structuredClone(safeEvent);
-          broadcast(safeEvent);
-        } catch (err) {
-          console.warn("send progress broadcast skipped:", err?.message || err);
-        }
-      },
-    });
-    return deepCloneable({
-      results: result.results,
-      successCount: result.successCount,
-      failCount: result.failCount,
-    });
+    sendAbortController = new AbortController();
+    try {
+      const result = await sendService.executeSend({
+        matched,
+        wechatFirst,
+        userDataPath: app.getPath("userData"),
+        onProgress: (event) => {
+          const safeEvent = deepCloneable({ ...event, taskId: "send" });
+          try {
+            if (typeof structuredClone === "function") structuredClone(safeEvent);
+            broadcast(safeEvent);
+          } catch (err) {
+            console.warn("send progress broadcast skipped:", err?.message || err);
+          }
+        },
+        signal: sendAbortController.signal,
+      });
+      return deepCloneable({
+        results: result.results,
+        successCount: result.successCount,
+        failCount: result.failCount,
+        aborted: sendAbortController.signal.aborted,
+      });
+    } finally {
+      sendAbortController = null;
+    }
+  });
+
+  ipcMain.handle("send:cancel", async () => {
+    if (sendAbortController) {
+      sendAbortController.abort();
+      return { success: true };
+    }
+    return { success: false, error: "没有正在进行的发送任务" };
   });
 
   ipcMain.handle("send:get-history", async () => {
