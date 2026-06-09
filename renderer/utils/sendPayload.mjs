@@ -18,8 +18,9 @@ function normalizeRule(rule = {}) {
   };
 }
 
-export function createSendPayload(matchedItems, wechatFirst) {
+export function createSendPayload(matchedItems, wechatFirst, unmatchedItems) {
   const matched = Array.isArray(matchedItems) ? matchedItems : [];
+  const unmatched = Array.isArray(unmatchedItems) ? unmatchedItems.map(String) : [];
   return {
     matched: matched.map((item = {}) => ({
       originalName: asString(item.originalName),
@@ -30,5 +31,6 @@ export function createSendPayload(matchedItems, wechatFirst) {
       rule: normalizeRule(item.rule || {}),
     })),
     wechatFirst: wechatFirst !== false,
+    unmatched,
   };
 }

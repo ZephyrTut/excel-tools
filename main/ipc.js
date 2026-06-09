@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -610,19 +610,35 @@ function registerIpcHandlers() {
     return sendService.getRules(app.getPath("userData"));
   });
 
-  ipcMain.handle("send:match-files", async (_, folderPath) => {
-    return sendService.matchFolderFiles(folderPath, app.getPath("userData"));
+  ipcMain.handle("send:match-files", async (_, { folderPath, rules }) => {
+    return sendService.matchFolderFiles(folderPath, app.getPath("userData"), rules);
   });
 
   let sendAbortController = null;
 
   ipcMain.handle("send:send", async (_, payload) => {
-    const { matched, wechatFirst } = payload || {};
+    const { matched, wechatFirst, unmatched } = payload || {};
     sendAbortController = new AbortController();
+
+    // 全局 Esc 快捷键：微信界面也能一键中断
+    globalShortcut.register("Escape", () => {
+      if (sendAbortController) {
+        sendAbortController.abort();
+        const wins = BrowserWindow.getAllWindows();
+        if (wins.length > 0) {
+          const win = wins[0];
+          if (win.isMinimized()) win.restore();
+          win.focus();
+          win.show();
+        }
+      }
+    });
+
     try {
       const result = await sendService.executeSend({
         matched,
         wechatFirst,
+        unmatched: unmatched || [],
         userDataPath: app.getPath("userData"),
         onProgress: (event) => {
           const safeEvent = deepCloneable({ ...event, taskId: "send" });
@@ -642,6 +658,7 @@ function registerIpcHandlers() {
         aborted: sendAbortController.signal.aborted,
       });
     } finally {
+      globalShortcut.unregister("Escape");
       sendAbortController = null;
     }
   });
@@ -660,6 +677,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle("send:clear-history", async () => {
     await sendService.clearHistory(app.getPath("userData"));
+    return { success: true };
+  });
+
+  ipcMain.handle("send:delete-history-entry", async (_, index) => {
+    await sendService.deleteHistoryEntry(app.getPath("userData"), index);
     return { success: true };
   });
 

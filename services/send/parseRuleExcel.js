@@ -135,6 +135,7 @@ function parseRuleExcel(worksheet) {
       emailSubject: hasEmail ? emailSubject : null,
       emailTo: normalizeEmailList(splitComma(emailToStr)),
       emailCc: normalizeEmailList(splitComma(emailCcStr)),
+      originalRow: r,
     });
   }
 

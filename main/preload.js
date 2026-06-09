@@ -44,6 +44,9 @@ function normalizeSendPayload(payload) {
       };
     }),
     wechatFirst: safePayload.wechatFirst !== false,
+    unmatched: Array.isArray(safePayload.unmatched)
+      ? safePayload.unmatched.map((s) => String(s))
+      : [],
   };
 }
 
@@ -99,13 +102,14 @@ const api = {
   importSendRules: (filePath) =>
     ipcRenderer.invoke("send:import-rules", filePath),
   getSendRules: () => ipcRenderer.invoke("send:get-rules"),
-  matchSendFiles: (folderPath) =>
-    ipcRenderer.invoke("send:match-files", folderPath),
+  matchSendFiles: (folderPath, rules) =>
+    ipcRenderer.invoke("send:match-files", { folderPath, rules }),
   sendItems: (payload) =>
     ipcRenderer.invoke("send:send", normalizeSendPayload(payload)),
   cancelSend: () => ipcRenderer.invoke("send:cancel"),
   getSendHistory: () => ipcRenderer.invoke("send:get-history"),
   clearSendHistory: () => ipcRenderer.invoke("send:clear-history"),
+  deleteHistoryEntry: (index) => ipcRenderer.invoke("send:delete-history-entry", index),
   getSmtpConfig: () => ipcRenderer.invoke("send:get-smtp-config"),
   saveSmtpConfig: (config) =>
     ipcRenderer.invoke("send:save-smtp-config", sanitizeForIpc(config)),

@@ -85,7 +85,7 @@ function resetPythonCheck() {
  * @param {string} filePath - 文件绝对路径
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function sendToWechatGroup(groupName, filePath) {
+async function sendToWechatGroup(groupName, filePath, signal) {
   const pythonCmd = await findPython();
   if (!pythonCmd) {
     return {
@@ -102,7 +102,7 @@ async function sendToWechatGroup(groupName, filePath) {
     const { stdout } = await execFileAsync(
       prog,
       [...args, scriptPath, "--group", groupName, "--file", filePath],
-      { timeout: 60000 }
+      { timeout: 60000, signal }
     );
 
     const result = JSON.parse(stdout.trim());

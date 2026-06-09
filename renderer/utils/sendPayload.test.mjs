@@ -52,6 +52,7 @@ test("createSendPayload keeps only structured-cloneable send fields", () => {
       },
     ],
     wechatFirst: true,
+    unmatched: [],
   });
   assert.doesNotThrow(() => structuredClone(payload));
 });

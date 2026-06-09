@@ -33,6 +33,14 @@
             </el-button>
           </div>
         </el-form-item>
+        <el-form-item label="规则范围" v-if="rules.length > 0">
+          <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap">
+            <el-input-number v-model="ruleStartRow" :min="2" :max="9999" size="small" style="width: 95px" placeholder="起始行" controls-position="right" />
+            <span>～</span>
+            <el-input-number v-model="ruleEndRow" :min="2" :max="9999" size="small" style="width: 95px" placeholder="结束行" controls-position="right" />
+            <el-text size="small" type="info">(留空=全部行，含表头行1)</el-text>
+          </div>
+        </el-form-item>
         <el-form-item label="辅助工具">
           <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px">
             <div
@@ -118,25 +126,49 @@
     <el-card class="panel-card" v-if="history.length > 0">
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between">
-          <span>📜 发送历史</span>
-          <el-button text size="small" type="danger" @click="clearHistory">清空</el-button>
+          <span>📜 发送历史 ({{ history.length }})</span>
+          <el-button text size="small" type="danger" @click="clearHistory">清空全部</el-button>
         </div>
       </template>
-      <div v-for="(entry, idx) in history.slice(0, 5)" :key="idx" class="history-item">
-        <span class="history-date">{{ formatDate(entry.date) }}</span>
-        <span class="history-files">{{ entry.files.join(', ') }}</span>
-        <el-tag
-          v-for="(t, ti) in entry.targets"
-          :key="ti"
-          size="small"
-          :type="t.status === 'success' ? 'success' : 'danger'"
-          style="margin-left: 4px"
-        >
-          {{ t.type === 'wechat' ? '📱' : '📧' }} {{ t.name }}
-        </el-tag>
-        <el-button text size="small" type="primary" style="margin-left: 8px" @click="reuseHistory(entry)">
-          🔄 复用
-        </el-button>
+
+      <div class="history-pagination" v-if="history.length > 1">
+        <el-button size="small" :disabled="historyPage <= 0" @click="historyPage--">← 较新</el-button>
+        <span class="history-page-info">{{ historyPage + 1 }} / {{ history.length }}</span>
+        <el-button size="small" :disabled="historyPage >= history.length - 1" @click="historyPage++">较早 →</el-button>
+      </div>
+
+      <div v-if="currentHistoryEntry" class="history-batch">
+        <div class="history-batch-title">
+          <span class="history-date">{{ formatDate(currentHistoryEntry.date) }}</span>
+          <span class="history-files">· {{ currentHistoryEntry.files.length }} 个文件: {{ currentHistoryEntry.files.join(', ') }}</span>
+        </div>
+        <div class="history-table-wrap">
+          <el-table :data="currentHistoryEntry.targets" size="small" style="width: 100%; margin-bottom: 2px" max-height="240px">
+            <el-table-column label="文件名" min-width="140">
+              <template #default="{ row, $index }">
+                <span class="match-filename">{{ getHistoryFileName(currentHistoryEntry, row, $index) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="匹配状态">
+              <template #default="{ row }">
+                <el-tag v-if="row.type === 'skip'" size="small" type="info" effect="plain">⏭ 跳过</el-tag>
+                <el-tag v-else-if="row.status === 'interrupted'" size="small" type="warning" effect="plain">⏹ 中断</el-tag>
+                <el-tag v-else size="small" :type="row.status === 'success' ? 'success' : 'danger'">
+                  {{ row.type === 'wechat' ? '📱' : '📧' }} {{ row.name }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div class="history-batch-actions">
+          <el-button text size="small" type="primary" @click="reuseHistory(currentHistoryEntry)">🔄 复用</el-button>
+          <el-button text size="small" type="success" @click="echoHistory(currentHistoryEntry)">📋 回显</el-button>
+          <el-popconfirm title="确定清空此批记录？" @confirm="clearSingleHistory(historyPage)">
+            <template #reference>
+              <el-button text size="small" type="danger">🗑 清空此批</el-button>
+            </template>
+          </el-popconfirm>
+        </div>
       </div>
     </el-card>
 
@@ -145,9 +177,14 @@
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between">
           <span>📊 发送日志</span>
-          <el-button v-if="sendResults.length > 0" text size="small" type="primary" @click="exportResults">
-            📥 导出
-          </el-button>
+          <div>
+            <el-button v-if="logs.length > 0" text size="small" type="danger" @click="clearLogs" style="margin-right: 4px">
+              🗑 清空
+            </el-button>
+            <el-button v-if="sendResults.length > 0" text size="small" type="primary" @click="exportResults">
+              📥 导出
+            </el-button>
+          </div>
         </div>
       </template>
       <el-progress v-if="sending" :percentage="sendProgress" :stroke-width="14" style="margin-bottom: 8px" />
@@ -295,6 +332,9 @@ const sendAborted = ref(false);
 const folderDropActive = ref(false);
 const ruleDropActive = ref(false);
 const toolsDropActive = ref(false);
+const ruleStartRow = ref(null);
+const ruleEndRow = ref(null);
+const historyPage = ref(0);
 
 const smtpForm = reactive({
   provider: "",
@@ -328,6 +368,44 @@ const selectedCount = computed(() => {
 const failedItems = computed(() => sendResults.value.filter((r) => !r.success));
 const resultSuccessCount = computed(() => sendResults.value.filter((r) => r.success).length);
 const resultFailCount = computed(() => failedItems.value.length);
+
+const currentHistoryEntry = computed(() => {
+  if (history.value.length === 0) return null;
+  return history.value[historyPage.value] || null;
+});
+
+function getHistoryFileName(entry, target, index) {
+  if (target.type === 'skip') return target.name;
+  if (entry.matchedDetails) {
+    const detail = entry.matchedDetails.find(d => {
+      if (target.type === 'wechat') return d.rule?.wechatGroup === target.name;
+      if (target.type === 'email') return d.rule?.emailTo?.some(addr => target.name.includes(addr));
+      return false;
+    });
+    if (detail) return detail.originalName;
+  }
+  return entry.files?.[index] || entry.files?.[0] || '';
+}
+
+const clearingSingleIdx = ref(null);
+
+async function clearSingleHistory(index) {
+  if (clearingSingleIdx.value !== null) return;
+  clearingSingleIdx.value = index;
+  try {
+    await getApi().deleteHistoryEntry(index);
+    history.value = await getApi().getSendHistory();
+    // 如果当前页超出范围则回退一页
+    if (historyPage.value >= history.value.length) {
+      historyPage.value = Math.max(0, history.value.length - 1);
+    }
+    addLog("info", "已清空该批历史记录");
+  } catch (e) {
+    addLog("error", `清空失败: ${e.message}`);
+  } finally {
+    clearingSingleIdx.value = null;
+  }
+}
 
 // ── 初始化 ──
 onMounted(async () => {
@@ -499,10 +577,33 @@ function downloadTemplate() {
   });
 }
 
+function getActiveRules() {
+  let activeRules = rules.value;
+  if (ruleStartRow.value) {
+    activeRules = activeRules.filter(r => (r.originalRow || 0) >= ruleStartRow.value);
+  }
+  if (ruleEndRow.value) {
+    activeRules = activeRules.filter(r => (r.originalRow || 0) <= ruleEndRow.value);
+  }
+  return activeRules;
+}
+
 async function refreshMatch() {
   if (!folderPath.value) return;
   try {
-    const result = await getApi().matchSendFiles(folderPath.value);
+    const activeRules = getActiveRules();
+    // 将 Vue reactive proxy 转为纯对象，避免 IPC structuredClone 报错
+    const plainRules = activeRules.map(r => ({
+      originalName: r.originalName,
+      mappedName: r.mappedName,
+      channels: [...(r.channels || [])],
+      wechatGroup: r.wechatGroup,
+      emailSubject: r.emailSubject,
+      emailTo: [...(r.emailTo || [])],
+      emailCc: [...(r.emailCc || [])],
+      originalRow: r.originalRow,
+    }));
+    const result = await getApi().matchSendFiles(folderPath.value, plainRules);
     if (result.matched) {
       result.matched.forEach((m) => (m.selected = true));
     }
@@ -524,25 +625,35 @@ async function startSend() {
   sendResults.value = [];
   sendProgress.value = 0;
 
-  // Esc 键中断
+  // Esc 键中断（双层监听确保捕获）
   const onKeyDown = (e) => {
     if (e.key === "Escape" && sending.value) {
+      e.preventDefault();
       cancelSend();
     }
   };
   window.addEventListener("keydown", onKeyDown);
+  document.addEventListener("keydown", onKeyDown, true);
 
   try {
     const result = await getApi().sendItems(
-      createSendPayload(selected, true)
+      createSendPayload(selected, true, matchResult.value.unmatched || [])
     );
     sending.value = false;
     window.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("keydown", onKeyDown, true);
     sendResults.value = result.results || [];
 
     if (result.aborted) {
       sendAborted.value = true;
       addLog("warn", `⚠ 发送已中断（已完成 ${result.successCount} 项）`);
+    }
+
+    // 显示未匹配项
+    if (matchResult.value?.unmatched?.length > 0) {
+      for (const umName of matchResult.value.unmatched) {
+        addLog("warn", `⏭ 跳过 ${umName} (未匹配到规则)`);
+      }
     }
 
     // 逐行显示每条发送结果
@@ -566,10 +677,17 @@ async function startSend() {
     showResultDialog.value = true;
 
     history.value = await getApi().getSendHistory();
+    historyPage.value = 0;
   } catch (e) {
     sending.value = false;
     window.removeEventListener("keydown", onKeyDown);
-    addLog("error", `发送异常: ${e.message}`);
+    document.removeEventListener("keydown", onKeyDown, true);
+    if (e.name === "AbortError" || e.message?.includes("abort")) {
+      sendAborted.value = true;
+      addLog("warn", "⏹ 发送已被用户中断");
+    } else {
+      addLog("error", `发送异常: ${e.message}`);
+    }
   }
 }
 
@@ -689,10 +807,63 @@ async function reuseHistory(entry) {
 
   addLog("info", `🔍 正在匹配文件... (${entry.files.length} 个历史文件)`);
 
+  // 重置规则行范围（复用历史应使用全部规则）
+  ruleStartRow.value = null;
+  ruleEndRow.value = null;
+
   // 触发刷新匹配
   await refreshMatch();
 
   addLog("success", `✅ 复用完成: ${entry.date ? formatDate(entry.date) : ''} 的发送配置已恢复`);
+}
+
+function echoHistory(entry) {
+  // 1. 还原匹配信息到匹配预览区
+  if (entry.matchedDetails?.length > 0 || entry.unmatched?.length > 0) {
+    const restoredMatched = (entry.matchedDetails || []).map((d) => ({
+      originalName: d.originalName,
+      mappedName: d.mappedName || d.originalName,
+      channels: d.channels,
+      resolvedSubject: d.resolvedSubject || '',
+      selected: true,
+      rule: {
+        wechatGroup: d.rule?.wechatGroup || null,
+        emailTo: d.rule?.emailTo || [],
+        emailCc: d.rule?.emailCc || [],
+        emailSubject: d.rule?.emailSubject || null,
+      },
+      filePath: entry.folderPath ? entry.folderPath + '\\' + d.originalName : '',
+    }));
+    matchResult.value = {
+      matched: restoredMatched,
+      unmatched: entry.unmatched || [],
+      error: null,
+    };
+    folderPath.value = entry.folderPath || folderPath.value;
+  }
+
+  // 2. 还原发送日志
+  logs.value = [];
+  if (entry.targets?.length > 0) {
+    addLog("info", `📋 回显历史记录 (${formatDate(entry.date)})`);
+    for (let ti = 0; ti < entry.targets.length; ti++) {
+      const t = entry.targets[ti];
+      if (t.type === 'skip') {
+        addLog("warn", `⏭ 跳过 ${t.name} (未匹配到规则)`);
+      } else {
+        const icon = t.type === 'wechat' ? '📱' : '📧';
+        const fileName = getHistoryFileName(entry, t, ti);
+        const statusIcon = t.status === 'success' ? '✓' : '✗';
+        const errorStr = t.error ? ` (${t.error})` : '';
+        addLog(
+          t.status === 'success' ? 'success' : t.status === 'error' ? 'error' : 'warn',
+          `${icon} ${t.name} → ${fileName} ${statusIcon}${errorStr}`
+        );
+      }
+    }
+  }
+
+  addLog("info", `✅ 已从 ${formatDate(entry.date)} 的历史记录回显`);
 }
 
 async function clearHistory() {
@@ -703,6 +874,13 @@ async function clearHistory() {
   } catch (e) {
     addLog("error", `清空历史失败: ${e.message}`);
   }
+}
+
+function clearLogs() {
+  logs.value = [];
+  sendResults.value = [];
+  sendProgress.value = 0;
+  sendAborted.value = false;
 }
 
 async function exportResults() {
@@ -792,23 +970,58 @@ function formatDate(iso) {
   font-size: 13px;
 }
 
-.history-item {
+.history-pagination {
   display: flex;
   align-items: center;
-  padding: 6px 0;
+  justify-content: center;
+  gap: 12px;
+  padding: 4px 0 8px;
   font-size: 13px;
-  border-bottom: 1px solid var(--border-light);
+}
+
+.history-page-info {
+  color: var(--text-muted);
+  min-width: 60px;
+  text-align: center;
+}
+
+.history-table-wrap {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.history-batch {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-card);
+}
+
+.history-batch-title {
+  display: flex;
+  align-items: center;
+  padding: 2px 0 6px;
+  font-size: 13px;
+}
+
+.history-batch-actions {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 0;
 }
 
 .history-date {
   color: var(--text-muted);
-  min-width: 100px;
+  min-width: 90px;
 }
 
 .history-files {
-  color: var(--text-primary);
-  font-weight: 500;
-  margin: 0 8px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .log-line {

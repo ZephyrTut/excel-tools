@@ -1,0 +1,751 @@
+$ pnpm test 2>&1
+[exit 1]
+
+> excel-tools@1.2.5 test C:\Users\XXK\Desktop\work\excel tools\excel-tools
+> node scripts/run-local-tests.js
+
+TAP version 13
+# Subtest: release workflow pins electron mirror and fetch retries
+not ok 1 - release workflow pins electron mirror and fetch retries
+  ---
+  duration_ms: 8.4417
+  type: 'test'
+  location: 'C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\main\\releaseWorkflow.test.mjs:10:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /pnpm config set fetch-retries 5/. Input:
+    
+    'name: Release\n' +
+      '\n' +
+      'on:\n' +
+      '  push:\n' +
+      '    tags:\n' +
+      '      - "v*"\n' +
+      '  workflow_dispatch:\n' +
+      '\n' +
+      'jobs:\n' +
+      '  build-and-release:\n' +
+      '    name: Build & Release\n' +
+      '    runs-on: windows-latest\n' +
+      '\n' +
+      '    permissions:\n' +
+      '      contents: write\n' +
+      '\n' +
+      '    env:\n' +
+      '      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/\n' +
+      '      npm_config_electron_mirror: https://npmmirror.com/mirrors/electron/\n' +
+      '      ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/\n' +
+      '\n' +
+      '    steps:\n' +
+      '      - uses: actions/checkout@v4\n' +
+      '        with:\n' +
+      '          fetch-depth: 0\n' +
+      '\n' +
+      '      - name: Determine effective tag\n' +
+      '        shell: bash\n' +
+      '        run: |\n' +
+      '          if [[ "${{ github.ref_type }}" == "tag" ]]; then\n' +
+      '            echo "CURRENT_TAG=${{ github.ref_name }}" >> $GITHUB_ENV\n' +
+      '          else\n' +
+      '            echo "CURRENT_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV\n' +
+      '          fi\n' +
+      '\n' +
+      '      - name: Init timing summary\n' +
+      '        shell: pwsh\n' +
+      '        run: |\n' +
+      '          @"\n' +
+      '          # Release Timing Summary\n' +
+      '\n' +
+      '          - Workflow: ${{ github.workflow }}\n' +
+      '          - Ref: ${{ env.CURRENT_TAG }}\n' +
+      '          - Runner: windows-latest\n' +
+      '          "@ | Set-Content -Path $env:GITHUB_STEP_SUMMARY\n' +
+      '\n' +
+      '      - name: Setup pnpm\n' +
+      '        uses: pnpm/action-setup@v4\n' +
+      '        with:\n' +
+      '          version: 9\n' +
+      '          run_install: false\n' +
+      '\n' +
+      '      - name: Setup Node.js\n' +
+      '        uses: actions/setup-node@v4\n' +
+      '        with:\n' +
+      '          node-version: 22\n' +
+      '          cache: "pnpm"\n' +
+      '\n' +
+      '      - name: Install dependencies\n' +
+      '        shell: pwsh\n' +
+      '        run: |\n' +
+      '          $sw = [System.Diagnostics.Stopwatch]::StartNew()\n' +
+      '          pnpm install --frozen-lockfile\n' +
+      '          $sw.Stop()\n' +
+      '          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Install dependencies: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"\n' +
+      '\n' +
+      '      - name: Build renderer\n' +
+      '        shell: pwsh\n' +
+      '        run: |\n' +
+      '          $sw = [System.Diagnostics.Stopwatch]::StartNew()\n' +
+      '          pnpm build:renderer\n' +
+      '          $sw.Stop()\n' +
+      '          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build renderer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"\n' +
+      '\n' +
+      '      - name: Build installer\n' +
+      '        shell: pwsh\n' +
+      '        env:\n' +
+      '          CSC_IDENTITY_AUTO_DISCOVERY: false\n' +
+      '        run: |\n' +
+      '          $sw = [System.Diagnostics.Stopwatch]::StartNew()\n' +
+      '          pnpm exec electron-builder --config electron-builder.json --publish never\n' +
+      '          $sw.Stop()\n' +
+      '          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build installer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"\n' +
+      '\n' +
+      '      - name: Generate release notes\n' +
+      '        shell: pwsh\n' +
+      '        run: |\n' +
+      '          $currentTag = "${{ env.CURRENT_TAG }}"\n' +
+      '          $prevTag = git tag --sort=-version:refname | Where-Object { $_ -ne $currentTag } | Select-Object -First 1\n' +
+      '\n' +
+      '          if ($prevTag) {\n' +
+      '            $lines = git log "$prevTag..$currentTag" --oneline --no-decorate --format="- %s" `\n' +
+      "              | Where-Object { $_ -notmatch '^\\- release: v' }\n" +
+      '            $log = $lines -join "`r`n"\n' +
+      '          } else {\n' +
+      '            $log = "Initial release."\n' +
+      '          }\n' +
+      '\n' +
+      '          $body = @(\n' +
+      '            "## Excel Tools $currentTag",\n' +
+      '            "",\n' +
+      '            "### 更新内容",\n' +
+      '            $log,\n' +
+      '            "",\n' +
+      '            "### Windows",\n' +
+      '            "- ``Excel-Tools-Setup-$currentTag.exe`` — 安装包",\n' +
+      '            "",\n' +
+      '            "Built automatically by GitHub Actions."\n' +
+      '          ) -join "`r`n"\n' +
+      '          Set-Content -Path "$env:RUNNER_TEMP/release-body.md" -Value $body -Encoding UTF8\n' +
+      '\n' +
+      '      - name: Upload GitHub release assets\n' +
+      "        if: github.ref_type == 'tag'\n" +
+      '        uses: softprops/action-gh-release@v2\n' +
+      '        with:\n' +
+      '          name: Excel Tools ${{ env.CURRENT_TAG }}\n' +
+      '          body_path: ${{ runner.temp }}/release-body.md\n' +
+      '          files: |\n' +
+      '            dist/installers/*.exe\n' +
+      '            dist/installers/*.exe.blockmap\n' +
+      '            dist/installers/latest.yml\n' +
+      '          draft: false\n' +
+      '          prerelease: false\n' +
+      '          generate_release_notes: false\n' +
+      '\n' +
+      '      # ── 同步安装包到阿里云 OSS（国内用户免 VPN 更新） ────────\n' +
+      '      - name: Sync installers to Alibaba OSS mirror\n' +
+      '        continue-on-error: true\n' +
+      '        timeout-minutes: 15\n' +
+      '        env:\n' +
+      '          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}\n' +
+      '          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}\n' +
+      '          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}\n' +
+      '          OSS_REGION: ${{ secrets.OSS_REGION }}\n' +
+      '        shell: pwsh\n' +
+      '        run: |\n' +
+      '          if (-not $env:OSS_ACCESS_KEY_ID) {\n' +
+      '            Write-Host "OSS_ACCESS_KEY_ID is empty, skip OSS sync."\n' +
+      '            exit 0\n' +
+      '          }\n' +
+      '\n' +
+      '          Write-Host "Downloading ossutil..."\n' +
+      '          Invoke-WebRequest -Uri "https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil-v1.7.19-windows-amd64.zip" -OutFile ossutil.zip\n' +
+      '          Expand-Archive -Path ossutil.zip -DestinationPath . -Force\n' +
+      '\n' +
+      '          Write-Host "Configuring ossutil..."\n' +
+      '          .\\ossutil-v1.7.19-windows-amd64\\ossutil config -e "oss-$env:OSS_REGION.aliyuncs.com" -i "$env:OSS_ACCESS_KEY_ID" -k "$env:OSS_ACCESS_KEY_SECRET"\n' +
+      '\n' +
+      '          Write-Host "Uploading files to OSS..."\n' +
+      '          .\\ossutil-v1.7.19-windows-amd64\\ossutil cp dist/installers/latest.yml "oss://$env:OSS_BUCKET/latest.yml" -f\n' +
+      '          Get-ChildItem -Path dist/installers -Filter "*.exe" | ForEach-Object {\n' +
+      '            .\\ossutil-v1.7.19-windows-amd64\\ossutil cp $_.FullName "oss://$env:OSS_BUCKET/$($_.Name)" -f\n' +
+      '          }\n' +
+      '          Get-ChildItem -Path dist/installers -Filter "*.exe.blockmap" | ForEach-Object {\n' +
+      '            .\\ossutil-v1.7.19-windows-amd64\\ossutil cp $_.FullName "oss://$env:OSS_BUCKET/$($_.Name)" -f\n' +
+      '          }\n' +
+      '\n' +
+      '          Write-Host "OSS sync complete."\n' +
+      '\n' +
+      '      # ── 部署下载页到 Cloudflare Pages ──────────────────────\n' +
+      '      - name: Deploy download page to Cloudflare Pages\n' +
+      '        continue-on-error: true\n' +
+      '        timeout-minutes: 5\n' +
+      '        env:\n' +
+      '          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n' +
+      '          GH_TOKEN: ${{ github.token }}\n' +
+      '        shell: pwsh\n' +
+      '        run: |\n' +
+      '          if (-not $env:CLOUDFLARE_API_TOKEN) {\n' +
+      '            Write-Host "CLOUDFLARE_API_TOKEN is empty, skip Cloudflare Pages deploy."\n' +
+      '            exit 0\n' +
+      '          }\n' +
+      '\n' +
+      '          $currentVersion = "${{ env.CURRENT_TAG }}"\n' +
+      '\n' +
+      '          # Fetch all releases with body from GitHub, sorted newest first\n' +
+      '          $allReleases = gh release list --limit 100 --exclude-drafts --json tagName,body | ConvertFrom-Json | Sort-Object tagName -Descending\n' +
+      '\n' +
+      '          # Build version list HTML\n' +
+      '          $versionItems = ""\n' +
+      '          foreach ($release in $allReleases) {\n' +
+      '            $ver = $release.tagName\n' +
+      '            $body = $release.body\n' +
+      `            $badge = if ($ver -eq $currentVersion) { ' <span class="badge">★ 最新</span>' } else { '' }\n` +
+      '\n' +
+      '            # Extract changelog content between "### 更新内容" and next "###" or end\n' +
+      '            $changelog = ""\n' +
+      "            if ($body -match '(?s)### 更新内容\\s*\\n(.+?)(?=\\n###|\\z)') {\n" +
+      '              $changelog = $matches[1].Trim()\n' +
+      "              $changelog = $changelog -replace '(?m)^\\- ', '<li>'\n" +
+      "              $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'\n" +
+      "              $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'\n" +
+      '              $changelog = "<ul>$changelog</ul>"\n' +
+      '            }\n' +
+      '\n' +
+      "            $versionItems += '<li>'\n" +
+      `            $versionItems += '<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $ver + '.exe">' + $ver + '</a>' + $badge\n` +
+      '            if ($changelog) {\n' +
+      "              $versionItems += '<details><summary>更新内容</summary>' + $changelog + '</details>'\n" +
+      '            }\n' +
+      "            $versionItems += '</li>'\n" +
+      '          }\n' +
+      '\n' +
+      '          $lines = @(\n' +
+      "            '<!DOCTYPE html>',\n" +
+      `            '<html lang="zh-CN">',\n` +
+      "            '<head>',\n" +
+      `            '<meta charset="UTF-8">',\n` +
+      `            '<meta name="viewport" content="width=device-width,initial-scale=1.0">',\n` +
+      "            '<title>Excel Tools 下载</title>',\n" +
+      "            '<style>',\n" +
+      `            'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:60px auto;padding:0 20px;text-align:center}',\n` +
+      "            'h1{font-size:2em}',\n" +
+      "            '.btn{display:inline-block;padding:14px 36px;background:#409eff;color:#fff;border-radius:8px;text-decoration:none;font-size:1.1em;margin:1em 0}',\n" +
+      "            '.btn:hover{background:#337ecc}',\n" +
+      "            'ul{list-style:none;padding:0;text-align:left}',\n" +
+      "            'li{padding:8px 12px;border-bottom:1px solid #eee}',\n" +
+      "            'li a{color:#409eff;text-decoration:none}',\n" +
+      "            'li a:hover{text-decoration:underline}',\n" +
+      "            '.badge{color:#e6a23c;font-weight:bold}',\n" +
+      "            'details{margin:4px 0 4px 16px;font-size:0.85em;color:#666}',\n" +
+      "            'details summary{cursor:pointer;color:#999}',\n" +
+      "            'details ul{padding-left:20px;margin:4px 0}',\n" +
+      "            'details li{margin:2px 0;border:none;padding:2px}',\n" +
+      "            '.meta{color:#999;font-size:0.85em;margin-top:2em}',\n" +
+      "            '</style>',\n" +
+      "            '</head>',\n" +
+      "            '<body>',\n" +
+      "            '<h1>Excel Tools</h1>',\n" +
+      "            '<p>Excel 自动化处理工具</p>',\n" +
+      `            '<a class="btn" href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $currentVersion + '.exe">立即下载最新版</a>',\n` +
+      "            '<h2>所有版本</h2>',\n" +
+      "            '<ul>',\n" +
+      '            $versionItems,\n' +
+      "            '</ul>',\n" +
+      `            '<p class="meta">版本信息：<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml">latest.yml</a></p>',\n` +
+      "            '</body>',\n" +
+      "            '</html>'\n" +
+      '          )\n' +
+      '\n' +
+      '          $tmpDir = Join-Path $env:RUNNER_TEMP "cloudflare-pages"\n' +
+      '          mkdir -Force $tmpDir | Out-Null\n' +
+      '          Set-Content -Path "$tmpDir/index.html" -Value $lines -Encoding UTF8\n' +
+      '\n' +
+      '          Write-Host "Deploying to Cloudflare Pages..."\n' +
+      '          pnpm exec wrangler pages deploy "$tmpDir" --project-name excel-tools --branch main\n' +
+      '          Write-Host "Cloudflare Pages deploy complete."\n'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    name: Release
+    
+    on:
+      push:
+        tags:
+          - "v*"
+      workflow_dispatch:
+    
+    jobs:
+      build-and-release:
+        name: Build & Release
+        runs-on: windows-latest
+    
+        permissions:
+          contents: write
+    
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          npm_config_electron_mirror: https://npmmirror.com/mirrors/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+    
+        steps:
+          - uses: actions/checkout@v4
+            with:
+              fetch-depth: 0
+    
+          - name: Determine effective tag
+            shell: bash
+            run: |
+              if [[ "${{ github.ref_type }}" == "tag" ]]; then
+                echo "CURRENT_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+              else
+                echo "CURRENT_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+              fi
+    
+          - name: Init timing summary
+            shell: pwsh
+            run: |
+              @"
+              # Release Timing Summary
+    
+              - Workflow: ${{ github.workflow }}
+              - Ref: ${{ env.CURRENT_TAG }}
+              - Runner: windows-latest
+              "@ | Set-Content -Path $env:GITHUB_STEP_SUMMARY
+    
+          - name: Setup pnpm
+            uses: pnpm/action-setup@v4
+            with:
+              version: 9
+              run_install: false
+    
+          - name: Setup Node.js
+            uses: actions/setup-node@v4
+            with:
+              node-version: 22
+              cache: "pnpm"
+    
+          - name: Install dependencies
+            shell: pwsh
+            run: |
+              $sw = [System.Diagnostics.Stopwatch]::StartNew()
+              pnpm install --frozen-lockfile
+              $sw.Stop()
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Install dependencies: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
+    
+          - name: Build renderer
+            shell: pwsh
+            run: |
+              $sw = [System.Diagnostics.Stopwatch]::StartNew()
+              pnpm build:renderer
+              $sw.Stop()
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build renderer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
+    
+          - name: Build installer
+            shell: pwsh
+            env:
+              CSC_IDENTITY_AUTO_DISCOVERY: false
+            run: |
+              $sw = [System.Diagnostics.Stopwatch]::StartNew()
+              pnpm exec electron-builder --config electron-builder.json --publish never
+              $sw.Stop()
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build installer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
+    
+          - name: Generate release notes
+            shell: pwsh
+            run: |
+              $currentTag = "${{ env.CURRENT_TAG }}"
+              $prevTag = git tag --sort=-version:refname | Where-Object { $_ -ne $currentTag } | Select-Object -First 1
+    
+              if ($prevTag) {
+                $lines = git log "$prevTag..$currentTag" --oneline --no-decorate --format="- %s" `
+                  | Where-Object { $_ -notmatch '^\- release: v' }
+                $log = $lines -join "`r`n"
+              } else {
+                $log = "Initial release."
+              }
+    
+              $body = @(
+                "## Excel Tools $currentTag",
+                "",
+                "### 更新内容",
+                $log,
+                "",
+                "### Windows",
+                "- ``Excel-Tools-Setup-$currentTag.exe`` — 安装包",
+                "",
+                "Built automatically by GitHub Actions."
+              ) -join "`r`n"
+              Set-Content -Path "$env:RUNNER_TEMP/release-body.md" -Value $body -Encoding UTF8
+    
+          - name: Upload GitHub release assets
+            if: github.ref_type == 'tag'
+            uses: softprops/action-gh-release@v2
+            with:
+              name: Excel Tools ${{ env.CURRENT_TAG }}
+              body_path: ${{ runner.temp }}/release-body.md
+              files: |
+                dist/installers/*.exe
+                dist/installers/*.exe.blockmap
+                dist/installers/latest.yml
+              draft: false
+              prerelease: false
+              generate_release_notes: false
+    
+          # ── 同步安装包到阿里云 OSS（国内用户免 VPN 更新） ────────
+          - name: Sync installers to Alibaba OSS mirror
+            continue-on-error: true
+            timeout-minutes: 15
+            env:
+              OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+              OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+              OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+              OSS_REGION: ${{ secrets.OSS_REGION }}
+            shell: pwsh
+            run: |
+              if (-not $env:OSS_ACCESS_KEY_ID) {
+                Write-Host "OSS_ACCESS_KEY_ID is empty, skip OSS sync."
+                exit 0
+              }
+    
+              Write-Host "Downloading ossutil..."
+              Invoke-WebRequest -Uri "https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil-v1.7.19-windows-amd64.zip" -OutFile ossutil.zip
+              Expand-Archive -Path ossutil.zip -DestinationPath . -Force
+    
+              Write-Host "Configuring ossutil..."
+              .\ossutil-v1.7.19-windows-amd64\ossutil config -e "oss-$env:OSS_REGION.aliyuncs.com" -i "$env:OSS_ACCESS_KEY_ID" -k "$env:OSS_ACCESS_KEY_SECRET"
+    
+              Write-Host "Uploading files to OSS..."
+              .\ossutil-v1.7.19-windows-amd64\ossutil cp dist/installers/latest.yml "oss://$env:OSS_BUCKET/latest.yml" -f
+              Get-ChildItem -Path dist/installers -Filter "*.exe" | ForEach-Object {
+                .\ossutil-v1.7.19-windows-amd64\ossutil cp $_.FullName "oss://$env:OSS_BUCKET/$($_.Name)" -f
+              }
+              Get-ChildItem -Path dist/installers -Filter "*.exe.blockmap" | ForEach-Object {
+                .\ossutil-v1.7.19-windows-amd64\ossutil cp $_.FullName "oss://$env:OSS_BUCKET/$($_.Name)" -f
+              }
+    
+              Write-Host "OSS sync complete."
+    
+          # ── 部署下载页到 Cloudflare Pages ──────────────────────
+          - name: Deploy download page to Cloudflare Pages
+            continue-on-error: true
+            timeout-minutes: 5
+            env:
+              CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+              GH_TOKEN: ${{ github.token }}
+            shell: pwsh
+            run: |
+              if (-not $env:CLOUDFLARE_API_TOKEN) {
+                Write-Host "CLOUDFLARE_API_TOKEN is empty, skip Cloudflare Pages deploy."
+                exit 0
+              }
+    
+              $currentVersion = "${{ env.CURRENT_TAG }}"
+    
+              # Fetch all releases with body from GitHub, sorted newest first
+              $allReleases = gh release list --limit 100 --exclude-drafts --json tagName,body | ConvertFrom-Json | Sort-Object tagName -Descending
+    
+              # Build version list HTML
+              $versionItems = ""
+              foreach ($release in $allReleases) {
+                $ver = $release.tagName
+                $body = $release.body
+                $badge = if ($ver -eq $currentVersion) { ' <span class="badge">★ 最新</span>' } else { '' }
+    
+                # Extract changelog content between "### 更新内容" and next "###" or end
+                $changelog = ""
+                if ($body -match '(?s)### 更新内容\s*\n(.+?)(?=\n###|\z)') {
+                  $changelog = $matches[1].Trim()
+                  $changelog = $changelog -replace '(?m)^\- ', '<li>'
+                  $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'
+                  $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'
+                  $changelog = "<ul>$changelog</ul>"
+                }
+    
+                $versionItems += '<li>'
+                $versionItems += '<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $ver + '.exe">' + $ver + '</a>' + $badge
+                if ($changelog) {
+                  $versionItems += '<details><summary>更新内容</summary>' + $changelog + '</details>'
+                }
+                $versionItems += '</li>'
+              }
+    
+              $lines = @(
+                '<!DOCTYPE html>',
+                '<html lang="zh-CN">',
+                '<head>',
+                '<meta charset="UTF-8">',
+                '<meta name="viewport" content="width=device-width,initial-scale=1.0">',
+                '<title>Excel Tools 下载</title>',
+                '<style>',
+                'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:60px auto;padding:0 20px;text-align:center}',
+                'h1{font-size:2em}',
+                '.btn{display:inline-block;padding:14px 36px;background:#409eff;color:#fff;border-radius:8px;text-decoration:none;font-size:1.1em;margin:1em 0}',
+                '.btn:hover{background:#337ecc}',
+                'ul{list-style:none;padding:0;text-align:left}',
+                'li{padding:8px 12px;border-bottom:1px solid #eee}',
+                'li a{color:#409eff;text-decoration:none}',
+                'li a:hover{text-decoration:underline}',
+                '.badge{color:#e6a23c;font-weight:bold}',
+                'details{margin:4px 0 4px 16px;font-size:0.85em;color:#666}',
+                'details summary{cursor:pointer;color:#999}',
+                'details ul{padding-left:20px;margin:4px 0}',
+                'details li{margin:2px 0;border:none;padding:2px}',
+                '.meta{color:#999;font-size:0.85em;margin-top:2em}',
+                '</style>',
+                '</head>',
+                '<body>',
+                '<h1>Excel Tools</h1>',
+                '<p>Excel 自动化处理工具</p>',
+                '<a class="btn" href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $currentVersion + '.exe">立即下载最新版</a>',
+                '<h2>所有版本</h2>',
+                '<ul>',
+                $versionItems,
+                '</ul>',
+                '<p class="meta">版本信息：<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/latest.yml">latest.yml</a></p>',
+                '</body>',
+                '</html>'
+              )
+    
+              $tmpDir = Join-Path $env:RUNNER_TEMP "cloudflare-pages"
+              mkdir -Force $tmpDir | Out-Null
+              Set-Content -Path "$tmpDir/index.html" -Value $lines -Encoding UTF8
+    
+              Write-Host "Deploying to Cloudflare Pages..."
+              pnpm exec wrangler pages deploy "$tmpDir" --project-name excel-tools --branch main
+              Write-Host "Cloudflare Pages deploy complete."
+    
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/XXK/Desktop/work/excel%20tools/excel-tools/main/releaseWorkflow.test.mjs:18:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: package build script uses pnpm end-to-end
+ok 2 - package build script uses pnpm end-to-end
+  ---
+  duration_ms: 1.2745
+  type: 'test'
+  ...
+# Subtest: vite config resolves renderer paths from config file location instead of cwd
+ok 3 - vite config resolves renderer paths from config file location instead of cwd
+  ---
+  duration_ms: 2436.7483
+  type: 'test'
+  ...
+# Subtest: createSendPayload keeps only structured-cloneable send fields
+not ok 4 - createSendPayload keeps only structured-cloneable send fields
+  ---
+  duration_ms: 10.6067
+  type: 'test'
+  location: 'C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\renderer\\utils\\sendPayload.test.mjs:6:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    ... Skipped lines
+    
+      {
+        matched: [
+          {
+            channels: [
+              'wechat',
+    ...
+        ],
+    +   unmatched: [],
+        wechatFirst: true
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    matched:
+      0:
+        originalName: '日报.xlsx'
+        mappedName: '2026-06-07日报.xlsx'
+        resolvedSubject: '2026-06-07 日报'
+        channels:
+          0: 'wechat'
+          1: 'email'
+        filePath: 'C:\\tmp\\日报.xlsx'
+        rule:
+          originalName: '日报.xlsx'
+          mappedName: '{{date}}日报.xlsx'
+          channels:
+            0: 'wechat'
+            1: 'email'
+          wechatGroup: '测试群'
+          emailSubject: '{{date}} 日报'
+          emailTo:
+            0: 'a@example.com'
+          emailCc:
+            0: 'b@example.com'
+    wechatFirst: true
+  actual:
+    matched:
+      0:
+        originalName: '日报.xlsx'
+        mappedName: '2026-06-07日报.xlsx'
+        resolvedSubject: '2026-06-07 日报'
+        channels:
+          0: 'wechat'
+          1: 'email'
+        filePath: 'C:\\tmp\\日报.xlsx'
+        rule:
+          originalName: '日报.xlsx'
+          mappedName: '{{date}}日报.xlsx'
+          channels:
+            0: 'wechat'
+            1: 'email'
+          wechatGroup: '测试群'
+          emailSubject: '{{date}} 日报'
+          emailTo:
+            0: 'a@example.com'
+          emailCc:
+            0: 'b@example.com'
+    wechatFirst: true
+    unmatched:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/XXK/Desktop/work/excel%20tools/excel-tools/renderer/utils/sendPayload.test.mjs:35:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: optimizeWorksheetXml keeps sparse formula rows inside worksheet dimension
+ok 5 - optimizeWorksheetXml keeps sparse formula rows inside worksheet dimension
+  ---
+  duration_ms: 6.2433
+  type: 'test'
+  ...
+# Subtest: mapSourceToTargetColumns preserves duplicate header occurrences for daily report date blocks
+ok 6 - mapSourceToTargetColumns preserves duplicate header occurrences for daily report date blocks
+  ---
+  duration_ms: 15.7218
+  type: 'test'
+  ...
+# Subtest: trimTrailingVendorlessRows removes trailing daily rows when vendor is blank
+ok 7 - trimTrailingVendorlessRows removes trailing daily rows when vendor is blank
+  ---
+  duration_ms: 2.6602
+  type: 'test'
+  ...
+# Subtest: trimTrailingVendorlessRows keeps trailing rows when vendor is present
+ok 8 - trimTrailingVendorlessRows keeps trailing rows when vendor is present
+  ---
+  duration_ms: 0.6395
+  type: 'test'
+  ...
+# Subtest: resolveTemplateStyleRow prefers the matching template row before falling back to the first data row
+ok 9 - resolveTemplateStyleRow prefers the matching template row before falling back to the first data row
+  ---
+  duration_ms: 0.8407
+  type: 'test'
+  ...
+# Subtest: stripExternalLinksFromEntries removes external link parts and workbook references
+ok 10 - stripExternalLinksFromEntries removes external link parts and workbook references
+  ---
+  duration_ms: 3.5001
+  type: 'test'
+  ...
+# Subtest: extractWorkbookSheetEntries maps workbook sheet names to worksheet xml entries
+ok 11 - extractWorkbookSheetEntries maps workbook sheet names to worksheet xml entries
+  ---
+  duration_ms: 2.5548
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries rebuilds conditional formatting, normalizes sheet view, and trims trailing empty rows
+ok 12 - cleanupXlsxEntries rebuilds conditional formatting, normalizes sheet view, and trims trailing empty rows
+  ---
+  duration_ms: 11.4783
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries clips merge-side conditional formatting to the final worksheet row count
+ok 13 - cleanupXlsxEntries clips merge-side conditional formatting to the final worksheet row count
+  ---
+  duration_ms: 1.5745
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries removes frozen pane metadata when clearFrozenPane is enabled
+ok 14 - cleanupXlsxEntries removes frozen pane metadata when clearFrozenPane is enabled
+  ---
+  duration_ms: 1.0422
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries does not trim trailing rows that are still referenced by conditional formatting
+ok 15 - cleanupXlsxEntries does not trim trailing rows that are still referenced by conditional formatting
+  ---
+  duration_ms: 2.722
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries preserves trailing rows referenced by data validation
+ok 16 - cleanupXlsxEntries preserves trailing rows referenced by data validation
+  ---
+  duration_ms: 2.3909
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries caps data validation refs to the final worksheet range
+ok 17 - cleanupXlsxEntries caps data validation refs to the final worksheet range
+  ---
+  duration_ms: 1.5538
+  type: 'test'
+  ...
+# Subtest: findWorksheetDeclaredMaxRow prefers worksheet dimension over sparse row records
+ok 18 - findWorksheetDeclaredMaxRow prefers worksheet dimension over sparse row records
+  ---
+  duration_ms: 1.1092
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries preserves declared max row for split conditional formatting remap
+ok 19 - cleanupXlsxEntries preserves declared max row for split conditional formatting remap
+  ---
+  duration_ms: 2.812
+  type: 'test'
+  ...
+# Subtest: extractDifferentialStylesNode returns the dxfs section from styles.xml
+ok 20 - extractDifferentialStylesNode returns the dxfs section from styles.xml
+  ---
+  duration_ms: 0.8142
+  type: 'test'
+  ...
+# Subtest: cleanupXlsxEntries restores differential styles for conditional formatting dxfId references
+ok 21 - cleanupXlsxEntries restores differential styles for conditional formatting dxfId references
+  ---
+  duration_ms: 0.9773
+  type: 'test'
+  ...
+# Subtest: parseRuleExcel parses rules and splits delivery channels into arrays
+ok 22 - parseRuleExcel parses rules and splits delivery channels into arrays
+  ---
+  duration_ms: 7.3263
+  type: 'test'
+  ...
+# Subtest: parseRuleExcel skips rows with missing required fields
+ok 23 - parseRuleExcel skips rows with missing required fields
+  ---
+  duration_ms: 1.4086
+  type: 'test'
+  ...
+# Subtest: parseRuleExcel supports mixed Chinese and English channel labels
+ok 24 - parseRuleExcel supports mixed Chinese and English channel labels
+  ---
+  duration_ms: 1.2044
+  type: 'test'
+  ...
+# Subtest: parseRuleExcel handles Alibaba Mail format with display name <email>
+ok 25 - parseRuleExcel handles Alibaba Mail format with display name <email>
+  ---
+  duration_ms: 1.2624
+  type: 'test'
+  ...
+# Subtest: normalizeEmailAddress handles various formats
+ok 26 - normalizeEmailAddress handles various formats
+  ---
+  duration_ms: 0.3275
+  type: 'test'
+ 
+
+[… truncated 3014 chars …]

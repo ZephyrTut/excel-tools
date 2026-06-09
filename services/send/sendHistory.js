@@ -46,4 +46,19 @@ async function clearHistory(userDataPath) {
   await fs.writeFile(filePath, JSON.stringify([], null, 2), "utf-8");
 }
 
-module.exports = { loadHistory, saveHistoryEntry, clearHistory };
+/**
+ * 删除单条历史记录
+ * @param {string} userDataPath
+ * @param {number} index - 要删除的记录索引（0=最新）
+ * @returns {Promise<void>}
+ */
+async function deleteHistoryEntry(userDataPath, index) {
+  const history = await loadHistory(userDataPath);
+  if (index >= 0 && index < history.length) {
+    history.splice(index, 1);
+  }
+  const filePath = path.join(userDataPath, HISTORY_FILE);
+  await fs.writeFile(filePath, JSON.stringify(history, null, 2), "utf-8");
+}
+
+module.exports = { loadHistory, saveHistoryEntry, clearHistory, deleteHistoryEntry };

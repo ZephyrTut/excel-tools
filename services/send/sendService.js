@@ -24,6 +24,7 @@ const {
   loadHistory,
   saveHistoryEntry,
   clearHistory,
+  deleteHistoryEntry,
 } = require("./sendHistory");
 
 /**
@@ -69,8 +70,8 @@ async function getRules(userDataPath) {
  * @param {string} userDataPath
  * @returns {Promise<{matched: Array, unmatched: string[], error?: string}>}
  */
-async function matchFolderFiles(folderPath, userDataPath) {
-  const rules = await getRules(userDataPath);
+async function matchFolderFiles(folderPath, userDataPath, customRules) {
+  const rules = customRules || await getRules(userDataPath);
   if (rules.length === 0) {
     return { matched: [], unmatched: [], error: "尚未导入规则" };
   }
@@ -139,6 +140,7 @@ async function executeSend({
   userDataPath,
   onProgress,
   signal,
+  unmatched = [],
 }) {
   const smtpConfig = await getSmtpConfig(userDataPath);
   const results = [];
@@ -166,6 +168,9 @@ async function executeSend({
       ? -1
       : 1;
   });
+
+  let successCount = 0;
+  let failCount = 0;
 
   // 提前检测 Python 环境（微信发送依赖）
   const hasWechatQueue = queue.some((q) => q.channel === "wechat");
@@ -197,10 +202,9 @@ async function executeSend({
   }
 
   const total = queue.length;
-  let successCount = 0;
-  let failCount = 0;
 
-  for (let i = 0; i < queue.length; i++) {
+  let i;
+  for (i = 0; i < queue.length; i++) {
     if (signal && signal.aborted) break;
 
     const item = queue[i];
@@ -222,15 +226,16 @@ async function executeSend({
     if (onProgress) onProgress(progressEvent);
 
     let result;
-    if (item.channel === "wechat") {
-      hasWechat = true;
-      result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath);
-      results.push({
-        originalName: item.originalName,
-        channel: "wechat",
-        target: item.rule.wechatGroup,
-        success: result.success,
-        error: result.error || null,
+    try {
+      if (item.channel === "wechat") {
+        hasWechat = true;
+        result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath, signal);
+        results.push({
+          originalName: item.originalName,
+          channel: "wechat",
+          target: item.rule.wechatGroup,
+          success: result.success,
+          error: result.error || null,
       });
     } else if (item.channel === "email") {
       if (!smtpConfig) {
@@ -284,6 +289,41 @@ async function executeSend({
         status: result.success ? "success" : "error",
       });
     }
+    } catch (err) {
+      // 用户中断时立即跳出循环
+      if (signal && signal.aborted) break;
+      // 非中断性错误按失败处理
+      failCount++;
+      historyTargets.push({
+        type: item.channel,
+        name: item.channel === "wechat"
+          ? item.rule.wechatGroup
+          : formatEmailList(item.rule.emailTo),
+        status: "error",
+        error: err.message,
+      });
+      if (onProgress) {
+        onProgress({
+          ...progressEvent,
+          status: "error",
+        });
+      }
+    }
+  }
+
+  // 如果被中断，标记剩余未发送项
+  if (signal && signal.aborted) {
+    for (let j = i; j < queue.length; j++) {
+      const item = queue[j];
+      historyTargets.push({
+        type: item.channel,
+        name:
+          item.channel === "wechat"
+            ? item.rule.wechatGroup
+            : formatEmailList(item.rule.emailTo),
+        status: "interrupted",
+      });
+    }
   }
 
   // 所有微信发送完成后最小化窗口
@@ -306,11 +346,34 @@ async function executeSend({
       ? path.dirname(matched[0].filePath)
       : null;
 
+  // 记录未匹配项到历史
+  for (const umName of unmatched) {
+    historyTargets.push({
+      type: "skip",
+      name: umName,
+      status: "skipped",
+      error: null,
+    });
+  }
+
   const historyEntry = {
     date: new Date().toISOString(),
     folderPath,
     files: historyFiles,
     targets: historyTargets,
+    matchedDetails: matched.map((item) => ({
+      originalName: item.originalName,
+      mappedName: item.mappedName,
+      resolvedSubject: item.resolvedSubject || null,
+      channels: item.channels,
+      rule: {
+        wechatGroup: item.rule?.wechatGroup || null,
+        emailTo: item.rule?.emailTo || [],
+        emailCc: item.rule?.emailCc || [],
+        emailSubject: item.rule?.emailSubject || null,
+      },
+    })),
+    unmatched: [...unmatched],
   };
 
   await saveHistoryEntry(userDataPath, historyEntry);
@@ -335,4 +398,5 @@ module.exports = {
   executeSend,
   loadHistory,
   clearHistory,
+  deleteHistoryEntry,
 };
