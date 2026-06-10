@@ -1,6 +1,6 @@
 {
   "name": "excel-tools",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Excel automation desktop tools built with Electron + Vue + ExcelJS",
   "main": "main/main.js",
   "author": "excel-tools",
@@ -20,7 +20,8 @@
     "test": "node scripts/run-local-tests.js",
     "test:watch": "node --test --watch main/**/*.test.js services/**/*.test.js",
     "test:vitest": "vitest run --config ./vitest.config.mjs",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "changelog": "node scripts/generate-changelog.js --write"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
