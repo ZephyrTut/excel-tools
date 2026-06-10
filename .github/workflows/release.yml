@@ -172,39 +172,37 @@ jobs:
             exit 0
           }
 
-          $currentVersion = "$env:CURRENT_TAG".Trim()
+          $currentVersion = "${{ github.ref_name }}"
 
-          # Fetch all releases with body from GitHub, sorted newest first
+          # Fetch release list (only tagName — body requires per-release API call)
           Write-Host "Fetching releases via gh CLI..."
-          $releasesJson = gh release list --limit 100 --exclude-drafts --json tagName,body 2>&1
-          if (-not $releasesJson) {
-            Write-Host "WARNING: gh release list returned empty output"
+          try {
+            $allReleases = gh release list --limit 100 --exclude-drafts --json tagName 2>$null | ConvertFrom-Json | Sort-Object tagName -Descending
+            Write-Host "Found $($allReleases.Count) releases"
+          } catch {
+            Write-Host "WARNING: Failed to list releases: $_"
             $allReleases = @()
-          } else {
-            try {
-              $allReleases = $releasesJson | ConvertFrom-Json -ErrorAction Stop | Sort-Object tagName -Descending
-              Write-Host "Found $($allReleases.Count) releases"
-            } catch {
-              Write-Host "WARNING: Failed to parse releases JSON: $_"
-              $allReleases = @()
-            }
           }
 
-          # Build version list HTML
+          # Build version list HTML (fetch body per-release for changelog)
           $versionItems = ""
           foreach ($release in $allReleases) {
             $ver = $release.tagName
-            $body = $release.body
             $badge = if ($ver -eq $currentVersion) { ' <span class="badge">★ 最新</span>' } else { '' }
 
-            # Extract changelog content between "### 更新内容" and next "###" or end
+            # Fetch body separately for the changelog
             $changelog = ""
-            if ($body -match '(?s)### 更新内容\s*\n(.+?)(?=\n###|\z)') {
-              $changelog = $matches[1].Trim()
-              $changelog = $changelog -replace '(?m)^\- ', '<li>'
-              $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'
-              $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'
-              $changelog = "<ul>$changelog</ul>"
+            try {
+              $body = gh release view "$ver" --json body 2>$null | ConvertFrom-Json | Select-Object -ExpandProperty body
+              if ($body -match '(?s)### 更新内容\s*\n(.+?)(?=\n###|\z)') {
+                $changelog = $matches[1].Trim()
+                $changelog = $changelog -replace '(?m)^\- ', '<li>'
+                $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'
+                $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'
+                $changelog = "<ul>$changelog</ul>"
+              }
+            } catch {
+              # No body available — show version without changelog
             }
 
             $versionItems += '<li>'
