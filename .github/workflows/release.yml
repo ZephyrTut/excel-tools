@@ -172,10 +172,23 @@ jobs:
             exit 0
           }
 
-          $currentVersion = "${{ env.CURRENT_TAG }}"
+          $currentVersion = "$env:CURRENT_TAG".Trim()
 
           # Fetch all releases with body from GitHub, sorted newest first
-          $allReleases = gh release list --limit 100 --exclude-drafts --json tagName,body | ConvertFrom-Json | Sort-Object tagName -Descending
+          Write-Host "Fetching releases via gh CLI..."
+          $releasesJson = gh release list --limit 100 --exclude-drafts --json tagName,body 2>&1
+          if (-not $releasesJson) {
+            Write-Host "WARNING: gh release list returned empty output"
+            $allReleases = @()
+          } else {
+            try {
+              $allReleases = $releasesJson | ConvertFrom-Json -ErrorAction Stop | Sort-Object tagName -Descending
+              Write-Host "Found $($allReleases.Count) releases"
+            } catch {
+              Write-Host "WARNING: Failed to parse releases JSON: $_"
+              $allReleases = @()
+            }
+          }
 
           # Build version list HTML
           $versionItems = ""
