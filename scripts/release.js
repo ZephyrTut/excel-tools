@@ -88,9 +88,17 @@ async function main() {
   fs.writeFileSync(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + "\n");
   console.log(`✓ package.json 已更新: ${newVersion}`);
 
-  // 3. Git commit, tag, push
+  // 3. 重新生成 CHANGELOG.md
   try {
-    execSync("git add package.json", { stdio: "inherit" });
+    execSync(`node scripts/generate-changelog.js --write`, { stdio: "inherit" });
+    console.log("✓ CHANGELOG.md 已重新生成");
+  } catch (err) {
+    console.warn("⚠ CHANGELOG 生成失败:", err.message);
+  }
+
+  // 4. Git commit, tag, push
+  try {
+    execSync(`git add package.json CHANGELOG.md`, { stdio: "inherit" });
     execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
     execSync(`git tag ${tag}`, { stdio: "inherit" });
     console.log(`✓ 本地 tag ${tag} 已创建`);

@@ -1,145 +1,142 @@
 # Excel Tools
 
-基于 **Electron + Vue 3 + ExcelJS** 的桌面 Excel 处理工具，当前主要提供三类能力：
+基于 **Electron 31 + Vue 3 + Element Plus + ExcelJS** 的 Windows 桌面 Excel 自动化处理工具。
 
-- 拆分：按 `splitSheetRules` 将一个工作簿拆成多个文件
-- 合并：按 `mergeSheetRules` 和模板将多个来源文件汇总
-- 优化：对 xlsx 做 ZIP/XML 级清理，提升 Office 兼容性
+提供文件拆分、合并汇总、模板优化、批量分发（微信+邮件）四大核心能力，支持带格式/公式的复杂 Excel 操作。
 
 ## 快速开始
 
-安装依赖：
-
 ```bash
-npm install
+# 安装依赖（使用 pnpm）
+pnpm install
+
+# 启动开发模式（Vite dev server + Electron）
+pnpm dev
+
+# 运行测试
+pnpm test
+
+# 生产构建（打包为 NSIS 安装包）
+pnpm build
 ```
 
-开发模式：
+## 命令速查
 
-```bash
-npm run dev
+| 命令 | 用途 |
+|------|------|
+| `pnpm dev` | 启动 Vite + Electron 开发模式 |
+| `pnpm build` | 打包 Windows 安装包 |
+| `pnpm start` | 生产模式启动 |
+| `pnpm test` | 运行全部测试（node:test + vitest） |
+| `pnpm test:watch` | 监听模式运行测试 |
+| `pnpm release` | 发布新版本 (patch/minor/major) |
+| `pnpm setup:python` | 下载便携 Python + uiautomation |
+
+## 核心功能
+
+### 📂 Excel 拆分
+
+按规则将一个工作簿拆成多个文件，支持：
+- 按列值分组拆分
+- 模板绑定（保留样式、合并单元格、条件格式）
+- 自定义输出目录和文件名
+
+### 📊 合并汇总
+
+将多个来源文件按模板合并，支持：
+- 智能列头映射（模糊匹配 + 自定义别名）
+- 按供应商/分组排序
+- 透传 sheet 保留
+- 列宽自动复制
+
+### 🔧 模板优化
+
+对 XLSX 做 ZIP/XML 级清理，解决 WPS 与 Office 兼容性问题：
+- 清理空单元格/空行
+- 自动修正维度
+- 移除无用条目
+- 修复条件格式引用
+
+### 📤 批量分发
+
+支持微信 + 邮件双渠道分发：
+- **规则导入**：Excel 规则表定义"哪个文件发给谁"，支持变量替换 `{{date}}` / `{{fileName}}`
+- **文件匹配**：自动扫描文件夹匹配规则
+- **微信发送**：Python uiautomation 驱动微信 PC 端自动发送
+- **邮件发送**：Nodemailer 封装，支持 SMTP + 附件 + 抄送
+- **依赖自检**：启动时自动检测 Python / uiautomation，缺失时尝试自动修复
+- **全局 Esc 中断**：即使微信窗口有焦点，按 Esc 中断整个发送流程
+
+## 技术架构
+
+```
+Renderer (Vue 3 + Element Plus)
+  ↓ window.excelTools.xxx()
+preload.js (contextBridge)
+  ↓ ipcRenderer.invoke()
+ipc.js (ipcMain.handle)
+  ├──→ Worker 线程 (split/merge 重型 Excel 操作)
+  │     状态通过 task:event 推回 Renderer
+  └──→ 主进程直接执行 (optimize/update/send)
 ```
 
-生产模式启动：
+### 项目结构
 
-```bash
-npm start
 ```
-
-构建安装包：
-
-```bash
-npm run build
-```
-
-## 当前项目结构
-
-```text
 excel-tools/
-├─ main/                  # Electron 主进程、IPC、Worker
-├─ renderer/              # Vue 3 页面与组件
-├─ services/
-│  ├─ split/              # 拆分逻辑
-│  ├─ merge/              # 合并逻辑
-│  └─ optimize/           # xlsx ZIP/XML 兼容修复
-├─ config/
-│  └─ defaultRules.json   # 默认规则模板
-├─ scripts/               # 命令行脚本与验证脚本
-├─ docs/                  # 项目文档
-├─ samples/               # 示例输入
-├─ templates/             # 模板目录
-└─ output/                # 默认输出目录
+├── main/                    # Electron 主进程
+│   ├── main.js             # app.whenReady() 入口
+│   ├── ipc.js              # 所有 IPC 处理器
+│   ├── preload.js          # contextBridge (25+ 个 API)
+│   ├── window.js           # BrowserWindow 创建
+│   ├── workerRunner.js     # Worker 线程管理
+│   ├── updater.js          # 自动更新（双源回退）
+│   └── taskWorker.js       # Worker 任务处理
+├── renderer/                # Vue 3 前端
+│   ├── views/
+│   │   ├── SplitView.vue   # 拆分
+│   │   ├── MergeView.vue   # 合并
+│   │   ├── OptimizeView.vue# 优化
+│   │   └── SendView.vue    # 发送（含依赖自检状态）
+│   ├── components/
+│   │   ├── MergeColumnMappingPanel.vue
+│   │   ├── DependencyStatus.vue  # 依赖检查 UI
+│   │   ├── RuleTable.vue
+│   │   └── LogPanel.vue
+│   └── utils/
+├── services/                # 后端逻辑
+│   ├── split/              # 拆分引擎
+│   ├── merge/              # 合并引擎
+│   ├── optimize/           # 模板优化
+│   ├── send/               # 发送工具
+│   │   ├── sendService.js       # 发送编排
+│   │   ├── wechatController.js  # Python 微信控制
+│   │   ├── wechat_sender.py     # Python uiautomation 脚本
+│   │   ├── emailSender.js       # Nodemailer 封装
+│   │   ├── parseRuleExcel.js    # 规则表解析
+│   │   └── sendHistory.js       # 发送历史持久化
+│   └── dependencyCheck.js  # 外部依赖注册表 + 自检引擎
+├── scripts/                # 构建与工具脚本
+├── docs/                   # 设计文档与 ADR
+├── config/                 # 默认规则配置
+└── .vscode/                # Volar + ESLint 配置
 ```
 
-## 核心运行链路
+## 依赖管理
 
-```text
-Renderer
-  -> window.excelTools.*
-  -> main/preload.js
-  -> main/ipc.js
-  -> service
-  -> Worker 或主进程直调
-```
-
-关键入口文件：
-
-- `main/preload.js`
-- `main/ipc.js`
-- `renderer/views/SplitView.vue`
-- `renderer/views/MergeView.vue`
-- `services/split/splitService.js`
-- `services/merge/mergeService.js`
-- `services/optimize/zipUtils.js`
-
-## 当前规则模型
-
-请以这些字段为准：
-
-- `split.templateFile`
-- `merge.templateFile`
-- `split.sheetNameAliases`
-- `merge.sheetNameAliases`
-- `splitSheetRules`
-- `mergeSheetRules`
-
-说明：
-
-- 拆分和合并使用各自独立模板
-- 拆分和合并使用各自独立 sheet 别名映射
-- 旧的共享 `sheetRules` 概念不再是当前主路径
-
-## 常用命令
-
-```bash
-npm run dev
-npm start
-npm run build
-npm run split:zhejiang
-npm run compare:zhejiang
-npm run merge
-npm run compare:merge
-npm test
-```
-
-补充测试：
-
-```bash
-node --test .\main\ipcPayload.test.js
-node --test .\services\merge\mergeEngine.test.js
-node --test .\services\optimize\zipUtils.test.js
-node --test .\services\split\ruleManager.test.js
-```
-
-## 常见问题入口
-
-如果遇到这些问题，建议直接从对应文件开始排查：
-
-- `window.excelTools` 不存在
-  先看 `main/preload.js`、`main/window.js`
-- `An object could not be cloned`
-  先看 `main/ipcPayload.js`、对应 View 的请求构造
-- WPS 能开、Office 报修复
-  先看 `services/optimize/zipUtils.js`
-- 拆分 sheet 对不上
-  先看 `services/split/sheetNameMatcher.js` 和 `split.sheetNameAliases`
-- 合并列错位或某列全空
-  先看 `services/merge/mergeEngine.js` 和 `merge.sheetNameAliases`
-
-## 文档入口
-
-建议阅读顺序：
-
-1. [docs/PROJECT_HANDBOOK.md](./docs/PROJECT_HANDBOOK.md)
-2. [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-3. [docs/SPLIT_LOGIC.md](./docs/SPLIT_LOGIC.md)
-4. [docs/MERGE_LOGIC.md](./docs/MERGE_LOGIC.md)
-5. [docs/COMPATIBILITY_FIXES.md](./docs/COMPATIBILITY_FIXES.md)
-6. [docs/BUILD.md](./docs/BUILD.md)
+| 依赖 | 用途 | 运行时 |
+|------|------|--------|
+| Electron 31 | 桌面框架 | 打包自带 |
+| Vue 3 | 前端框架 | 打包 |
+| Element Plus | UI 组件库 | 按需加载 |
+| ExcelJS | Excel 读写 | 打包 |
+| Nodemailer | 邮件发送 | 打包 |
+| Python 3 | 微信自动化 | 系统安装或打包便携版 |
+| uiautomation | 微信 PC 控制 | `pip install uiautomation` 自动安装 |
 
 ## 下载与更新
 
-国内用户（无需 VPN）访问 Cloudflare Pages 下载页面：
+国内用户（无需 VPN）通过阿里云 OSS 加速：
 
 - **下载页面：** https://excel-tools.pages.dev/
 - **最新版安装包：** `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-v{version}.exe`
@@ -147,18 +144,34 @@ node --test .\services\split\ruleManager.test.js
 
 当前最新版本：**v1.2.17**
 
-应用内自动更新优先检查 OSS 镜像，失败后回退 GitHub。
+应用内自动更新策略：
+1. 先尝试阿里云 OSS 镜像
+2. 回退 GitHub Releases
 
-海外 / 有 VPN 用户直接从 [GitHub Releases](https://github.com/ZephyrTut/excel-tools/releases) 下载。
+海外用户从 [GitHub Releases](https://github.com/ZephyrTut/excel-tools/releases) 直接下载。
 
-## 更新机制
+## 外部依赖自检
+
+启动时自动检测 Python / uiautomation 等外部依赖，缺失时自动尝试修复：
 
 ```
-国内用户 → OSS 镜像（阿里云）→ latest.yml → 安装包
-                                               ↓ 失败
-海外用户 → GitHub Releases → latest.yml → 安装包
+✅ 所有依赖就绪 (2/2)          ← 展开查看详情
+├─ ✅ Python 3 — 微信发送所需
+└─ ✅ uiautomation — 微信 PC 端控制库
 ```
 
-核心文件：[main/updater.js](./main/updater.js) — 双源回退策略：
-1. 先尝试阿里云 OSS（generic provider）
-2. 回退 GitHub（github provider）
+依赖注册表位于 [services/dependencyCheck.js](services/dependencyCheck.js)，新增依赖只需添加一条 `{ check(), autoFix() }` 记录。
+
+## 文档
+
+- [CLAUDE.md](CLAUDE.md) — 代码库导航与贡献者指南
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 技术架构
+- [docs/SPLIT_LOGIC.md](docs/SPLIT_LOGIC.md) — 拆分引擎
+- [docs/MERGE_LOGIC.md](docs/MERGE_LOGIC.md) — 合并引擎
+- [docs/BUILD.md](docs/BUILD.md) — 构建与发布
+- [docs/PRD.md](docs/PRD.md) — 产品需求
+
+## 系统要求
+
+- **操作系统：** Windows 10/11（x64）
+- **微信发送要求：** 需安装微信 PC 版并登录；Python 3 或自动打包的便携 Python
