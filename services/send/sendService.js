@@ -5,7 +5,7 @@ const ExcelJS = require("exceljs");
 const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
-const { sendToWechatGroup, minimizeWechat, findPython } = require("./wechatController");
+const { sendToWechatGroup, minimizeWechat, findPython, checkUiautomationInstalled, ensureUiautomationInstalled } = require("./wechatController");
 
 /** 将地址对象或字符串转为显示用字符串 */
 function formatEmail(addr) {
@@ -172,7 +172,7 @@ async function executeSend({
   let successCount = 0;
   let failCount = 0;
 
-  // 提前检测 Python 环境（微信发送依赖）
+  // 提前检测 Python 和 uiautomation（微信发送依赖）
   const hasWechatQueue = queue.some((q) => q.channel === "wechat");
   if (hasWechatQueue) {
     const py = await findPython();
@@ -196,6 +196,36 @@ async function executeSend({
           });
           failCount++;
           queue.splice(qi, 1);
+        }
+      }
+    } else {
+      // 有 Python 但检测 uiautomation 是否安装
+      const hasUi = await checkUiautomationInstalled(py);
+      if (!hasUi) {
+        if (onProgress) onProgress({ type: "log", level: "warn", message: "未检测到 uiautomation，尝试自动安装..." });
+        const installed = await ensureUiautomationInstalled(py);
+        if (!installed) {
+          if (onProgress) onProgress({ type: "log", level: "error", message: "自动安装 uiautomation 失败，请手动运行: pip install uiautomation" });
+          for (let qi = queue.length - 1; qi >= 0; qi--) {
+            if (queue[qi].channel === "wechat") {
+              const item = queue[qi];
+              results.push({
+                originalName: item.originalName,
+                channel: "wechat",
+                target: item.rule.wechatGroup,
+                success: false,
+                error: "uiautomation 未安装且自动安装失败，跳过微信发送",
+              });
+              historyTargets.push({
+                type: "wechat",
+                name: item.rule.wechatGroup,
+                status: "error",
+                error: "uiautomation 未安装",
+              });
+              failCount++;
+              queue.splice(qi, 1);
+            }
+          }
         }
       }
     }

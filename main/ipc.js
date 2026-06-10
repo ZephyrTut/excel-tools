@@ -9,6 +9,7 @@ const { loadRules, saveRules } = require("../services/split/ruleManager");
 const templateStore = require("../services/templateStore");
 const { resolveSheetName } = require("../services/split/sheetNameMatcher");
 const sendService = require("../services/send/sendService");
+const depCheck = require("../services/dependencyCheck");
 
 /** Lazy getters — these modules are heavy and only needed on first IPC call. */
 function excelReader() {
@@ -683,6 +684,17 @@ function registerIpcHandlers() {
   ipcMain.handle("send:delete-history-entry", async (_, index) => {
     await sendService.deleteHistoryEntry(app.getPath("userData"), index);
     return { success: true };
+  });
+
+  // ── 依赖检查 ──
+  ipcMain.handle("deps:run-check", async () => {
+    return depCheck.runDependencyCheck((event) => {
+      broadcast({ type: "dependency-event", ...event, taskId: "deps" });
+    });
+  });
+
+  ipcMain.handle("deps:status", async () => {
+    return depCheck.getResults() || [];
   });
 
   ipcMain.handle("send:get-smtp-config", async () => {

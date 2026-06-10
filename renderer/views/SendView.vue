@@ -3,6 +3,7 @@
     <!-- 配置区 -->
     <el-card class="panel-card">
       <template #header><span>⚙️ 配置</span></template>
+      <DependencyStatus :results="depResults" />
       <el-form label-width="100px">
         <el-form-item label="SMTP 邮件">
           <el-tag v-if="smtpConfigured" type="success" size="small">已配置</el-tag>
@@ -303,6 +304,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { createSendPayload } from "../utils/sendPayload.mjs";
+import DependencyStatus from "../components/DependencyStatus.vue";
 
 function getApi() {
   const api = window.excelTools;
@@ -327,6 +329,7 @@ const showSmtpDialog = ref(false);
 const showRuleHelp = ref(false);
 const showResultDialog = ref(false);
 const clipboardFiles = ref([]);
+const depResults = ref([]);
 const sendProgress = ref(0);
 const sendAborted = ref(false);
 const folderDropActive = ref(false);
@@ -431,6 +434,11 @@ onMounted(async () => {
       }
       smtpConfigured.value = true;
     }
+  } catch {}
+
+  // 启动时自检外部依赖
+  try {
+    depResults.value = await api.runDependencyCheck();
   } catch {}
 });
 

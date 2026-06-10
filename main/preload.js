@@ -118,6 +118,15 @@ const api = {
     ipcRenderer.invoke("send:list-folder-files", folderPath),
   exportSendResults: (data) =>
     ipcRenderer.invoke("send:export-results", sanitizeForIpc(data)),
+
+  // ── 依赖检查 ──────────────────────────────────────────────────
+  runDependencyCheck: () => ipcRenderer.invoke("deps:run-check"),
+  getDependencyStatus: () => ipcRenderer.invoke("deps:status"),
+  onDependencyEvent: (handler) => {
+    const listener = (_, event) => handler(event);
+    ipcRenderer.on("deps:event", listener);
+    return () => ipcRenderer.removeListener("deps:event", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("excelTools", api);

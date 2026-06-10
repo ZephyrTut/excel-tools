@@ -140,4 +140,46 @@ async function minimizeWechat() {
   }
 }
 
-module.exports = { sendToWechatGroup, minimizeWechat, findPython, resetPythonCheck };
+/**
+ * 检测 uiautomation 包是否已安装
+ * @param {string} pythonCmd - Python 命令或路径
+ * @returns {Promise<boolean>}
+ */
+async function checkUiautomationInstalled(pythonCmd) {
+  if (!pythonCmd) return false;
+  try {
+    const [prog, ...args] = pythonCmd.split(" ");
+    const { stdout } = await execFileAsync(
+      prog,
+      [...args, "-c", "import uiautomation; print('OK')"],
+      { timeout: 10000 }
+    );
+    return stdout.trim() === "OK";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 自动安装 uiautomation 到指定的 Python 环境
+ * @param {string} pythonCmd - Python 命令或路径
+ * @returns {Promise<boolean>}
+ */
+async function ensureUiautomationInstalled(pythonCmd) {
+  if (!pythonCmd) return false;
+  // 先检查是否已安装
+  const installed = await checkUiautomationInstalled(pythonCmd);
+  if (installed) return true;
+
+  try {
+    const [prog, ...args] = pythonCmd.split(" ");
+    await execFileAsync(prog, [...args, "-m", "pip", "install", "uiautomation"], {
+      timeout: 120000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { sendToWechatGroup, minimizeWechat, findPython, resetPythonCheck, getBundledPythonPath, checkUiautomationInstalled, ensureUiautomationInstalled };
