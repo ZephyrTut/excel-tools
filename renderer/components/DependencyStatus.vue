@@ -1,11 +1,23 @@
 <template>
-  <div class="dependency-status" v-if="results.length > 0">
-    <div class="dep-bar" :class="'dep-bar--' + overallStatus" @click="expanded = !expanded">
+  <div class="dependency-status" v-if="results.length > 0 || installing">
+    <!-- 安装进度 -->
+    <div v-if="installing" class="dep-installing">
+      <el-progress :percentage="progressPercent" :stroke-width="10" style="margin-bottom: 4px" />
+      <div class="dep-install-msg">{{ progressMessage }}</div>
+    </div>
+
+    <!-- 结果状态条 -->
+    <div v-if="!installing" class="dep-bar" :class="'dep-bar--' + overallStatus" @click="expanded = !expanded">
       <span class="dep-bar-icon">{{ overallIcon }}</span>
       <span class="dep-bar-text">{{ overallText }}</span>
+      <el-button size="small" text type="primary" @click.stop="emit('check')" style="margin-right: 4px">
+        🔄 检测环境
+      </el-button>
       <span class="dep-bar-action">{{ expanded ? '收起' : '详情' }}</span>
     </div>
-    <div v-if="expanded" class="dep-list">
+
+    <!-- 详情列表 -->
+    <div v-if="expanded && !installing" class="dep-list">
       <div
         v-for="item in results"
         :key="item.id"
@@ -28,10 +40,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed } from "vue";
 
 const props = defineProps({
   results: { type: Array, default: () => [] },
+  installing: { type: Boolean, default: false },
+  progressPercent: { type: Number, default: 0 },
+  progressMessage: { type: String, default: "" },
 });
 
 const emit = defineEmits(["check"]);
@@ -40,10 +55,6 @@ const expanded = ref(false);
 
 const okCount = computed(() => props.results.filter((r) => r.status === "ok").length);
 const totalCount = computed(() => props.results.length);
-
-const hasIssue = computed(() =>
-  props.results.some((r) => r.status === "missing" || r.status === "error")
-);
 
 const overallStatus = computed(() => {
   if (props.results.some((r) => r.status === "error")) return "error";
@@ -78,6 +89,18 @@ function itemIcon(item) {
 .dependency-status {
   margin-top: 8px;
   font-size: 13px;
+}
+
+.dep-installing {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 145, 178, 0.04);
+}
+
+.dep-install-msg {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .dep-bar {
@@ -123,6 +146,7 @@ function itemIcon(item) {
 .dep-bar-action {
   font-size: 12px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .dep-list {

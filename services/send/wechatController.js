@@ -1,10 +1,26 @@
 "use strict";
-const { execFile } = require("node:child_process");
+const { execFile, execSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 const { promisify } = require("node:util");
+const https = require("node:https");
+const http = require("node:http");
+const { URL } = require("node:url");
+const { createWriteStream } = fs;
 
 const execFileAsync = promisify(execFile);
+
+const PYTHON_VERSION = "3.12.8";
+
+// 下载源列表（按优先级：国内镜像优先，官方回退）
+const PYTHON_EMBED_URLS = [
+  // 1. 项目 OSS 镜像（国内最快）
+  `https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/deps/python-${PYTHON_VERSION}-embed-amd64.zip`,
+  // 2. npmmirror 二进制镜像（国内备用）
+  `https://registry.npmmirror.com/-/binary/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-amd64.zip`,
+  // 3. 官方源（海外回退）
+  `https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-amd64.zip`,
+];
 
 // ── Python 检测（模块级缓存） ─────────────────────────────────────
 
@@ -26,12 +42,21 @@ function getBundledPythonPath() {
 }
 
 /**
- * 检测可用的 Python 命令
- * @returns {Promise<string|null>} 找到则返回命令名/路径，否则返回 null
+ * 获取打包在 resources 中的便携 Python 路径
  */
-async function findPython() {
-  if (_pythonChecked) return _pythonCommand;
-  _pythonChecked = true;
+function getUserPythonPath(userDataDir) {
+  if (!userDataDir) return null;
+  const exePath = path.join(userDataDir, "python", "python.exe");
+  return fs.existsSync(exePath) ? exePath : null;
+}
+
+/**
+ * 检测可用的 Python 命令
+ * @param {string} [userDataDir] - 用户数据目录，用于查找自动下载的 Python
+ * @returns {Promise<string|null>}
+ */
+async function findPython(userDataDir) {
+  if (_pythonChecked && !userDataDir) return _pythonCommand;
 
   // 1. 优先使用打包的便携 Python
   const bundled = getBundledPythonPath();
@@ -42,14 +67,34 @@ async function findPython() {
       });
       if (stdout && stdout.toLowerCase().includes("python")) {
         _pythonCommand = bundled;
+        _pythonChecked = true;
         return _pythonCommand;
       }
     } catch {
-      // 打包的 Python 不可用，回退到系统 Python
+      // 打包的 Python 不可用，继续
     }
   }
 
-  // 2. 回退到系统 Python
+  // 2. 检查用户目录下的自动安装 Python
+  if (userDataDir) {
+    const userPython = getUserPythonPath(userDataDir);
+    if (userPython) {
+      try {
+        const { stdout } = await execFileAsync(userPython, ["--version"], {
+          timeout: 3000,
+        });
+        if (stdout && stdout.toLowerCase().includes("python")) {
+          _pythonCommand = userPython;
+          _pythonChecked = true;
+          return _pythonCommand;
+        }
+      } catch {
+        // 用户目录的 Python 损坏，继续
+      }
+    }
+  }
+
+  // 3. 回退到系统 Python
   for (const cmd of PYTHON_CANDIDATES) {
     try {
       const [prog, ...args] = cmd.split(" ");
@@ -58,6 +103,7 @@ async function findPython() {
       });
       if (stdout && stdout.toLowerCase().includes("python")) {
         _pythonCommand = cmd;
+        _pythonChecked = true;
         return _pythonCommand;
       }
     } catch {
@@ -65,6 +111,7 @@ async function findPython() {
     }
   }
 
+  _pythonChecked = true;
   _pythonCommand = null;
   return null;
 }
@@ -182,4 +229,158 @@ async function ensureUiautomationInstalled(pythonCmd) {
   }
 }
 
-module.exports = { sendToWechatGroup, minimizeWechat, findPython, resetPythonCheck, getBundledPythonPath, checkUiautomationInstalled, ensureUiautomationInstalled };
+/**
+ * 自动下载嵌入式 Python 到指定目录，并安装 pip + uiautomation
+ * @param {string} destDir - 目标目录（如 app.getPath("userData")）
+ * @param {function} [onProgress] - ({ percent: number, message: string }) => void
+ * @returns {Promise<boolean>}
+ */
+async function autoInstallPython(destDir, onProgress) {
+  if (!destDir) return false;
+  const prog = (p, msg) => { if (typeof onProgress === "function") onProgress({ percent: p, message: msg }); };
+
+  const pythonDir = path.join(destDir, "python");
+
+  // 如果已经安装过，验证可用性后直接返回
+  const installed = getUserPythonPath(destDir);
+  if (installed) {
+    try {
+      const { stdout } = await execFileAsync(installed, ["--version"], { timeout: 3000 });
+      if (stdout && stdout.toLowerCase().includes("python")) return true;
+    } catch { /* 损坏，重新安装 */ }
+  }
+
+  prog(0, "准备安装 Python 环境...");
+
+  // 清空并创建目录
+  if (fs.existsSync(pythonDir)) {
+    fs.rmSync(pythonDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(pythonDir, { recursive: true });
+
+  const tmpDir = path.join(destDir, ".python-tmp");
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const zipFile = path.join(tmpDir, "python-embed.zip");
+
+  // 多源下载（OSS 镜像 → npmmirror → 官方）
+  let downloaded = false;
+  let lastError = null;
+  for (const url of PYTHON_EMBED_URLS) {
+    prog(5, `正在下载 Python (${new URL(url).hostname})...`);
+    try {
+      await downloadFile(url, zipFile, (pct) => {
+        prog(5 + Math.round(pct * 0.4), `正在下载 Python... ${pct}%`);
+      });
+      downloaded = true;
+      break;
+    } catch (err) {
+      lastError = err;
+      prog(5, `下载失败，尝试下一个镜像...`);
+    }
+  }
+
+  if (!downloaded) {
+    prog(0, `下载 Python 失败: ${lastError ? lastError.message : '所有镜像均不可用'}`);
+    return false;
+  }
+
+  prog(50, "正在解压...");
+  try {
+    execSync(`powershell -Command "Expand-Archive -Path '${zipFile}' -DestinationPath '${pythonDir}' -Force"`, {
+      timeout: 30000,
+    });
+  } catch {
+    prog(0, "解压失败");
+    return false;
+  }
+
+  // 修改 _pth 文件启用 site-packages
+  const pthFiles = fs.readdirSync(pythonDir).filter((f) => f.endsWith("._pth"));
+  for (const pthFile of pthFiles) {
+    const pthPath = path.join(pythonDir, pthFile);
+    let content = fs.readFileSync(pthPath, "utf-8");
+    if (!content.includes("import site")) {
+      content = content.replace(/#import site/, "import site");
+    }
+    if (!content.includes("Lib\\site-packages")) {
+      content += "Lib\\site-packages\n";
+    }
+    fs.writeFileSync(pthPath, content, "utf-8");
+  }
+
+  const pythonExe = path.join(pythonDir, "python.exe");
+  if (!fs.existsSync(pythonExe)) {
+    prog(0, "未找到 python.exe，解压可能失败");
+    return false;
+  }
+
+  // 安装 pip
+  prog(55, "正在安装 pip...");
+  const getPipFile = path.join(tmpDir, "get-pip.py");
+  try {
+    await downloadFile("https://bootstrap.pypa.io/get-pip.py", getPipFile, (pct) => {
+      prog(55 + Math.round(pct * 0.15), "正在下载 pip...");
+    });
+    execSync(`"${pythonExe}" "${getPipFile}" --no-warn-script-location`, {
+      timeout: 120000,
+    });
+  } catch (err) {
+    prog(0, `pip 安装失败: ${err.message}`);
+    return false;
+  }
+
+  // 安装 uiautomation
+  prog(75, "正在安装 uiautomation...");
+  try {
+    execSync(`"${pythonExe}" -m pip install uiautomation --no-warn-script-location`, {
+      timeout: 120000,
+    });
+  } catch (err) {
+    prog(0, `uiautomation 安装失败: ${err.message}`);
+    return false;
+  }
+
+  // 标记完成
+  const markerFile = path.join(pythonDir, ".setup_done");
+  fs.writeFileSync(markerFile, `Python ${PYTHON_VERSION} embedded with uiautomation\n`, "utf-8");
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  prog(100, "Python + uiautomation 安装完成");
+  return true;
+}
+
+/**
+ * 下载文件（支持进度回调）
+ * @param {string} url
+ * @param {string} dest
+ * @param {function} [onProgress] - (percent: number) => void
+ * @returns {Promise<void>}
+ */
+function downloadFile(url, dest, onProgress) {
+  const mod = url.startsWith("https") ? https : http;
+  return new Promise((resolve, reject) => {
+    mod.get(url, { timeout: 120000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        downloadFile(res.headers.location, dest, onProgress).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      const total = parseInt(res.headers["content-length"] || "0", 10);
+      let received = 0;
+      const file = createWriteStream(dest);
+      res.on("data", (chunk) => {
+        received += chunk.length;
+        if (total > 0 && typeof onProgress === "function") {
+          onProgress(Math.min(99, Math.round((received / total) * 100)));
+        }
+      });
+      res.pipe(file);
+      file.on("finish", () => { file.close(); resolve(); });
+    }).on("error", reject).on("timeout", function () { this.destroy(); reject(new Error("下载超时")); });
+  });
+}
+
+module.exports = { sendToWechatGroup, minimizeWechat, findPython, resetPythonCheck, getBundledPythonPath, checkUiautomationInstalled, ensureUiautomationInstalled, getUserPythonPath, autoInstallPython };

@@ -158,6 +158,64 @@ jobs:
 
           Write-Host "OSS sync complete."
 
+      # ── 同步 Python 嵌入式运行时到 OSS（仅首次上传，后续跳过） ──
+      - name: Sync Python embedded runtime to OSS
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_REGION: ${{ secrets.OSS_REGION }}
+        shell: pwsh
+        run: |
+          if (-not $env:OSS_ACCESS_KEY_ID) {
+            Write-Host "OSS_ACCESS_KEY_ID is empty, skip."
+            exit 0
+          }
+
+          $pythonVer = "3.12.8"
+          $zipName = "python-$pythonVer-embed-amd64.zip"
+          $ossPath = "oss://$env:OSS_BUCKET/deps/$zipName"
+
+          # 绕过 ossutil 直接调用阿里云 OSS REST API 检查文件存在性
+          Write-Host "Check if $zipName already exists on OSS..."
+          $ossEndpoint = "$env:OSS_BUCKET.$env:OSS_REGION.aliyuncs.com"
+          $checkUrl = "https://$ossEndpoint/deps/$zipName"
+          try {
+            $checkReq = [System.Net.WebRequest]::Create($checkUrl)
+            $checkReq.Method = "HEAD"
+            $checkReq.Timeout = 5000
+            $checkResp = $checkReq.GetResponse()
+            $checkResp.Close()
+            Write-Host "✓ $zipName already exists on OSS, skip download."
+            exit 0
+          } catch {
+            Write-Host "File not found on OSS, will download and upload."
+          }
+
+          Write-Host "Downloading ossutil..."
+          Invoke-WebRequest -Uri "https://gosspublic.alicdn.com/ossutil/1.7.19/ossutil-v1.7.19-windows-amd64.zip" -OutFile ossutil.zip
+          Expand-Archive -Path ossutil.zip -DestinationPath . -Force
+
+          $pythonUrl = "https://www.python.org/ftp/python/$pythonVer/$zipName"
+          Write-Host "Downloading $zipName from python.org..."
+          try {
+            Invoke-WebRequest -Uri $pythonUrl -OutFile "$env:RUNNER_TEMP\$zipName" -TimeoutSec 180
+          } catch {
+            Write-Host "Download failed: $_"
+            exit 0
+          }
+          Write-Host "Download complete."
+
+          Write-Host "Configuring ossutil..."
+          .\ossutil-v1.7.19-windows-amd64\ossutil config -e "oss-$env:OSS_REGION.aliyuncs.com" -i "$env:OSS_ACCESS_KEY_ID" -k "$env:OSS_ACCESS_KEY_SECRET"
+
+          Write-Host "Uploading $zipName to OSS deps/..."
+          .\ossutil-v1.7.19-windows-amd64\ossutil cp "$env:RUNNER_TEMP\$zipName" $ossPath -f
+
+          Write-Host "Python runtime sync complete."
+
       # ── 部署下载页到 Cloudflare Pages ──────────────────────
       - name: Deploy download page to Cloudflare Pages
         continue-on-error: true

@@ -11,18 +11,20 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | `pnpm dev` | 启动 Vite dev server + Electron |
 | `pnpm build` | 打包为 Windows 安装包 |
 | `pnpm start` | 生产模式启动 |
-| `pnpm test` | 运行测试 (vitest) |
+| `pnpm test` | 运行测试 (node:test + vitest) |
 | `pnpm release` | 发布新版本 (patch/minor/major) |
+| `pnpm changelog` | 基于 git 标签自动生成 CHANGELOG.md |
 
 ## Feature → File 映射
 
-### 三大核心功能
+### 三大核心功能 + 发送工具
 
 | 功能 | 前端 View | 后端 Service | IPC 入口 | 执行模式 |
 |------|-----------|-------------|----------|---------|
 | **Excel 拆分** | [SplitView.vue](renderer/views/SplitView.vue) | [split/](services/split/) | `task:start-split` | Worker 线程 |
 | **合并汇总** | [MergeView.vue](renderer/views/MergeView.vue) | [merge/](services/merge/) | `task:start-merge` | Worker 线程 |
 | **模板优化** | [OptimizeView.vue](renderer/views/OptimizeView.vue) | [optimize/](services/optimize/) | `optimize:run` | 主进程 |
+| **发送工具** | [SendView.vue](renderer/views/SendView.vue) | [send/](services/send/) | `send:*` / `deps:*` | 主进程直接执行 |
 
 ### 辅助功能
 
@@ -59,6 +61,8 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | `checkForUpdates()` / `downloadUpdate()` / `installUpdate()` | `update:*` | update:* | 428-437 |
 | `onTaskEvent(handler)` | `task:event` (push) | ipcRenderer.on | 21-24 |
 | `onUpdateEvent(handler)` | `update:event` (push) | ipcRenderer.on | 29-32 |
+| `runDependencyCheck()` / `getDependencyStatus()` | `deps:*` | `deps:run-check` / `deps:status` | 697 / 703 |
+| `onDependencyEvent(handler)` | `deps:event` (push) | ipcRenderer.on | preload.js:128 |
 
 ## 核心函数定位
 
@@ -110,6 +114,23 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | [zipUtils.js](services/optimize/zipUtils.js) | `readXlsxEntries()` | 11 | 读取 XLSX 条目 |
 | [zipUtils.js](services/optimize/zipUtils.js) | `writeXlsxFile()` | 34 | 写出优化后的 XLSX |
 
+### send/ — 发送工具
+
+| 文件 | 关键函数 | 行号 | 职责 |
+|------|---------|------|------|
+| [sendService.js](services/send/sendService.js) | `executeSend()` | 137 | 发送编排：队列 -> 微信/邮件 -> 历史 |
+| [sendService.js](services/send/sendService.js) | `importRules()` / `matchFolderFiles()` | 36 / 73 | 规则导入与文件匹配 |
+| [wechatController.js](services/send/wechatController.js) | `sendToWechatGroup()` | 88 | 通过 Python uiautomation 发送文件到微信群 |
+| [wechatController.js](services/send/wechatController.js) | `findPython()` | 32 | Python 环境检测（bundled → system PATH） |
+| [wechatController.js](services/send/wechatController.js) | `checkUiautomationInstalled()` / `ensureUiautomationInstalled()` | — | uiautomation 检测与自动安装 |
+| [wechatController.js](services/send/wechatController.js) | `getBundledPythonPath()` | 21 | 打包 Python 路径 |
+| [wechat_sender.py](services/send/wechat_sender.py) | `send_file_to_group()` | 106 | Python 端：剪贴板CF_HDROP + uiautomation |
+| [emailSender.js](services/send/emailSender.js) | `sendEmail()` | — | Nodemailer 封装 |
+| [parseRuleExcel.js](services/send/parseRuleExcel.js) | `parseRuleExcel()` | — | Excel 规则表解析 |
+| [ruleMatcher.js](services/send/ruleMatcher.js) | `matchFiles()` | — | 文件名与规则匹配 |
+| [sendHistory.js](services/send/sendHistory.js) | `load/save/clear/deleteHistoryEntry()` | — | 发送历史持久化 |
+| [dependencyCheck.js](services/dependencyCheck.js) | `runDependencyCheck()` | — | 外部依赖注册表 + 自检引擎 |
+
 ### renderer/ — 前端组件
 
 | 文件 | 关键函数/区域 | 行号 |
@@ -119,6 +140,8 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 | [MergeView.vue](renderer/views/MergeView.vue) | 模板选择、列映射面板 | 485 行 |
 | [OptimizeView.vue](renderer/views/OptimizeView.vue) | `runOptimize()` / `saveFile()` | 218 行 |
 | [HomeView.vue](renderer/views/HomeView.vue) | 首页 + 版本更新检测 | 27 行 |
+| [SendView.vue](renderer/views/SendView.vue) | `startSend()` / `cancelSend()` / `reuseHistory()` / `echoHistory()` | 688 行 |
+| [DependencyStatus.vue](renderer/components/DependencyStatus.vue) | 依赖自检状态展示（展开/收起） | 128 行 |
 | [MergeColumnMappingPanel.vue](renderer/components/MergeColumnMappingPanel.vue) | 列拖拽映射 UI | 650 行 |
 | [RuleTable.vue](renderer/components/RuleTable.vue) | 拆分规则表格 | 90 行 |
 | [LogPanel.vue](renderer/components/LogPanel.vue) | 任务日志面板 | 37 行 |
@@ -129,7 +152,7 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 |------|-------------|------|
 | [main.js](main/main.js) | `app.whenReady()` 入口 | 60 行 |
 | [ipc.js](main/ipc.js) | `registerIpcHandlers()` — 所有 IPC | 509 行 |
-| [preload.js](main/preload.js) | contextBridge 暴露 22 个 API | 36 行 |
+| [preload.js](main/preload.js) | contextBridge 暴露 25+ 个 API | 36 行 |
 | [window.js](main/window.js) | BrowserWindow 创建 | 32 行 |
 | [workerRunner.js](main/workerRunner.js) | Worker 线程管理 | 80 行 |
 | [taskWorker.js](main/taskWorker.js) | Worker 任务处理 | 45 行 |
@@ -168,7 +191,8 @@ ipc.js (ipcMain.handle)
 4. 在 `renderer/App.vue` 中添加 `<el-tab-pane>` 引入新 View
 
 > 重型任务（Excel 读写）走 Worker 线程 + `task:event` 回传进度；
-> 轻型任务（文件操作、优化）在主进程直接执行。
+> 轻型任务（文件操作、优化、发送）在主进程直接执行。
+> 依赖自检：`deps:event` 推送到渲染层，[DependencyStatus.vue](renderer/components/DependencyStatus.vue) 消费展示。
 
 ## 文档索引
 
@@ -182,3 +206,21 @@ ipc.js (ipcMain.handle)
 | [XLSX_OPTIMIZATION_GUIDE.md](docs/XLSX_OPTIMIZATION_GUIDE.md) | XLSX 优化指南 |
 | [PROMPTS.md](docs/PROMPTS.md) | AI 协作提示词模板 |
 | [BUILD.md](docs/BUILD.md) | 构建与发布流程 |
+
+## 依赖自检系统
+
+启动时自动检测外部依赖（Python、uiautomation），缺失时尝试自动修复。
+
+- 注册表：[dependencyCheck.js](services/dependencyCheck.js) — 每条记录含 `{ id, check(), autoFix() }`
+- IPC 桥接：`deps:run-check` / `deps:status` / `deps:event`（push）
+- UI：[DependencyStatus.vue](renderer/components/DependencyStatus.vue) — 配置面板顶部展示
+
+### 发送工具关键机制
+
+| 机制 | 说明 |
+|------|------|
+| **全局 Esc 中断** | `globalShortcut.register('Escape')` 即使在微信窗口也能按 Esc 中断发送 + 自动切回应用 |
+| **中断项标记** | 被中断的文件在历史中显示 `⏹ 中断`（黄色标签），而非跳过 |
+| **uiautomation 预检** | sendService 发送前检测，缺失则自动 `pip install uiautomation` |
+| **Esc 双层监听** | globalShortcut（主进程） + keydown（渲染层），确保全场景覆盖 |
+| **发送历史分页** | 每页一条历史，prev/next 导航，表格超出 240px 滚动 |

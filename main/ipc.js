@@ -690,7 +690,7 @@ function registerIpcHandlers() {
   ipcMain.handle("deps:run-check", async () => {
     return depCheck.runDependencyCheck((event) => {
       broadcast({ type: "dependency-event", ...event, taskId: "deps" });
-    });
+    }, app.getPath("userData"));
   });
 
   ipcMain.handle("deps:status", async () => {

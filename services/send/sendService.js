@@ -5,7 +5,7 @@ const ExcelJS = require("exceljs");
 const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
-const { sendToWechatGroup, minimizeWechat, findPython, checkUiautomationInstalled, ensureUiautomationInstalled } = require("./wechatController");
+const { sendToWechatGroup, minimizeWechat, findPython, checkUiautomationInstalled, ensureUiautomationInstalled, autoInstallPython } = require("./wechatController");
 
 /** 将地址对象或字符串转为显示用字符串 */
 function formatEmail(addr) {
@@ -175,9 +175,19 @@ async function executeSend({
   // 提前检测 Python 和 uiautomation（微信发送依赖）
   const hasWechatQueue = queue.some((q) => q.channel === "wechat");
   if (hasWechatQueue) {
-    const py = await findPython();
+    let py = await findPython(userDataPath);
     if (!py) {
-      // 无 Python 时标记所有微信项为错误并从队列移除，不阻塞邮件
+      // 无 Python → 尝试自动下载安装嵌入式 Python 环境
+      if (onProgress) onProgress({ type: "log", level: "warn", message: "未检测到 Python，尝试自动下载安装..." });
+      const installed = await autoInstallPython(userDataPath, (msg) => {
+        if (onProgress) onProgress({ type: "log", level: "info", message: msg });
+      });
+      if (installed) {
+        py = await findPython(userDataPath);
+      }
+    }
+    if (!py) {
+      // 仍无 Python → 标记所有微信项为错误并从队列移除，不阻塞邮件
       for (let qi = queue.length - 1; qi >= 0; qi--) {
         if (queue[qi].channel === "wechat") {
           const item = queue[qi];

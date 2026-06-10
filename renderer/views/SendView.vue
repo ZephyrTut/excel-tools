@@ -3,7 +3,13 @@
     <!-- 配置区 -->
     <el-card class="panel-card">
       <template #header><span>⚙️ 配置</span></template>
-      <DependencyStatus :results="depResults" />
+      <DependencyStatus
+  :results="depResults"
+  :installing="depInstalling"
+  :progress-percent="depProgressPercent"
+  :progress-message="depProgressMessage"
+  @check="onDepCheck"
+/>
       <el-form label-width="100px">
         <el-form-item label="SMTP 邮件">
           <el-tag v-if="smtpConfigured" type="success" size="small">已配置</el-tag>
@@ -330,6 +336,9 @@ const showRuleHelp = ref(false);
 const showResultDialog = ref(false);
 const clipboardFiles = ref([]);
 const depResults = ref([]);
+const depInstalling = ref(false);
+const depProgressPercent = ref(0);
+const depProgressMessage = ref("");
 const sendProgress = ref(0);
 const sendAborted = ref(false);
 const folderDropActive = ref(false);
@@ -437,12 +446,57 @@ onMounted(async () => {
   } catch {}
 
   // 启动时自检外部依赖
+  // 先注册进度监听，再触发检查
+  const unsubDepEvent = api.onDependencyEvent((event) => {
+    if (event.type === "log") {
+      depProgressMessage.value = event.message || "";
+    } else if (event.percent !== undefined) {
+      depInstalling.value = true;
+      depProgressPercent.value = event.percent;
+      depProgressMessage.value = event.message || "";
+    } else if (event.status === "fixing" || event.status === "checking") {
+      depInstalling.value = true;
+      depProgressPercent.value = 0;
+      depProgressMessage.value = `正在${event.status === "fixing" ? "修复" : "检测"} ${event.name || ""}...`;
+    } else {
+      // 单项完成
+      depInstalling.value = false;
+    }
+  });
   try {
     depResults.value = await api.runDependencyCheck();
   } catch {}
+  unsubDepEvent();
 });
 
 // ── 方法 ──
+async function onDepCheck() {
+  const api = getApi();
+  const unsub = api.onDependencyEvent((event) => {
+    if (event.type === "log") {
+      depProgressMessage.value = event.message || "";
+    } else if (event.percent !== undefined) {
+      depInstalling.value = true;
+      depProgressPercent.value = event.percent;
+      depProgressMessage.value = event.message || "";
+    } else if (event.status === "fixing" || event.status === "checking") {
+      depInstalling.value = true;
+      depProgressPercent.value = 0;
+      depProgressMessage.value = `正在${event.status === "fixing" ? "修复" : "检测"} ${event.name || ""}...`;
+    } else {
+      depInstalling.value = false;
+    }
+  });
+  depInstalling.value = true;
+  depProgressPercent.value = 0;
+  depProgressMessage.value = "正在检测环境...";
+  try {
+    depResults.value = await api.runDependencyCheck();
+  } catch {}
+  depInstalling.value = false;
+  unsub();
+}
+
 async function pickRuleFile() {
   const file = await getApi().selectTemplateFile();
   if (!file) return;
