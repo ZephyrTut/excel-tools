@@ -11,6 +11,7 @@ function normalizeRule(rule = {}) {
     originalName: asString(rule.originalName),
     mappedName: asString(rule.mappedName),
     channels: asStringArray(rule.channels),
+    strippedChannels: asStringArray(rule.strippedChannels),
     wechatGroup: rule.wechatGroup || null,
     emailSubject: rule.emailSubject || null,
     emailTo: asStringArray(rule.emailTo),
