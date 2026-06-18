@@ -161,16 +161,9 @@
             </el-table-column>
             <el-table-column label="匹配状态">
               <template #default="{ row }">
-                <template v-for="t in row.tags" :key="t.type + t.status + t.name">
-                  <el-tag v-if="t.type === 'skip'" size="small" type="info" effect="plain" style="margin-right: 4px">⏭ 跳过</el-tag>
-                  <el-tag v-else-if="t.status === 'interrupted'" size="small" type="warning" effect="plain" style="margin-right: 4px">⏹ 中断</el-tag>
-                  <el-tag v-else-if="t.status === 'stripped'" size="small" type="warning" effect="plain" style="margin-right: 4px">
-                    {{ t.type === 'wechat' ? '📱 微信' : '📧 邮件' }} (配置不全)
-                  </el-tag>
-                  <el-tag v-else size="small" :type="t.status === 'success' ? 'success' : 'danger'" style="margin-right: 4px">
-                    {{ t.type === 'wechat' ? '📱' : '📧' }} {{ t.name }}
-                  </el-tag>
-                </template>
+                <el-tag v-for="t in row.tags" :key="t.type + t.status + tagName(t)" size="small" :type="tagType(t)" effect="plain" style="margin-right: 4px">
+                  {{ tagLabel(t) }}
+                </el-tag>
               </template>
             </el-table-column>
           </el-table>
@@ -409,6 +402,32 @@ const historyGroupedRows = computed(() => {
   }
   return groups;
 });
+
+function tagName(t) {
+  if (t.type === 'skip') return '';
+  if (t.type === 'wechat') return t.name;
+  // email: name 可能是格式化字符串或对象 {name, address}
+  if (typeof t.name === 'object' && t.name !== null) {
+    return t.name.address || t.name.name || '';
+  }
+  return t.name || '';
+}
+
+function tagType(t) {
+  if (t.type === 'skip') return 'info';
+  if (t.status === 'interrupted') return 'warning';
+  if (t.status === 'stripped') return 'warning';
+  if (t.status === 'success') return 'success';
+  return 'danger';
+}
+
+function tagLabel(t) {
+  if (t.type === 'skip') return '⏭ 跳过';
+  if (t.status === 'interrupted') return '⏹ 中断';
+  const icon = t.type === 'wechat' ? '📱' : '📧';
+  if (t.status === 'stripped') return `${icon} ${t.type === 'wechat' ? '微信' : '邮件'} (配置不全)`;
+  return `${icon} ${tagName(t)}`;
+}
 
 function getHistoryFileName(entry, target, index) {
   if (target.type === 'skip') return target.name;

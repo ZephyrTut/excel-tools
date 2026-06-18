@@ -1,19 +1,23 @@
 <template>
-  <div class="dependency-status" v-if="results.length > 0 && hasIssues || installing">
+  <div class="dependency-status" v-if="results.length > 0 || installing">
     <!-- 安装进度 -->
     <div v-if="installing" class="dep-installing">
       <el-progress :percentage="progressPercent" :stroke-width="10" style="margin-bottom: 4px" />
       <div class="dep-install-msg">{{ progressMessage }}</div>
     </div>
 
-    <!-- 结果状态条 -->
+    <!-- 结果状态条（有失败时红色/黄色，全部通过时不显示） -->
     <div v-if="!installing && hasIssues" class="dep-bar" :class="'dep-bar--' + overallStatus" @click="expanded = !expanded">
       <span class="dep-bar-icon">{{ overallIcon }}</span>
       <span class="dep-bar-text">{{ overallText }}</span>
-      <el-button size="small" text type="primary" @click.stop="emit('check')" style="margin-right: 4px">
+      <span class="dep-bar-action">{{ expanded ? '收起' : '详情' }}</span>
+    </div>
+
+    <!-- 检测环境按钮始终可见 -->
+    <div v-if="!installing" style="margin-top: 4px">
+      <el-button size="small" text type="primary" @click="emit('check')">
         🔄 检测环境
       </el-button>
-      <span class="dep-bar-action">{{ expanded ? '收起' : '详情' }}</span>
     </div>
 
     <!-- 详情列表（仅失败项） -->
