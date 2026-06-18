@@ -8,7 +8,6 @@
   :installing="depInstalling"
   :progress-percent="depProgressPercent"
   :progress-message="depProgressMessage"
-  @check="onDepCheck"
 />
       <el-form label-width="100px">
         <el-form-item label="SMTP 邮件">
@@ -311,6 +310,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { createSendPayload } from "../utils/sendPayload.mjs";
+import { buildHistoryGroupedRows } from "../utils/sendHistoryRows.mjs";
 import DependencyStatus from "../components/DependencyStatus.vue";
 
 function getApi() {
@@ -389,18 +389,7 @@ const currentHistoryEntry = computed(() => {
 
 const historyGroupedRows = computed(() => {
   const entry = currentHistoryEntry.value;
-  if (!entry || !entry.targets) return [];
-  const groups = [];
-  for (const t of entry.targets) {
-    const name = t.type === 'skip' ? t.name : (t._fileName || getHistoryFileName(entry, t, -1));
-    let group = groups.find(g => g.fileName === name);
-    if (!group) {
-      group = { fileName: name, tags: [] };
-      groups.push(group);
-    }
-    group.tags.push(t);
-  }
-  return groups;
+  return buildHistoryGroupedRows(entry, getHistoryFileName);
 });
 
 const tagName = (t) => {
@@ -513,33 +502,6 @@ onMounted(async () => {
 });
 
 // ── 方法 ──
-async function onDepCheck() {
-  const api = getApi();
-  const unsub = api.onDependencyEvent((event) => {
-    if (event.type === "log") {
-      depProgressMessage.value = event.message || "";
-    } else if (event.percent !== undefined) {
-      depInstalling.value = true;
-      depProgressPercent.value = event.percent;
-      depProgressMessage.value = event.message || "";
-    } else if (event.status === "fixing" || event.status === "checking") {
-      depInstalling.value = true;
-      depProgressPercent.value = 0;
-      depProgressMessage.value = `正在${event.status === "fixing" ? "修复" : "检测"} ${event.name || ""}...`;
-    } else {
-      depInstalling.value = false;
-    }
-  });
-  depInstalling.value = true;
-  depProgressPercent.value = 0;
-  depProgressMessage.value = "正在检测环境...";
-  try {
-    depResults.value = await api.runDependencyCheck();
-  } catch {}
-  depInstalling.value = false;
-  unsub();
-}
-
 async function pickRuleFile() {
   const file = await getApi().selectTemplateFile();
   if (!file) return;
@@ -728,6 +690,8 @@ async function refreshMatch() {
       });
     }
     matchResult.value = result;
+    console.log(matchResult);
+
     addLog("info", `匹配完成: ${result.matched.length} 匹配, ${result.unmatched.length} 未匹配`);
     // 展示渠道不全的警告
     if (result.warnings && result.warnings.length > 0) {

@@ -14,6 +14,9 @@ function normalizeSendRule(rule) {
     channels: Array.isArray(safeRule.channels)
       ? safeRule.channels.map((item) => String(item))
       : [],
+    strippedChannels: Array.isArray(safeRule.strippedChannels)
+      ? safeRule.strippedChannels.map((item) => String(item))
+      : [],
     wechatGroup: safeRule.wechatGroup || null,
     emailSubject: safeRule.emailSubject || null,
     emailTo: Array.isArray(safeRule.emailTo)

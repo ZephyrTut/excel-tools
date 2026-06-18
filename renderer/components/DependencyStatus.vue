@@ -6,19 +6,14 @@
       <div class="dep-install-msg">{{ progressMessage }}</div>
     </div>
 
-    <!-- 结果状态条（有失败时红色/黄色，全部通过时不显示） -->
+    <!-- 结果状态条（有失败时才显示，点击展开详情） -->
     <div v-if="!installing && hasIssues" class="dep-bar" :class="'dep-bar--' + overallStatus" @click="expanded = !expanded">
       <span class="dep-bar-icon">{{ overallIcon }}</span>
       <span class="dep-bar-text">{{ overallText }}</span>
-      <span class="dep-bar-action">{{ expanded ? '收起' : '详情' }}</span>
+      <span class="dep-bar-action">{{ expanded ? '收起 ▲' : '详情 ▼' }}</span>
     </div>
 
-    <!-- 检测环境按钮始终可见 -->
-    <div v-if="!installing" class="dep-check-row">
-      <el-button size="small" text type="primary" @click="emit('check')">
-        🔄 检测环境
-      </el-button>
-    </div>
+    <!-- 全部就绪时极简展示 -->
 
     <!-- 详情列表（仅失败项） -->
     <div v-if="expanded && !installing" class="dep-list">
@@ -52,8 +47,6 @@ const props = defineProps({
   progressPercent: { type: Number, default: 0 },
   progressMessage: { type: String, default: "" },
 });
-
-const emit = defineEmits(["check"]);
 
 const expanded = ref(false);
 
@@ -95,11 +88,6 @@ function itemIcon(item) {
 .dependency-status {
   margin-top: 8px;
   font-size: 13px;
-}
-
-.dep-check-row {
-  display: flex;
-  align-items: center;
 }
 
 .dep-installing {
