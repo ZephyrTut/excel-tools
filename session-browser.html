@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reasonix 会话浏览器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 18px; font-weight: 600; color: #58a6ff; }
+.header p { font-size: 12px; color: #8b949e; margin-top: 4px; }
+.container { max-width: 960px; margin: 0 auto; padding: 24px; }
+.session-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.session-card:hover { border-color: #58a6ff; background: #1c2129; }
+.session-card.active { border-color: #58a6ff; background: #1c2533; box-shadow: 0 0 0 1px #58a6ff40; }
+.session-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.session-summary { flex: 1; font-size: 14px; line-height: 1.5; color: #e6edf3; word-break: break-all; }
+.session-meta { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: #8b949e; flex-wrap: wrap; }
+.session-meta span { display: flex; align-items: center; gap: 4px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+.badge-current { background: #23863626; color: #3fb950; border: 1px solid #23863640; }
+.badge-archive { background: #1f6feb26; color: #58a6ff; border: 1px solid #1f6feb40; }
+.empty { text-align: center; padding: 60px 20px; color: #8b949e; }
+.empty .icon { font-size: 48px; margin-bottom: 16px; }
+.detail-panel { display: none; background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; overflow: hidden; }
+.detail-panel.show { display: block; }
+.detail-toolbar { display: flex; gap: 8px; padding: 12px 16px; background: #0d1117; border-bottom: 1px solid #30363d; }
+.detail-toolbar button { padding: 6px 14px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 12px; font-family: inherit; }
+.detail-toolbar button:hover { background: #30363d; }
+.detail-content { padding: 16px; max-height: 500px; overflow-y: auto; font-size: 12px; line-height: 1.6; }
+.detail-content pre { white-space: pre-wrap; word-break: break-all; }
+.msg { padding: 8px 12px; margin-bottom: 8px; border-radius: 6px; border-left: 3px solid #30363d; }
+.msg.user { border-left-color: #58a6ff; background: #1c253310; }
+.msg.assistant { border-left-color: #3fb950; background: #23863608; }
+.msg.tool { border-left-color: #8b949e; background: #8b949e08; font-size: 11px; opacity: 0.7; }
+.msg-role { font-weight: 600; font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }
+.msg-role.user { color: #58a6ff; }
+.msg-role.assistant { color: #3fb950; }
+.msg-role.tool { color: #8b949e; }
+.search-box { margin-bottom: 20px; }
+.search-box input { width: 100%; padding: 10px 16px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #c9d1d9; font-size: 14px; font-family: inherit; outline: none; }
+.search-box input:focus { border-color: #58a6ff; }
+.search-box input::placeholder { color: #484f58; }
+.stats { color: #8b949e; font-size: 12px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📋 Reasonix 会话浏览器</h1>
+  <p>共 <span id="totalCount">0</span> 条会话 · 点击卡片查看详情 · 双击打开源文件</p>
+</div>
+<div class="container">
+  <div class="search-box">
+    <input type="text" id="search" placeholder="搜索会话摘要..." oninput="filterSessions()">
+  </div>
+  <div class="stats" id="stats"></div>
+  <div id="sessionList"></div>
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-toolbar">
+      <button onclick="closeDetail()">✕ 关闭</button>
+      <button onclick="openSource()" id="btnOpenSource">📂 打开源文件</button>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:#8b949e;align-self:center" id="detailTitle"></span>
+    </div>
+    <div class="detail-content" id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+const DATA = {"sessions":[{"name":"code-excel-tools","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools.jsonl","size":1007760,"messageCount":376,"mtime":1781776132108,"summary":"通读整个项目C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\docs，理解需求帮我将所有处理后的excel文","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605210705__archive_202605210948","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605210705__archive_202605210948.jsonl","size":1145620,"messageCount":782,"mtime":1781772704833,"summary":"还是不行，所以换技术和思路把，彻彻底底的完全重构","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605210705__archive_202605210948__ar","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605210705__archive_202605210948__ar.jsonl","size":1545441,"messageCount":796,"mtime":1779367709566,"summary":"先读项目，合并和拆分后的文件使用office打开不兼容，帮我制定相关plan，在excel office中现在是直接报错文件损坏了打开都打不开了，我本地有安装o","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605210949","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605210949.jsonl","size":1147369,"messageCount":708,"mtime":1779356707978,"summary":"读取相关文档C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\docs\\SPLIT_LOGIC.md找出我导出","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605201934","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605201934.jsonl","size":1373715,"messageCount":737,"mtime":1779305470813,"summary":"# Task: Initialize REASONIX.md I want you to generate a REASONIX.md at the proje","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605201619","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605201619.jsonl","size":120181,"messageCount":130,"mtime":1779297524994,"summary":"帮我安装frontend-design这个skill","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605190659","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605190659.jsonl","size":74045,"messageCount":35,"mtime":1779212236448,"summary":"检查更新失败：Cannot download \"https://github.com/ZephyrTut/excel-tools/releases/downlo","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605190659__archive_202605191733","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605190659__archive_202605191733.jsonl","size":1023775,"messageCount":583,"mtime":1779210761846,"summary":"C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\docs\\MERGE_PROMPT.md先细读这个文档将整个","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605190659__archive_202605191446","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605190659__archive_202605191446.jsonl","size":1305808,"messageCount":532,"mtime":1779201922412,"summary":"帮我生成一份关于汇总合并的逻辑说明文档","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605190826","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605190826.jsonl","size":495207,"messageCount":194,"mtime":1779199119992,"summary":"先理解整个项目我觉得你事先预读取功能的方式不对应该一个文件一个文件的读取，先将一个文件所需的对应标题行读取过来，规则按合并规则（按 sheet）这里进行约束读取","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605190826__archive_202605191317","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605190826__archive_202605191317.jsonl","size":1090346,"messageCount":432,"mtime":1779196536088,"summary":"读取项目的合并汇总功能，稍微参考C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\docs\\MERGE_LOG","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605191011","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605191011.jsonl","size":1163503,"messageCount":705,"mtime":1779195607033,"summary":"预读取标题行C:\\Users\\XXK\\Desktop\\work\\excel tools\\excel-tools\\config\\defaultRules.json","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605181443","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605181443.jsonl","size":1157404,"messageCount":862,"mtime":1779115105995,"summary":"Run pnpm exec electron-builder --config electron-builder.json --publish never pn","workspaceStatus":"matched"},{"name":"code-excel-tools__archive_202605172102","path":"C:\\Users\\XXK\\.reasonix\\sessions\\code-excel-tools__archive_202605172102.jsonl","size":239160,"messageCount":162,"mtime":1779051751993,"summary":"安装完了，但是我下载的几个exe都不能正确使用","workspaceStatus":"matched"}],"currentSession":null,"canSwitch":true};
+
+let activePath = null;
+
+function formatDate(mtime) {
+  const d = new Date(mtime);
+  return d.toLocaleDateString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }) + ' ' +
+         d.toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function isCurrent(name) { return name === 'code-excel-tools'; }
+
+function renderSessions(sessions) {
+  const list = document.getElementById('sessionList');
+  document.getElementById('totalCount').textContent = sessions.length;
+  document.getElementById('stats').textContent = '显示 ' + sessions.length + ' 条会话';
+
+  if (sessions.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="icon">🔍</div>没有匹配的会话</div>';
+    return;
+  }
+
+  list.innerHTML = sessions.map((s, i) => `
+    <div class="session-card" onclick="viewSession('${s.path.replace(/\\/g,'\\\\')}', '${s.name}', this)" ondblclick="openFile('${s.path.replace(/\\/g,'\\\\')}')">
+      <div class="session-header">
+        <div class="session-summary">${escHtml(s.summary || '(无摘要)')}</div>
+        <span class="badge ${isCurrent(s.name) ? 'badge-current' : 'badge-archive'}">${isCurrent(s.name) ? '当前' : '归档'}</span>
+      </div>
+      <div class="session-meta">
+        <span>💬 ${s.messageCount} 条消息</span>
+        <span>📦 ${formatSize(s.size)}</span>
+        <span>🕐 ${formatDate(s.mtime)}</span>
+        <span style="font-size:10px;opacity:0.5;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(s.name)}">📄 ${escHtml(s.name.substring(0,50))}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function viewSession(path, name, el) {
+  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  activePath = path;
+  document.getElementById('detailTitle').textContent = name;
+
+  const content = document.getElementById('detailContent');
+  content.innerHTML = '<div style="text-align:center;padding:40px;color:#8b949e;">⏳ 正在加载会话内容...</div>';
+  document.getElementById('detailPanel').classList.add('show');
+  document.getElementById('detailPanel').scrollIntoView({ behavior: 'smooth' });
+
+  // Load the JSONL file content - we need to use a fetch to a local server or show file info
+  // Since browsers can't read local files, we show instructions
+  content.innerHTML = `
+    <div style="text-align:center;padding:40px;">
+      <div style="font-size:32px;margin-bottom:12px;">📂</div>
+      <div style="color:#e6edf3;margin-bottom:8px;">会话内容存储在本地文件中</div>
+      <div style="color:#8b949e;font-size:12px;margin-bottom:16px;word-break:break-all;">${escHtml(path)}</div>
+      <button onclick="openFile('${path.replace(/\\/g,'\\\\')}')" style="padding:8px 20px;background:#238636;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">📂 在 VS Code 中打开</button>
+      <div style="color:#8b949e;font-size:11px;margin-top:12px;">或复制路径后用任意文本编辑器打开<br>JSONL 格式，每行一条 JSON 对话记录</div>
+    </div>
+  `;
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('show');
+  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'));
+  activePath = null;
+}
+
+function openSource() {
+  if (activePath) openFile(activePath);
+}
+
+function openFile(filePath) {
+  // Try to open via shell: URI or copy to clipboard
+  const input = document.createElement('textarea');
+  input.value = filePath;
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand('copy');
+  document.body.removeChild(input);
+
+  // Also try to open
+  window.location.href = 'vscode://file/' + filePath;
+}
+
+function filterSessions() {
+  const query = document.getElementById('search').value.toLowerCase();
+  const filtered = query
+    ? DATA.sessions.filter(s => s.summary && s.summary.toLowerCase().includes(query))
+    : DATA.sessions;
+  renderSessions(filtered);
+}
+
+// Initial render
+renderSessions(DATA.sessions);
+</script>
+</body>
+</html>

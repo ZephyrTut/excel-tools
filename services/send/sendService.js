@@ -209,13 +209,13 @@ async function executeSend({
         }
       }
     } else {
-      // 有 Python 但检测 uiautomation 是否安装
+      // 有 Python 但检测 wx4py 是否安装
       const hasUi = await checkUiautomationInstalled(py);
       if (!hasUi) {
-        if (onProgress) onProgress({ type: "log", level: "warn", message: "未检测到 uiautomation，尝试自动安装..." });
+        if (onProgress) onProgress({ type: "log", level: "warn", message: "未检测到 wx4py，尝试自动安装..." });
         const installed = await ensureUiautomationInstalled(py);
         if (!installed) {
-          if (onProgress) onProgress({ type: "log", level: "error", message: "自动安装 uiautomation 失败，请手动运行: pip install uiautomation" });
+          if (onProgress) onProgress({ type: "log", level: "error", message: "自动安装 wx4py 失败，请手动运行: pip install wx4py" });
           for (let qi = queue.length - 1; qi >= 0; qi--) {
             if (queue[qi].channel === "wechat") {
               const item = queue[qi];
@@ -334,13 +334,19 @@ async function executeSend({
       if (signal && signal.aborted) break;
       // 非中断性错误按失败处理
       failCount++;
+      // 过滤技术性错误消息，避免暴露给用户
+      let displayError = (err && err.message) || "发送失败";
+      if (displayError.includes("JSON") || displayError.includes("Unexpected") ||
+          displayError.includes("position") || displayError.includes("SyntaxError")) {
+        displayError = "发送异常，请重试";
+      }
       historyTargets.push({
         type: item.channel,
         name: item.channel === "wechat"
           ? item.rule.wechatGroup
           : formatEmailList(item.rule.emailTo),
         status: "error",
-        error: err.message,
+        error: displayError,
       });
       if (onProgress) {
         onProgress({

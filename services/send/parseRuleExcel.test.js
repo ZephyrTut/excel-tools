@@ -59,8 +59,9 @@ test("parseRuleExcel skips rows with missing required fields", () => {
 
   const result = parseRuleExcel(ws);
 
-  assert.equal(result.warnings.length, 1);
+  assert.equal(result.warnings.length, 2);
   assert.match(result.warnings[0], /微信群名为空/);
+  assert.match(result.warnings[1], /所有渠道均无效/);
   assert.equal(result.rules.length, 0);
 });
 

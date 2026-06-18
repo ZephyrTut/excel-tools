@@ -120,11 +120,11 @@ Electron 31 + Vue 3 + Element Plus + ExcelJS 桌面应用，pnpm 管理依赖。
 |------|---------|------|------|
 | [sendService.js](services/send/sendService.js) | `executeSend()` | 137 | 发送编排：队列 -> 微信/邮件 -> 历史 |
 | [sendService.js](services/send/sendService.js) | `importRules()` / `matchFolderFiles()` | 36 / 73 | 规则导入与文件匹配 |
-| [wechatController.js](services/send/wechatController.js) | `sendToWechatGroup()` | 88 | 通过 Python uiautomation 发送文件到微信群 |
+| [wechatController.js](services/send/wechatController.js) | `sendToWechatGroup()` | 88 | 通过 Python wx4py 发送文件到微信群 |
 | [wechatController.js](services/send/wechatController.js) | `findPython()` | 32 | Python 环境检测（bundled → system PATH） |
-| [wechatController.js](services/send/wechatController.js) | `checkUiautomationInstalled()` / `ensureUiautomationInstalled()` | — | uiautomation 检测与自动安装 |
+| [wechatController.js](services/send/wechatController.js) | `checkUiautomationInstalled()` / `ensureUiautomationInstalled()` | — | wx4py 检测与自动安装 |
 | [wechatController.js](services/send/wechatController.js) | `getBundledPythonPath()` | 21 | 打包 Python 路径 |
-| [wechat_sender.py](services/send/wechat_sender.py) | `send_file_to_group()` | 106 | Python 端：剪贴板CF_HDROP + uiautomation |
+| [wechat_sender_wx4.py](services/send/wechat_sender_wx4.py) | `send_file()` | 60 | Python 端：wx4py UIA 文件发送 |
 | [emailSender.js](services/send/emailSender.js) | `sendEmail()` | — | Nodemailer 封装 |
 | [parseRuleExcel.js](services/send/parseRuleExcel.js) | `parseRuleExcel()` | — | Excel 规则表解析 |
 | [ruleMatcher.js](services/send/ruleMatcher.js) | `matchFiles()` | — | 文件名与规则匹配 |

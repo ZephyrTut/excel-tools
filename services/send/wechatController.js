@@ -124,10 +124,52 @@ function resetPythonCheck() {
   _pythonCommand = null;
 }
 
+// ── 辅助 ──────────────────────────────────────────────────────────
+
+/**
+ * 从可能混杂了其他内容的 stdout 中提取 JSON 对象
+ * 优先尝试整体解析，失败后尝试正则匹配最后一个完整 JSON 对象
+ */
+function extractJsonFromOutput(stdout) {
+  const trimmed = stdout.trim();
+  // 优先直接解析
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // 尝试按行找最后一行 JSON
+    const lines = trimmed.split(/\r?\n/).filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const obj = JSON.parse(lines[i].trim());
+        if (obj && typeof obj === "object") return obj;
+      } catch { /* continue */ }
+    }
+    // 最后尝试正则提取
+    const jsonMatch = trimmed.match(/\{[\s\S]*"success"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch { /* give up */ }
+    }
+    return null;
+  }
+}
+
+/**
+ * 判断是否是中断信号导致的错误
+ */
+function isAbortError(err) {
+  return err && (
+    err.name === "AbortError" ||
+    (err.message || "").toLowerCase().includes("abort") ||
+    (err.message || "").includes("取消")
+  );
+}
+
 // ── 微信发送 ──────────────────────────────────────────────────────
 
 /**
- * 通过 Python uiautomation 脚本发送文件到微信群
+ * 通过 Python wx4py 脚本发送文件到微信群（UIA 操控）
  * @param {string} groupName - 微信群名称
  * @param {string} filePath - 文件绝对路径
  * @returns {Promise<{success: boolean, error?: string}>}
@@ -142,37 +184,56 @@ async function sendToWechatGroup(groupName, filePath, signal) {
     };
   }
 
-  const scriptPath = path.join(__dirname, "wechat_sender.py");
+  const scriptPath = path.join(__dirname, "wechat_sender_wx4.py");
 
+  let stdout = "";
   try {
     const [prog, ...args] = pythonCmd.split(" ");
-    const { stdout } = await execFileAsync(
+    const result = await execFileAsync(
       prog,
       [...args, scriptPath, "--group", groupName, "--file", filePath],
       { timeout: 60000, signal }
     );
+    stdout = result.stdout || "";
 
-    const result = JSON.parse(stdout.trim());
-    return result;
-  } catch (err) {
-    let errorMsg = err.message || "Python 脚本执行失败";
-    if (err.stdout) {
-      try {
-        const parsed = JSON.parse(err.stdout.trim());
-        if (parsed && parsed.error) {
-          errorMsg = parsed.error;
-        }
-      } catch { /* ignore JSON parse failure */ }
+    const parsed = extractJsonFromOutput(stdout);
+    if (parsed) {
+      return parsed;
     }
-    return { success: false, error: errorMsg };
+    // stdout 存在但无法提取 JSON
+    console.warn("[wechatController] 无法解析 Python 输出:", stdout.substring(0, 500));
+    return { success: false, error: "微信发送异常，请重试" };
+  } catch (err) {
+    // 用户中断
+    if (isAbortError(err)) {
+      return { success: false, error: "发送已取消" };
+    }
+
+    // Python 进程失败（非零退出码），尝试从 stderr/stdout 提取结构化错误
+    stdout = err.stdout || stdout;
+    if (stdout) {
+      const parsed = extractJsonFromOutput(stdout);
+      if (parsed && parsed.error) {
+        return { success: false, error: parsed.error };
+      }
+    }
+
+    // 超时
+    if (err.killed || (err.message || "").includes("timeout")) {
+      return { success: false, error: "微信发送超时，请确认微信已打开且窗口可见" };
+    }
+
+    // 兜底：记录原始错误到日志，返回用户友好消息
+    console.warn("[wechatController] 微信发送失败:", err.message);
+    return { success: false, error: "微信发送失败，请确认微信已登录且窗口可见" };
   }
 }
 
 async function minimizeWechat() {
   const pythonCmd = await findPython();
-  if (!pythonCmd) return { success: false, error: "Python not found" };
+  if (!pythonCmd) return { success: false, error: "未检测到 Python" };
 
-  const scriptPath = path.join(__dirname, "wechat_sender.py");
+  const scriptPath = path.join(__dirname, "wechat_sender_wx4.py");
 
   try {
     const [prog, ...args] = pythonCmd.split(" ");
@@ -181,14 +242,16 @@ async function minimizeWechat() {
       [...args, scriptPath, "--action", "minimize"],
       { timeout: 10000 }
     );
-    return JSON.parse(stdout.trim());
-  } catch (err) {
-    return { success: false, error: err.message };
+    const parsed = extractJsonFromOutput(stdout);
+    if (parsed) return parsed;
+    return { success: true }; // minimize 失败不阻塞，静默忽略
+  } catch {
+    return { success: true }; // minimize 失败不阻塞
   }
 }
 
 /**
- * 检测 uiautomation 包是否已安装
+ * 检测 wx4py 包是否已安装
  * @param {string} pythonCmd - Python 命令或路径
  * @returns {Promise<boolean>}
  */
@@ -198,7 +261,7 @@ async function checkUiautomationInstalled(pythonCmd) {
     const [prog, ...args] = pythonCmd.split(" ");
     const { stdout } = await execFileAsync(
       prog,
-      [...args, "-c", "import uiautomation; print('OK')"],
+      [...args, "-c", "from wx4py import WeChatClient; print('OK')"],
       { timeout: 10000 }
     );
     return stdout.trim() === "OK";
@@ -208,7 +271,7 @@ async function checkUiautomationInstalled(pythonCmd) {
 }
 
 /**
- * 自动安装 uiautomation 到指定的 Python 环境
+ * 自动安装 wx4py 到指定的 Python 环境
  * @param {string} pythonCmd - Python 命令或路径
  * @returns {Promise<boolean>}
  */
@@ -220,12 +283,33 @@ async function ensureUiautomationInstalled(pythonCmd) {
 
   try {
     const [prog, ...args] = pythonCmd.split(" ");
-    await execFileAsync(prog, [...args, "-m", "pip", "install", "uiautomation"], {
+    await execFileAsync(prog, [...args, "-m", "pip", "install", "wx4py"], {
       timeout: 120000,
     });
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 确保嵌入式 Python 的 ._pth 文件已正确配置（import site 解注释 + Lib\site-packages）
+ * 幂等操作：已配置好的不会重复修改
+ * @param {string} pythonDir - Python 安装目录
+ */
+function ensurePthConfigured(pythonDir) {
+  const pthFiles = fs.readdirSync(pythonDir).filter((f) => f.endsWith("._pth"));
+  for (const pthFile of pthFiles) {
+    const pthPath = path.join(pythonDir, pthFile);
+    let content = fs.readFileSync(pthPath, "utf-8");
+    // 用行级正则匹配：已存在未注释的 import site 才跳过
+    if (!/^import site$/m.test(content)) {
+      content = content.replace(/^#import site$/m, "import site");
+    }
+    if (!content.includes("Lib\\site-packages")) {
+      content += "Lib\\site-packages\n";
+    }
+    fs.writeFileSync(pthPath, content, "utf-8");
   }
 }
 
@@ -241,12 +325,16 @@ async function autoInstallPython(destDir, onProgress) {
 
   const pythonDir = path.join(destDir, "python");
 
-  // 如果已经安装过，验证可用性后直接返回
+  // 如果已经安装过，验证可用性并修复 ._pth 后直接返回
   const installed = getUserPythonPath(destDir);
   if (installed) {
     try {
       const { stdout } = await execFileAsync(installed, ["--version"], { timeout: 3000 });
-      if (stdout && stdout.toLowerCase().includes("python")) return true;
+      if (stdout && stdout.toLowerCase().includes("python")) {
+        // 升级场景：已有 Python 但 ._pth 可能未修复（旧版本 bug）
+        ensurePthConfigured(pythonDir);
+        return true;
+      }
     } catch { /* 损坏，重新安装 */ }
   }
 
@@ -294,19 +382,8 @@ async function autoInstallPython(destDir, onProgress) {
     return false;
   }
 
-  // 修改 _pth 文件启用 site-packages
-  const pthFiles = fs.readdirSync(pythonDir).filter((f) => f.endsWith("._pth"));
-  for (const pthFile of pthFiles) {
-    const pthPath = path.join(pythonDir, pthFile);
-    let content = fs.readFileSync(pthPath, "utf-8");
-    if (!content.includes("import site")) {
-      content = content.replace(/#import site/, "import site");
-    }
-    if (!content.includes("Lib\\site-packages")) {
-      content += "Lib\\site-packages\n";
-    }
-    fs.writeFileSync(pthPath, content, "utf-8");
-  }
+  // 修改 _pth 文件启用 site-packages（幂等，复用升级路径同一逻辑）
+  ensurePthConfigured(pythonDir);
 
   const pythonExe = path.join(pythonDir, "python.exe");
   if (!fs.existsSync(pythonExe)) {
@@ -329,23 +406,23 @@ async function autoInstallPython(destDir, onProgress) {
     return false;
   }
 
-  // 安装 uiautomation
-  prog(75, "正在安装 uiautomation...");
+  // 安装 wx4py（微信 UIA 自动化库）
+  prog(75, "正在安装 wx4py...");
   try {
-    execSync(`"${pythonExe}" -m pip install uiautomation --no-warn-script-location`, {
+    execSync(`"${pythonExe}" -m pip install wx4py --no-warn-script-location`, {
       timeout: 120000,
     });
   } catch (err) {
-    prog(0, `uiautomation 安装失败: ${err.message}`);
+    prog(0, `wx4py 安装失败: ${err.message}`);
     return false;
   }
 
   // 标记完成
   const markerFile = path.join(pythonDir, ".setup_done");
-  fs.writeFileSync(markerFile, `Python ${PYTHON_VERSION} embedded with uiautomation\n`, "utf-8");
+  fs.writeFileSync(markerFile, `Python ${PYTHON_VERSION} embedded with wx4py\n`, "utf-8");
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
-  prog(100, "Python + uiautomation 安装完成");
+  prog(100, "Python + wx4py 安装完成");
   return true;
 }
 

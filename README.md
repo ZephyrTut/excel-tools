@@ -111,7 +111,7 @@ excel-tools/
 │   ├── send/               # 发送工具
 │   │   ├── sendService.js       # 发送编排
 │   │   ├── wechatController.js  # Python 微信控制
-│   │   ├── wechat_sender.py     # Python uiautomation 脚本
+│   │   ├── wechat_sender_wx4.py # Python wx4py 发送脚本
 │   │   ├── emailSender.js       # Nodemailer 封装
 │   │   ├── parseRuleExcel.js    # 规则表解析
 │   │   └── sendHistory.js       # 发送历史持久化

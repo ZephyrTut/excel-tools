@@ -106,16 +106,26 @@ function parseRuleExcel(worksheet) {
     const hasWechat = channels.includes("wechat");
     const hasEmail = channels.includes("email");
 
-    if (hasWechat && !wechatGroup) {
-      warnings.push(`行 ${r} (${originalName}): 包含微信分发但微信群名为空`);
-      continue;
+    const wechatValid = hasWechat && !!wechatGroup;
+    const emailValid = hasEmail && !!emailToStr && !!emailSubject;
+
+    const strippedChannels = [];
+    if (hasWechat && !wechatValid) {
+      warnings.push(`行 ${r} (${originalName}): 包含微信分发但微信群名为空，已跳过微信发送`);
+      channels.splice(channels.indexOf("wechat"), 1);
+      strippedChannels.push("wechat");
     }
-    if (hasEmail && !emailToStr) {
-      warnings.push(`行 ${r} (${originalName}): 包含邮件分发但收件人为空`);
-      continue;
+    if (hasEmail && !emailValid) {
+      const missing = [];
+      if (!emailToStr) missing.push("收件人");
+      if (!emailSubject) missing.push("邮件主题");
+      warnings.push(`行 ${r} (${originalName}): 邮件${missing.join("、")}为空，已跳过邮件发送`);
+      channels.splice(channels.indexOf("email"), 1);
+      strippedChannels.push("email");
     }
-    if (hasEmail && !emailSubject) {
-      warnings.push(`行 ${r} (${originalName}): 包含邮件分发但邮件主题为空`);
+
+    if (channels.length === 0) {
+      warnings.push(`行 ${r} (${originalName}): 所有渠道均无效，跳过`);
       continue;
     }
 
@@ -131,10 +141,11 @@ function parseRuleExcel(worksheet) {
       originalName,
       mappedName: mappedName || originalName,
       channels,
-      wechatGroup: hasWechat ? wechatGroup : null,
-      emailSubject: hasEmail ? emailSubject : null,
-      emailTo: normalizeEmailList(splitComma(emailToStr)),
-      emailCc: normalizeEmailList(splitComma(emailCcStr)),
+      wechatGroup: wechatValid ? wechatGroup : null,
+      emailSubject: emailValid ? emailSubject : null,
+      emailTo: normalizeEmailList(splitComma(emailValid ? emailToStr : "")),
+      emailCc: normalizeEmailList(splitComma(emailValid ? emailCcStr : "")),
+      strippedChannels,
       originalRow: r,
     });
   }

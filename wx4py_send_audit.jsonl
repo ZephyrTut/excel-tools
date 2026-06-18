@@ -1,0 +1,6 @@
+{"run_id":"e09ef7c1-6cbd-4613-a02c-dd4f9ea87777","target":"测试群5","attempt":1,"phase":"open","success":true,"exception_type":"","exception_msg":"","elapsed_ms":6135}
+{"run_id":"e09ef7c1-6cbd-4613-a02c-dd4f9ea87777","target":"测试群5","attempt":1,"phase":"send","success":true,"exception_type":"","exception_msg":"","elapsed_ms":3374}
+{"run_id":"55b0059f-522a-4568-b33b-01a11e6c2e51","target":"测试群8","attempt":1,"phase":"open","success":true,"exception_type":"","exception_msg":"","elapsed_ms":6210}
+{"run_id":"55b0059f-522a-4568-b33b-01a11e6c2e51","target":"测试群8","attempt":1,"phase":"send","success":true,"exception_type":"","exception_msg":"","elapsed_ms":3362}
+{"run_id":"2abf5f74-db04-49dd-ace5-b7165f026ccb","target":"测试群3","attempt":1,"phase":"open","success":false,"exception_type":"TargetNotFoundError","exception_msg":"'测试群3' not found in '群聊' group","elapsed_ms":5190}
+{"run_id":"04f69642-c3fa-44d7-881b-4bd0963c6c6d","target":"不存在的群XYZ","attempt":1,"phase":"open","success":false,"exception_type":"TargetNotFoundError","exception_msg":"'不存在的群XYZ' not found in '群聊' group","elapsed_ms":5238}
