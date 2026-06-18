@@ -110,6 +110,7 @@ async function main() {
     }
   }
 
+  rl.close();
   const releaseNotes = await new Promise((resolve) => {
     const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
     const lines = [];
