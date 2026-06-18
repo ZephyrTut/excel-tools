@@ -940,9 +940,16 @@ async function reuseHistory(entry) {
   addLog("success", `✅ 复用完成: ${entry.date ? formatDate(entry.date) : ''} 的发送配置已恢复`);
 }
 
-function echoHistory(entry) {
-  // 1. 还原匹配信息到匹配预览区
-  if (entry.matchedDetails?.length > 0 || entry.unmatched?.length > 0) {
+async function echoHistory(entry) {
+  // 1. 还原匹配信息：优先用当前规则重新匹配（避免历史快照数据过期）
+  if (entry.folderPath) {
+    folderPath.value = entry.folderPath;
+    ruleStartRow.value = null;
+    ruleEndRow.value = null;
+    await refreshMatch();
+  } else if (entry.matchedDetails?.length > 0 || entry.unmatched?.length > 0) {
+    // 没有文件夹路径时，回退到历史快照
+    logs.value = []; // 仅在回退模式清空日志
     const restoredMatched = (entry.matchedDetails || []).map((d) => ({
       originalName: d.originalName,
       mappedName: d.mappedName || d.originalName,
@@ -956,20 +963,18 @@ function echoHistory(entry) {
         emailSubject: d.rule?.emailSubject || null,
         strippedChannels: d.strippedChannels || [],
       },
-      filePath: entry.folderPath ? entry.folderPath + '\\' + d.originalName : '',
+      filePath: '',
     }));
     matchResult.value = {
       matched: restoredMatched,
       unmatched: entry.unmatched || [],
       error: null,
     };
-
-    console.log('matchResult',matchResult);
-    folderPath.value = entry.folderPath || folderPath.value;
+  } else {
+    // 既无文件夹路径也无历史快照时，不做任何事
   }
 
-  // 2. 还原发送日志
-  logs.value = [];
+  // 2. 还原发送日志（重新匹配路径：refreshMatch 已添加匹配日志，此处追加历史发送记录）
   if (entry.targets?.length > 0) {
     addLog("info", `📋 回显历史记录 (${formatDate(entry.date)})`);
     for (let ti = 0; ti < entry.targets.length; ti++) {
