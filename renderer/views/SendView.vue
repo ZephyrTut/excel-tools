@@ -153,22 +153,24 @@
           <span class="history-files">· {{ currentHistoryEntry.files.length }} 个文件: {{ currentHistoryEntry.files.join(', ') }}</span>
         </div>
         <div class="history-table-wrap">
-          <el-table :data="currentHistoryEntry.targets" size="small" style="width: 100%; margin-bottom: 2px" max-height="240px">
+          <el-table :data="historyGroupedRows" size="small" style="width: 100%; margin-bottom: 2px" max-height="240px">
             <el-table-column label="文件名" min-width="140">
-              <template #default="{ row, $index }">
-                <span class="match-filename">{{ getHistoryFileName(currentHistoryEntry, row, $index) }}</span>
+              <template #default="{ row }">
+                <span class="match-filename">{{ row.fileName }}</span>
               </template>
             </el-table-column>
             <el-table-column label="匹配状态">
               <template #default="{ row }">
-                <el-tag v-if="row.type === 'skip'" size="small" type="info" effect="plain">⏭ 跳过</el-tag>
-                <el-tag v-else-if="row.status === 'interrupted'" size="small" type="warning" effect="plain">⏹ 中断</el-tag>
-                <el-tag v-else-if="row.status === 'stripped'" size="small" type="warning" effect="plain">
-                  {{ row.type === 'wechat' ? '📱 微信' : '📧 邮件' }} (配置不全)
-                </el-tag>
-                <el-tag v-else size="small" :type="row.status === 'success' ? 'success' : 'danger'">
-                  {{ row.type === 'wechat' ? '📱' : '📧' }} {{ row.name }}
-                </el-tag>
+                <template v-for="t in row.tags" :key="t.type + t.status + t.name">
+                  <el-tag v-if="t.type === 'skip'" size="small" type="info" effect="plain" style="margin-right: 4px">⏭ 跳过</el-tag>
+                  <el-tag v-else-if="t.status === 'interrupted'" size="small" type="warning" effect="plain" style="margin-right: 4px">⏹ 中断</el-tag>
+                  <el-tag v-else-if="t.status === 'stripped'" size="small" type="warning" effect="plain" style="margin-right: 4px">
+                    {{ t.type === 'wechat' ? '📱 微信' : '📧 邮件' }} (配置不全)
+                  </el-tag>
+                  <el-tag v-else size="small" :type="t.status === 'success' ? 'success' : 'danger'" style="margin-right: 4px">
+                    {{ t.type === 'wechat' ? '📱' : '📧' }} {{ t.name }}
+                  </el-tag>
+                </template>
               </template>
             </el-table-column>
           </el-table>
@@ -390,6 +392,22 @@ const resultFailCount = computed(() => failedItems.value.length);
 const currentHistoryEntry = computed(() => {
   if (history.value.length === 0) return null;
   return history.value[historyPage.value] || null;
+});
+
+const historyGroupedRows = computed(() => {
+  const entry = currentHistoryEntry.value;
+  if (!entry || !entry.targets) return [];
+  const groups = [];
+  for (const t of entry.targets) {
+    const name = t.type === 'skip' ? t.name : (t._fileName || getHistoryFileName(entry, t, -1));
+    let group = groups.find(g => g.fileName === name);
+    if (!group) {
+      group = { fileName: name, tags: [] };
+      groups.push(group);
+    }
+    group.tags.push(t);
+  }
+  return groups;
 });
 
 function getHistoryFileName(entry, target, index) {

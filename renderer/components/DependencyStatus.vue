@@ -1,5 +1,5 @@
 <template>
-  <div class="dependency-status" v-if="results.length > 0 || installing">
+  <div class="dependency-status" v-if="results.length > 0 && hasIssues || installing">
     <!-- 安装进度 -->
     <div v-if="installing" class="dep-installing">
       <el-progress :percentage="progressPercent" :stroke-width="10" style="margin-bottom: 4px" />
@@ -7,7 +7,7 @@
     </div>
 
     <!-- 结果状态条 -->
-    <div v-if="!installing" class="dep-bar" :class="'dep-bar--' + overallStatus" @click="expanded = !expanded">
+    <div v-if="!installing && hasIssues" class="dep-bar" :class="'dep-bar--' + overallStatus" @click="expanded = !expanded">
       <span class="dep-bar-icon">{{ overallIcon }}</span>
       <span class="dep-bar-text">{{ overallText }}</span>
       <el-button size="small" text type="primary" @click.stop="emit('check')" style="margin-right: 4px">
@@ -16,10 +16,10 @@
       <span class="dep-bar-action">{{ expanded ? '收起' : '详情' }}</span>
     </div>
 
-    <!-- 详情列表 -->
+    <!-- 详情列表（仅失败项） -->
     <div v-if="expanded && !installing" class="dep-list">
       <div
-        v-for="item in results"
+        v-for="item in failedResults"
         :key="item.id"
         class="dep-item"
         :class="'dep-item--' + item.status"
@@ -55,6 +55,8 @@ const expanded = ref(false);
 
 const okCount = computed(() => props.results.filter((r) => r.status === "ok").length);
 const totalCount = computed(() => props.results.length);
+const hasIssues = computed(() => props.results.some(r => r.status === "missing" || r.status === "error"));
+const failedResults = computed(() => props.results.filter(r => r.status !== "ok"));
 
 const overallStatus = computed(() => {
   if (props.results.some((r) => r.status === "error")) return "error";
