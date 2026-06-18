@@ -9,7 +9,6 @@
 
 用法（由 wechatController.js 通过 execFile 调用）:
   python wechat_sender_wx4.py --group "测试群5" --file "C:/path/file.xlsx"
-  python wechat_sender_wx4.py --action minimize
 
 返回（stdout 纯 JSON，无任何其他内容）:
   {"success": true, "group": "群名", "file": "路径"}
@@ -81,35 +80,13 @@ def send_file(group_name: str, file_path: str) -> dict:
         sys.stdout = _real_stdout
 
 
-def minimize_wechat() -> dict:
-    """最小化微信窗口。"""
-    _real_stdout = sys.stdout
-    sys.stdout = io.StringIO()
-    try:
-        with WeChatClient(auto_connect=True) as wx:
-            wx.disconnect()
-        # wx4py 的 disconnect 会自动尝试恢复微信状态
-        return {"success": True}
-    except WeChatNotFoundError:
-        return {"success": False, "error": "未找到微信窗口"}
-    except Exception as e:
-        return {"success": False, "error": f"最小化失败: {e}"}
-    finally:
-        sys.stdout = _real_stdout
-
-
 def main():
     parser = argparse.ArgumentParser(description="微信 PC 端发送（wx4py）")
-    parser.add_argument(
-        "--action", choices=["send", "minimize"], default="send"
-    )
     parser.add_argument("--group", help="微信群名称")
     parser.add_argument("--file", help="文件路径")
     args = parser.parse_args()
 
-    if args.action == "minimize":
-        result = minimize_wechat()
-    elif not args.group or not args.file:
+    if not args.group or not args.file:
         result = {"success": False, "error": "需要 --group 和 --file 参数"}
     else:
         result = send_file(args.group, args.file)

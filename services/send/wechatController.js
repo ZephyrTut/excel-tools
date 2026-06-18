@@ -229,27 +229,6 @@ async function sendToWechatGroup(groupName, filePath, signal) {
   }
 }
 
-async function minimizeWechat() {
-  const pythonCmd = await findPython();
-  if (!pythonCmd) return { success: false, error: "未检测到 Python" };
-
-  const scriptPath = path.join(__dirname, "wechat_sender_wx4.py");
-
-  try {
-    const [prog, ...args] = pythonCmd.split(" ");
-    const { stdout } = await execFileAsync(
-      prog,
-      [...args, scriptPath, "--action", "minimize"],
-      { timeout: 10000 }
-    );
-    const parsed = extractJsonFromOutput(stdout);
-    if (parsed) return parsed;
-    return { success: true }; // minimize 失败不阻塞，静默忽略
-  } catch {
-    return { success: true }; // minimize 失败不阻塞
-  }
-}
-
 /**
  * 检测 wx4py 包是否已安装
  * @param {string} pythonCmd - Python 命令或路径
@@ -460,4 +439,4 @@ function downloadFile(url, dest, onProgress) {
   });
 }
 
-module.exports = { sendToWechatGroup, minimizeWechat, findPython, resetPythonCheck, getBundledPythonPath, checkUiautomationInstalled, ensureUiautomationInstalled, getUserPythonPath, autoInstallPython };
+module.exports = { sendToWechatGroup, findPython, resetPythonCheck, getBundledPythonPath, checkUiautomationInstalled, ensureUiautomationInstalled, getUserPythonPath, autoInstallPython };

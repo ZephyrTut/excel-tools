@@ -105,6 +105,9 @@
             <el-tag v-for="ch in item.channels" :key="ch" size="small" :type="ch === 'wechat' ? 'primary' : 'success'" style="margin-right: 4px">
               {{ ch === 'wechat' ? '📱 微信' : '📧 邮件' }}
             </el-tag>
+            <el-tag v-for="ch in (item.rule?.strippedChannels || [])" :key="'sc-'+ch" size="small" type="warning" style="margin-right: 4px">
+              {{ ch === 'wechat' ? '📱 微信' : '📧 邮件' }} (配置不全)
+            </el-tag>
             <span v-if="item.channels.includes('wechat')" class="match-target">{{ item.rule.wechatGroup }}</span>
             <span v-if="item.channels.includes('email')" class="match-target">{{ item.rule.emailTo.join(', ') }}</span>
           </div>
@@ -911,6 +914,7 @@ function echoHistory(entry) {
         emailTo: d.rule?.emailTo || [],
         emailCc: d.rule?.emailCc || [],
         emailSubject: d.rule?.emailSubject || null,
+        strippedChannels: d.strippedChannels || [],
       },
       filePath: entry.folderPath ? entry.folderPath + '\\' + d.originalName : '',
     }));

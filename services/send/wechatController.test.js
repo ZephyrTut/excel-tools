@@ -65,14 +65,6 @@ test("sendToWechatGroup accepts and propagates AbortSignal", async () => {
   assert.ok(typeof result.success === "boolean");
 });
 
-test("minimizeWechat handles no Python gracefully", async () => {
-  wechatController.resetPythonCheck();
-  const result = await wechatController.minimizeWechat();
-  // Should return an error object, not crash
-  assert.ok(typeof result === "object");
-  assert.ok(typeof result.success === "boolean");
-});
-
 test("checkUiautomationInstalled returns false when pythonCmd is null", async () => {
   const result = await wechatController.checkUiautomationInstalled(null);
   assert.equal(result, false);
