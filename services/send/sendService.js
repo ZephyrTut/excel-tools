@@ -279,7 +279,19 @@ async function executeSend({
     try {
       if (item.channel === "wechat") {
         hasWechat = true;
-        result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath, signal);
+
+        // 超过 100 MB 则跳过微信发送，建议走邮件
+        let fileSizeMB = 0;
+        try {
+          const stat = await fs.stat(item.filePath);
+          fileSizeMB = stat.size / (1024 * 1024);
+        } catch (_) { /* 文件不存在时 stat 会抛异常，sizeMB 保持 0 */ }
+
+        if (fileSizeMB > 100) {
+          result = { success: false, error: `文件过大 (${fileSizeMB.toFixed(1)} MB)，请通过邮件发送` };
+        } else {
+          result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath, signal);
+        }
         results.push({
           originalName: item.originalName,
           channel: "wechat",

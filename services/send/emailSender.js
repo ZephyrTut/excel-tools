@@ -35,10 +35,15 @@ async function sendEmail({ smtpConfig, to, cc, subject, attachments }) {
     },
   });
 
-  const mailAttachments = (attachments || []).map((att) => ({
-    filename: att.mappedName || path.basename(att.filePath),
-    path: att.filePath,
-  }));
+  const mailAttachments = (attachments || []).map((att) => {
+    const rawName = att.mappedName || path.basename(att.filePath);
+    const nameWithoutExt = path.parse(rawName).name;
+    return {
+      filename: nameWithoutExt + ".xlsx",
+      path: att.filePath,
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    };
+  });
 
   try {
     const info = await transporter.sendMail({
