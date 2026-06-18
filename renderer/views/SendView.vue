@@ -136,7 +136,11 @@
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between">
           <span>📜 发送历史 ({{ history.length }})</span>
-          <el-button text size="small" type="danger" @click="clearHistory">清空全部</el-button>
+          <el-popconfirm title="确定清空全部发送历史？" @confirm="clearHistory">
+            <template #reference>
+              <el-button text size="small" type="danger">清空全部</el-button>
+            </template>
+          </el-popconfirm>
         </div>
       </template>
 

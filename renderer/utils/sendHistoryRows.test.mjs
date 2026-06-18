@@ -59,3 +59,96 @@ test("buildHistoryGroupedRows does not duplicate existing stripped target tags",
 
   assert.equal(rows[0].tags.length, 1);
 });
+
+test("buildHistoryGroupedRows assigns repeated email targets to matching files in order", () => {
+  const rows = buildHistoryGroupedRows(
+    {
+      targets: [
+        {
+          type: "email",
+          name: "tuwanwan666@gmail.com",
+          status: "success",
+        },
+        {
+          type: "email",
+          name: "tuwanwan666@gmail.com",
+          status: "success",
+        },
+      ],
+      matchedDetails: [
+        {
+          originalName: "力高.xlsx",
+          rule: { emailTo: ["tuwanwan666@gmail.com"] },
+        },
+        {
+          originalName: "富程威.xlsx",
+          rule: { emailTo: ["tuwanwan666@gmail.com"] },
+        },
+      ],
+    },
+    () => ""
+  );
+
+  assert.deepEqual(
+    rows.map((row) => ({
+      fileName: row.fileName,
+      tagCount: row.tags.length,
+    })),
+    [
+      { fileName: "力高.xlsx", tagCount: 1 },
+      { fileName: "富程威.xlsx", tagCount: 1 },
+    ]
+  );
+});
+
+test("buildHistoryGroupedRows allows one file to receive both wechat and email tags", () => {
+  const rows = buildHistoryGroupedRows(
+    {
+      targets: [
+        {
+          type: "email",
+          name: "tuwanwan666@gmail.com",
+          status: "success",
+        },
+        {
+          type: "wechat",
+          name: "测试群8",
+          status: "success",
+        },
+        {
+          type: "email",
+          name: "tuwanwan666@gmail.com",
+          status: "success",
+        },
+      ],
+      matchedDetails: [
+        {
+          originalName: "力高.xlsx",
+          rule: { emailTo: ["tuwanwan666@gmail.com"] },
+        },
+        {
+          originalName: "富程威.xlsx",
+          rule: {
+            wechatGroup: "测试群8",
+            emailTo: ["tuwanwan666@gmail.com"],
+          },
+        },
+      ],
+    },
+    (entry, target) => {
+      if (target.type === "email") return "力高.xlsx";
+      return "";
+    }
+  );
+
+  assert.deepEqual(
+    rows.map((row) => ({
+      fileName: row.fileName,
+      tags: row.tags.map((tag) => tag.type),
+    })),
+    [
+      { fileName: "力高.xlsx", tags: ["email"] },
+      { fileName: "富程威.xlsx", tags: ["wechat", "email"] },
+    ]
+  );
+});

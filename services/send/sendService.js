@@ -20,6 +20,28 @@ function formatEmail(addr) {
 function formatEmailList(arr) {
   return (arr || []).map(formatEmail).filter(Boolean).join(", ");
 }
+
+function buildSendQueue(matched, wechatFirst = true) {
+  const priority = wechatFirst ? ["wechat", "email"] : ["email", "wechat"];
+  const queue = [];
+
+  for (const item of matched || []) {
+    const channels = Array.isArray(item.channels) ? item.channels : [];
+    for (const channel of priority) {
+      if (channels.includes(channel)) {
+        queue.push({ ...item, channel });
+      }
+    }
+    for (const channel of channels) {
+      if (!priority.includes(channel)) {
+        queue.push({ ...item, channel });
+      }
+    }
+  }
+
+  return queue;
+}
+
 const {
   loadHistory,
   saveHistoryEntry,
@@ -159,25 +181,7 @@ async function executeSend({
 
   let hasWechat = false;
 
-  // 构建发送队列
-  const queue = [];
-  for (const item of matched) {
-    for (const channel of item.channels) {
-      queue.push({ ...item, channel });
-    }
-  }
-
-  // 按顺序排列
-  queue.sort((a, b) => {
-    if (a.channel === b.channel) return 0;
-    return wechatFirst
-      ? a.channel === "wechat"
-        ? -1
-        : 1
-      : a.channel === "email"
-      ? -1
-      : 1;
-  });
+  const queue = buildSendQueue(matched, wechatFirst);
 
   let successCount = 0;
   let failCount = 0;
@@ -331,6 +335,7 @@ async function executeSend({
             ? item.rule.wechatGroup
             : formatEmailList(item.rule.emailTo),
         status: "success",
+        _fileName: item.originalName,
       });
     } else {
       failCount++;
@@ -342,6 +347,7 @@ async function executeSend({
             : formatEmailList(item.rule.emailTo),
         status: "error",
         error: result.error,
+        _fileName: item.originalName,
       });
     }
 
@@ -369,6 +375,7 @@ async function executeSend({
           : formatEmailList(item.rule.emailTo),
         status: "error",
         error: displayError,
+        _fileName: item.originalName,
       });
       if (onProgress) {
         onProgress({
@@ -394,6 +401,7 @@ async function executeSend({
             ? item.rule.wechatGroup
             : formatEmailList(item.rule.emailTo),
         status: "interrupted",
+        _fileName: item.originalName,
       });
     }
   }
@@ -484,6 +492,7 @@ module.exports = {
   getSmtpConfig,
   saveSmtpConfig,
   executeSend,
+  buildSendQueue,
   loadHistory,
   clearHistory,
   deleteHistoryEntry,

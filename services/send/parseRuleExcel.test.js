@@ -178,3 +178,33 @@ test("parseRuleExcel handles email-only rows", () => {
   assert.deepEqual(result.rules[0].channels, ["email"]);
   assert.equal(result.rules[0].wechatGroup, null);
 });
+
+test("parseRuleExcel keeps email sendable when wechat config is incomplete", () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("规则");
+  ws.addRow([
+    "文件名(原)",
+    "文件名(映射)",
+    "分发方式",
+    "微信群名",
+    "邮件主题",
+    "收件人",
+    "抄送人",
+  ]);
+  ws.addRow([
+    "月报.xlsx",
+    "",
+    "微信,邮件",
+    "",
+    "月报主题",
+    "boss@a.com",
+    "",
+  ]);
+
+  const result = parseRuleExcel(ws);
+
+  assert.equal(result.rules.length, 1);
+  assert.deepEqual(result.rules[0].channels, ["email"]);
+  assert.deepEqual(result.rules[0].strippedChannels, ["wechat"]);
+  assert.deepEqual(result.rules[0].emailTo, [{ name: null, address: "boss@a.com" }]);
+});

@@ -57,3 +57,31 @@ test("createSendPayload keeps only structured-cloneable send fields", () => {
   });
   assert.doesNotThrow(() => structuredClone(payload));
 });
+
+test("createSendPayload keeps stripped wechat out of send channels while preserving warning data", () => {
+  const payload = createSendPayload(
+    [
+      {
+        originalName: "月报.xlsx",
+        mappedName: "月报.xlsx",
+        resolvedSubject: "月报主题",
+        channels: ["email"],
+        filePath: "C:\\tmp\\月报.xlsx",
+        rule: {
+          originalName: "月报.xlsx",
+          mappedName: "月报.xlsx",
+          channels: ["email"],
+          strippedChannels: ["wechat"],
+          wechatGroup: null,
+          emailSubject: "月报主题",
+          emailTo: ["boss@a.com"],
+          emailCc: [],
+        },
+      },
+    ],
+    true
+  );
+
+  assert.deepEqual(payload.matched[0].channels, ["email"]);
+  assert.deepEqual(payload.matched[0].rule.strippedChannels, ["wechat"]);
+});
