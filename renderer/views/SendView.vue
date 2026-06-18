@@ -136,11 +136,7 @@
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between">
           <span>📜 发送历史 ({{ history.length }})</span>
-          <el-popconfirm title="确定清空全部发送历史？" @confirm="clearHistory">
-            <template #reference>
-              <el-button text size="small" type="danger">清空全部</el-button>
-            </template>
-          </el-popconfirm>
+          <el-button text size="small" type="danger" @click="showClearAllDialog = true">清空全部</el-button>
         </div>
       </template>
 
@@ -182,6 +178,15 @@
         </div>
       </div>
     </el-card>
+
+    <!-- 清空全部发送历史确认对话框 -->
+    <el-dialog v-model="showClearAllDialog" title="清空全部发送历史" width="380px">
+      <p>确定要清空全部 {{ history.length }} 条发送历史记录吗？此操作不可撤销。</p>
+      <template #footer>
+        <el-button @click="showClearAllDialog = false">取消</el-button>
+        <el-button type="danger" @click="showClearAllDialog = false; clearHistory()">确定</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 发送日志 -->
     <el-card class="panel-card" v-if="logs.length > 0">
@@ -339,6 +344,7 @@ const smtpConfigured = ref(false);
 const showSmtpDialog = ref(false);
 const showRuleHelp = ref(false);
 const showResultDialog = ref(false);
+const showClearAllDialog = ref(false);
 const clipboardFiles = ref([]);
 const depResults = ref([]);
 const depInstalling = ref(false);
@@ -621,9 +627,9 @@ function downloadTemplate() {
     }));
 
     // 示例行
-    ws.addRow(["月报.xlsx", "{{date}}经营月报", "微信,邮件", "管理群", "{{date}} {{fileName}}", "boss@qq.com", "cto@qq.com,hr@qq.com"]);
-    ws.addRow(["日报.xlsx", "日报", "微信", "部门群", "", "", ""]);
-    ws.addRow(["周报.xlsx", "{{date}}周报", "邮件", "", "{{date}} 周报", "sales@163.com", ""]);
+    ws.addRow(["月报.xlsx", "{{fileName}}.xlsx", "微信,邮件", "管理群", "{{fileName}}", "boss@qq.com", "cto@qq.com,hr@qq.com"]);
+    ws.addRow(["日报.xlsx", "{{fileName}}.xlsx", "微信", "部门群", "{{fileName}}", "", ""]);
+    ws.addRow(["周报.xlsx", "{{fileName}}.xlsx", "邮件", "", "{{fileName}}", "sales@163.com", ""]);
 
     // 示例行样式
     for (let r = 2; r <= 4; r++) {
@@ -989,6 +995,17 @@ async function echoHistory(entry) {
   }
 
   addLog("info", `✅ 已从 ${formatDate(entry.date)} 的历史记录回显`);
+
+  // 恢复 sendResults 使导出按钮可见
+  sendResults.value = (entry.targets || [])
+    .filter(t => t.type !== 'skip' && t.type !== 'stripped')
+    .map((t, ti) => ({
+      originalName: t._fileName || getHistoryFileName(entry, t, ti),
+      channel: t.type,
+      target: t.name,
+      success: t.status === 'success',
+      error: t.error || null,
+    }));
 }
 
 async function clearHistory() {
