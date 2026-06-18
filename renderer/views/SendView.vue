@@ -669,8 +669,8 @@ async function refreshMatch() {
       strippedChannels: [...(r.strippedChannels || [])],
       wechatGroup: r.wechatGroup,
       emailSubject: r.emailSubject,
-      emailTo: [...(r.emailTo || [])],
-      emailCc: [...(r.emailCc || [])],
+      emailTo: (r.emailTo || []).map(e => ({ name: e.name, address: e.address })),
+      emailCc: (r.emailCc || []).map(e => ({ name: e.name, address: e.address })),
       originalRow: r.originalRow,
     }));
     const result = await getApi().matchSendFiles(folderPath.value, plainRules);
