@@ -14,7 +14,7 @@
     </div>
 
     <!-- 检测环境按钮始终可见 -->
-    <div v-if="!installing" style="margin-top: 4px">
+    <div v-if="!installing" class="dep-check-row">
       <el-button size="small" text type="primary" @click="emit('check')">
         🔄 检测环境
       </el-button>
@@ -95,6 +95,11 @@ function itemIcon(item) {
 .dependency-status {
   margin-top: 8px;
   font-size: 13px;
+}
+
+.dep-check-row {
+  display: flex;
+  align-items: center;
 }
 
 .dep-installing {

@@ -403,31 +403,30 @@ const historyGroupedRows = computed(() => {
   return groups;
 });
 
-function tagName(t) {
+const tagName = (t) => {
   if (t.type === 'skip') return '';
   if (t.type === 'wechat') return t.name;
-  // email: name 可能是格式化字符串或对象 {name, address}
   if (typeof t.name === 'object' && t.name !== null) {
     return t.name.address || t.name.name || '';
   }
   return t.name || '';
-}
+};
 
-function tagType(t) {
+const tagType = (t) => {
   if (t.type === 'skip') return 'info';
   if (t.status === 'interrupted') return 'warning';
   if (t.status === 'stripped') return 'warning';
   if (t.status === 'success') return 'success';
   return 'danger';
-}
+};
 
-function tagLabel(t) {
+const tagLabel = (t) => {
   if (t.type === 'skip') return '⏭ 跳过';
   if (t.status === 'interrupted') return '⏹ 中断';
   const icon = t.type === 'wechat' ? '📱' : '📧';
   if (t.status === 'stripped') return `${icon} ${t.type === 'wechat' ? '微信' : '邮件'} (配置不全)`;
   return `${icon} ${tagName(t)}`;
-}
+};
 
 function getHistoryFileName(entry, target, index) {
   if (target.type === 'skip') return target.name;
