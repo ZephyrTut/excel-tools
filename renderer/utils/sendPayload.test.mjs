@@ -48,6 +48,7 @@ test("createSendPayload keeps only structured-cloneable send fields", () => {
           emailSubject: "{{date}} 日报",
           emailTo: ["a@example.com"],
           emailCc: ["b@example.com"],
+          strippedChannels: [],
         },
       },
     ],
