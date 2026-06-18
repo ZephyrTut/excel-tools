@@ -209,7 +209,6 @@ jobs:
         timeout-minutes: 5
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           if (-not $env:CLOUDFLARE_API_TOKEN) {
@@ -217,7 +216,7 @@ jobs:
             exit 0
           }
 
-          $currentVersion = "${{ github.ref_name }}"
+          $currentVersion = "${{ env.CURRENT_TAG }}"
 
           # Parse all version sections from CHANGELOG.md
           $changelog = Get-Content -Path CHANGELOG.md -Raw -Encoding UTF8
