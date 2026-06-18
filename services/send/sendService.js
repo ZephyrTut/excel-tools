@@ -68,7 +68,7 @@ async function getRules(userDataPath) {
  * 扫描文件夹并匹配规则
  * @param {string} folderPath - 文件夹路径
  * @param {string} userDataPath
- * @returns {Promise<{matched: Array, unmatched: string[], error?: string}>}
+ * @returns {Promise<{matched: Array, unmatched: string[], warnings?: string[], error?: string}>}
  */
 async function matchFolderFiles(folderPath, userDataPath, customRules) {
   const rules = customRules || await getRules(userDataPath);
@@ -95,7 +95,17 @@ async function matchFolderFiles(folderPath, userDataPath, customRules) {
     m.filePath = path.join(folderPath, m.originalName);
   }
 
-  return { matched, unmatched };
+  // 从规则的 strippedChannels 生成警告
+  const warnings = [];
+  for (const m of matched) {
+    const sc = m.rule && m.rule.strippedChannels;
+    if (sc && sc.length > 0) {
+      const strippedLabels = sc.map(c => c === "wechat" ? "微信" : "邮件").join("、");
+      warnings.push(`${m.originalName} 仅通过${m.channels.map(c => c === "wechat" ? "微信" : "邮件").join("、")}发送（${strippedLabels}渠道配置不全）`);
+    }
+  }
+
+  return { matched, unmatched, warnings };
 }
 
 /**
@@ -412,6 +422,7 @@ async function executeSend({
       mappedName: item.mappedName,
       resolvedSubject: item.resolvedSubject || null,
       channels: item.channels,
+      strippedChannels: item.rule?.strippedChannels || [],
       rule: {
         wechatGroup: item.rule?.wechatGroup || null,
         emailTo: item.rule?.emailTo || [],
