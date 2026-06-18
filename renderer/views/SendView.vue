@@ -711,7 +711,18 @@ async function refreshMatch() {
     }));
     const result = await getApi().matchSendFiles(folderPath.value, plainRules);
     if (result.matched) {
-      result.matched.forEach((m) => (m.selected = true));
+      result.matched.forEach((m) => {
+        m.selected = true;
+        // 将 emailTo/emailCc 对象转为纯地址字符串，避免模板 join(', ') 显示 [object Object]
+        if (m.rule) {
+          m.rule.emailTo = (m.rule.emailTo || []).map(e =>
+            typeof e === 'string' ? e : (e.address || e.name || '')
+          );
+          m.rule.emailCc = (m.rule.emailCc || []).map(e =>
+            typeof e === 'string' ? e : (e.address || e.name || '')
+          );
+        }
+      });
     }
     matchResult.value = result;
     addLog("info", `匹配完成: ${result.matched.length} 匹配, ${result.unmatched.length} 未匹配`);
