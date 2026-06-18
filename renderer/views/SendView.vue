@@ -690,8 +690,6 @@ async function refreshMatch() {
       });
     }
     matchResult.value = result;
-    console.log(matchResult);
-
     addLog("info", `匹配完成: ${result.matched.length} 匹配, ${result.unmatched.length} 未匹配`);
     // 展示渠道不全的警告
     if (result.warnings && result.warnings.length > 0) {
