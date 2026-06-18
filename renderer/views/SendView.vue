@@ -102,10 +102,10 @@
             <el-checkbox v-model="item.selected" style="margin-right: 8px" />
             <span class="match-filename">{{ item.originalName }}</span>
             <span class="match-arrow">→</span>
-            <el-tag v-for="ch in item.channels" :key="ch" size="small" :type="ch === 'wechat' ? 'primary' : 'success'" style="margin-right: 4px">
+            <el-tag v-for="ch in (item.displayChannels || item.channels)" :key="ch" size="small" :type="ch === 'wechat' ? 'primary' : 'success'" style="margin-right: 4px">
               {{ ch === 'wechat' ? '📱 微信' : '📧 邮件' }}
             </el-tag>
-            <el-tag v-for="ch in (item.rule?.strippedChannels || [])" :key="'sc-'+ch" size="small" type="warning" style="margin-right: 4px">
+            <el-tag v-for="ch in (item.missingChannels || item.rule?.strippedChannels || [])" :key="'sc-'+ch" size="small" type="warning" style="margin-right: 4px">
               {{ ch === 'wechat' ? '📱 微信' : '📧 邮件' }} (配置不全)
             </el-tag>
             <span v-if="item.channels.includes('wechat')" class="match-target">{{ item.rule.wechatGroup }}</span>
@@ -713,6 +713,9 @@ async function refreshMatch() {
     if (result.matched) {
       result.matched.forEach((m) => {
         m.selected = true;
+        // UI 专用：原始配置源 + 被剥离的渠道（与发送用的 channels 分离）
+        m.displayChannels = [...(m.rule?.channels || [])];
+        m.missingChannels = [...(m.rule?.strippedChannels || [])];
         // 将 emailTo/emailCc 对象转为纯地址字符串，避免模板 join(', ') 显示 [object Object]
         if (m.rule) {
           m.rule.emailTo = (m.rule.emailTo || []).map(e =>
@@ -964,9 +967,11 @@ async function echoHistory(entry) {
     const restoredMatched = (entry.matchedDetails || []).map((d) => ({
       originalName: d.originalName,
       mappedName: d.mappedName || d.originalName,
-      channels: d.channels,
+      channels: d.channels || [],
       resolvedSubject: d.resolvedSubject || '',
       selected: true,
+      displayChannels: [...(d.channels || [])],
+      missingChannels: [...(d.strippedChannels || [])],
       rule: {
         wechatGroup: d.rule?.wechatGroup || null,
         emailTo: (d.rule?.emailTo || []).map(e => typeof e === 'string' ? e : (e.address || e.name || '')),
