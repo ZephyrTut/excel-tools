@@ -41,7 +41,9 @@ function createDetailResolver(entry) {
 
     // WeChat: 精确一对一匹配，记录索引供后续 email 优先归属
     if (target.type === "wechat") {
-      const index = details.findIndex((d) => wechatMatches(d.rule, target.name));
+      const index = details.findIndex((d) =>
+        wechatMatches(d.rule, target.name)
+      );
       if (index >= 0) {
         lastWechatMatchedIndex = index;
         return details[index].originalName;
@@ -98,6 +100,5 @@ export function buildHistoryGroupedRows(entry, getFileName = () => "") {
       });
     }
   }
-  console.log(JSON.stringify(groups));
   return groups;
 }
