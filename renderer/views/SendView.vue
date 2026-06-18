@@ -951,8 +951,8 @@ function echoHistory(entry) {
       selected: true,
       rule: {
         wechatGroup: d.rule?.wechatGroup || null,
-        emailTo: d.rule?.emailTo || [],
-        emailCc: d.rule?.emailCc || [],
+        emailTo: (d.rule?.emailTo || []).map(e => typeof e === 'string' ? e : (e.address || e.name || '')),
+        emailCc: (d.rule?.emailCc || []).map(e => typeof e === 'string' ? e : (e.address || e.name || '')),
         emailSubject: d.rule?.emailSubject || null,
         strippedChannels: d.strippedChannels || [],
       },
@@ -963,6 +963,8 @@ function echoHistory(entry) {
       unmatched: entry.unmatched || [],
       error: null,
     };
+
+    console.log('matchResult',matchResult);
     folderPath.value = entry.folderPath || folderPath.value;
   }
 
