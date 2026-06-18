@@ -133,7 +133,6 @@ async function main() {
 
   if (!releaseNotes) {
     console.log("更新日志为空，退出");
-    rl.close();
     process.exit(1);
   }
 
@@ -147,21 +146,30 @@ async function main() {
   const date = new Date().toISOString().slice(0, 10);
   const newSection = `## [${tag}] - ${date}\n\n${releaseNotes}\n\n`;
 
-  let existing = "";
   try {
-    existing = fs.readFileSync(CHANGELOG_PATH, "utf-8");
-  } catch {
-    existing = "# Changelog\n\n";
+    let existing = "";
+    try {
+      existing = fs.readFileSync(CHANGELOG_PATH, "utf-8");
+    } catch {
+      existing = "# Changelog\n\n";
+    }
+
+    // 插入到标题行之后 (fallback: 文件无空行时追加在末尾)
+    let newChangelog;
+    const headerEnd = existing.indexOf("\n\n");
+    if (headerEnd === -1) {
+      newChangelog = existing.trimEnd() + "\n\n" + newSection;
+    } else {
+      const header = existing.slice(0, headerEnd + 2);
+      const body = existing.slice(headerEnd + 2);
+      newChangelog = header + newSection + body;
+    }
+
+    fs.writeFileSync(CHANGELOG_PATH, newChangelog);
+    console.log(`✓ CHANGELOG.md 已更新: ${tag}`);
+  } catch (err) {
+    console.warn("⚠ CHANGELOG 写入失败:", err.message);
   }
-
-  // 插入到标题行之后
-  const headerEnd = existing.indexOf("\n\n");
-  const header = existing.slice(0, headerEnd + 2);
-  const body = existing.slice(headerEnd + 2);
-  const newChangelog = header + newSection + body;
-
-  fs.writeFileSync(CHANGELOG_PATH, newChangelog);
-  console.log(`✓ CHANGELOG.md 已更新: ${tag}`);
 
   // 4. Git commit, tag, push
   try {

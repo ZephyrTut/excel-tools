@@ -89,7 +89,8 @@ jobs:
           $currentTag = "${{ env.CURRENT_TAG }}"
           $changelog = Get-Content -Path CHANGELOG.md -Raw -Encoding UTF8
           # 提取当前版本段落：匹配 "## [vX.Y.Z] - YYYY-MM-DD" 到下一个 "## [v" 或文件结束
-          $pattern = "(?s)## \[$currentTag\].*?(?=\n## \[v|\z)"
+          $escapedTag = [regex]::Escape($currentTag)
+          $pattern = "(?s)## \[$escapedTag\].*?(?=\n## \[v|\z)"
           if ($changelog -match $pattern) {
             $body = $matches[0].Trim()
           } else {
