@@ -142,13 +142,26 @@ async function main() {
   fs.writeFileSync(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + "\n");
   console.log(`✓ package.json 已更新: ${newVersion}`);
 
-  // 3. 重新生成 CHANGELOG.md
+  // 3. 写入 CHANGELOG.md
+  const CHANGELOG_PATH = path.join(__dirname, "..", "CHANGELOG.md");
+  const date = new Date().toISOString().slice(0, 10);
+  const newSection = `## [${tag}] - ${date}\n\n${releaseNotes}\n\n`;
+
+  let existing = "";
   try {
-    execSync(`node scripts/generate-changelog.js --write`, { stdio: "inherit" });
-    console.log("✓ CHANGELOG.md 已重新生成");
-  } catch (err) {
-    console.warn("⚠ CHANGELOG 生成失败:", err.message);
+    existing = fs.readFileSync(CHANGELOG_PATH, "utf-8");
+  } catch {
+    existing = "# Changelog\n\n";
   }
+
+  // 插入到标题行之后
+  const headerEnd = existing.indexOf("\n\n");
+  const header = existing.slice(0, headerEnd + 2);
+  const body = existing.slice(headerEnd + 2);
+  const newChangelog = header + newSection + body;
+
+  fs.writeFileSync(CHANGELOG_PATH, newChangelog);
+  console.log(`✓ CHANGELOG.md 已更新: ${tag}`);
 
   // 4. Git commit, tag, push
   try {
