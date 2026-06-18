@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.2.7] - 2026-06-11
+
+### 🚀 新功能
+- auto-install Python with multi-source mirror, progress bar, and OSS sync (617d101)
+- 添加自动生成 CHANGELOG.md 的功能，并在发布时更新 (334930f)
+- add dependency check functionality and UI integration (27b41d6)
+
+### 🔹 其他
+- ci: fix gh release list — body not valid for list command, use view per release (314b091)
+- ci: fix Cloudflare Pages deploy — use env var directly, add gh error handling (44f3248)
+- release: v1.2.7 (2a57f1c)
+
 ## [v1.2.6] - 2026-06-10
 
 ### 🚀 新功能
@@ -247,6 +259,16 @@
 ## [v0.0.1] - 2026-05-18
 
 ### 🚀 新功能
+- group history rows by file with multi-tag display; hide dependency successes (7301aa1)
+- show stripped channel yellow tags in send history match status (739c86c)
+- add 2-5s random delay between different group sends to avoid risk control (89a2c32)
+- add random delay after open_chat (0.5-1.5s) to reduce risk control detection (8dd8c7b)
+- yellow warning tags for stripped channels + remove minimize_wechat dead code (a9492e8)
+- display stripped channel warnings in match, send log, and history (0099c0d)
+- add warnings from strippedChannels to matchFolderFiles and history (5786e74)
+- decouple wechat/email channel validation with strippedChannels (6c103ed)
+- auto-install Python with multi-source mirror, progress bar, and OSS sync (617d101)
+- 添加自动生成 CHANGELOG.md 的功能，并在发布时更新 (334930f)
 - add dependency check functionality and UI integration (27b41d6)
 - Enhance send tool with history table, unmatched items logging, echo functionality, and abort signal handling (87b6e52)
 - add cancel send functionality and improve email handling (b5556ca)
@@ -293,6 +315,17 @@
 - add verification scripts for Excel Tools (5f19219)
 
 ### 🐛 Bug 修复
+- email target should prefer same-file wechat-matched detail, not consume all matches (a5c370c)
+- add strippedChannels to normalizeRule in sendPayload to preserve warning data in history (bc45e22)
+- convert emailTo/emailCc objects to strings in refreshMatch to prevent [object Object] display (ebfb623)
+- echoHistory re-runs refreshMatch instead of using stale snapshot; fix email object display (2001e65)
+- force .xlsx extension on email attachments; skip wx4py for files >100MB (418788d)
+- convert email objects to strings in echoHistory to prevent [object Object] display (bdd0d0b)
+- use const arrow functions for tagName/tagType/tagLabel; fix dep check button layout (0892dc0)
+- replace v-if chain with tag helpers to fix [object Object] and stripped tag; keep dep check button always visible (7cde66b)
+- deep-clone email objects in plainRules to prevent IPC structuredClone error (3427f2b)
+- remove redundant minimizeWechat after send (wx4py auto-minimizes) (b8b8905)
+- remove redundant open_chat before send_file_to to avoid double group search (89abe74)
 - unpack Python scripts from asar so Python can access them at runtime (f9c4cc8)
 - upgrade Node.js to v22 in CI for wrangler v4 compatibility (d92161f)
 - restore Cloudflare as single job step, add wrangler as devDep (819c60f)
@@ -337,12 +370,20 @@
 - 简化 release workflow，去除重复的 setup-node 调用，修复 cache path 错误 (f81185c)
 
 ### ♻️ 重构
+- format wechatMatches index finding for improved readability (d2e5ffc)
+- remove unnecessary dependency check button, auto-check on mount is sufficient (8355caf)
+- separate displayChannels/missingChannels from channels/strippedChannels for UI clarity (899068c)
+- rename uiautomation to wx4py across all send-related code (fe44f3e)
 - improve code readability by formatting and restructuring function calls (215cfc9)
 
 ### 📝 文档
+- add send history per-file aggregation design spec (4daec7c)
 - document OSS domestic update mirror across all project files (7ae7645)
 - add implementation plan for domestic update (2b41691)
 - add domestic update design spec for China mainland users (7438560)
+
+### ✅ 测试
+- add strippedChannels to sendPayload test expectation (0ddbce6)
 
 ### 📦 构建
 - disable asar to avoid file access restrictions at runtime (49433d7)
@@ -354,6 +395,10 @@
 - 准备发布流程 - 添加 .gitignore 排除 .history/，新增 release.sh 脚本、clean.js、BUILD.md 及 GitHub Actions 工作流 (49170e5)
 
 ### 🔹 其他
+- modified:   renderer/views/SendView.vue (560b8aa)
+- ci: fix gh release list — body not valid for list command, use view per release (314b091)
+- ci: fix Cloudflare Pages deploy — use env var directly, add gh error handling (44f3248)
+- release: v1.2.7 (2a57f1c)
 - release: v1.2.6 (17d3b85)
 - perf: split Cloudflare deploy to ubuntu job, fix workflow_dispatch tag error (cdc98c1)
 - release: v1.2.5 (6b26243)
