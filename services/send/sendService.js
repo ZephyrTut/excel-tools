@@ -5,7 +5,7 @@ const ExcelJS = require("exceljs");
 const { parseRuleExcel } = require("./parseRuleExcel");
 const { matchFiles } = require("./ruleMatcher");
 const { sendEmail } = require("./emailSender");
-const { sendToWechatGroup, minimizeWechat, findPython, checkUiautomationInstalled, ensureUiautomationInstalled, autoInstallPython } = require("./wechatController");
+const { sendToWechatGroup, findPython, checkUiautomationInstalled, ensureUiautomationInstalled, autoInstallPython } = require("./wechatController");
 
 /** 将地址对象或字符串转为显示用字符串 */
 function formatEmail(addr) {
@@ -382,10 +382,7 @@ async function executeSend({
     }
   }
 
-  // 所有微信发送完成后最小化窗口
-  if (hasWechat) {
-    minimizeWechat().catch(() => {});
-  }
+  // wx4py 的 send_file 内部已自动最小化窗口，无需额外操作
 
   // 去重 files
   const seenFiles = new Set();
