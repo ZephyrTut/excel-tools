@@ -83,6 +83,59 @@ async function main() {
     process.exit(0);
   }
 
+  // 2.5. 展示提交列表，等待用户提炼更新日志
+  const lastTag = (() => {
+    try {
+      return execSync("git describe --tags --abbrev=0", { encoding: "utf-8" }).trim();
+    } catch {
+      return null;
+    }
+  })();
+
+  if (lastTag) {
+    console.log(`\n📋 自 ${lastTag} 以来的提交:\n`);
+    try {
+      const log = execSync(`git log ${lastTag}..HEAD --oneline --no-decorate`, { encoding: "utf-8" });
+      console.log(log);
+    } catch {
+      console.log("  (无法获取提交列表)");
+    }
+  } else {
+    console.log("\n📋 首次发布，所有提交:\n");
+    try {
+      const log = execSync("git log --oneline --no-decorate", { encoding: "utf-8" });
+      console.log(log);
+    } catch {
+      console.log("  (无法获取提交列表)");
+    }
+  }
+
+  const releaseNotes = await new Promise((resolve) => {
+    const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const lines = [];
+    let blankCount = 0;
+    console.log("\n输入更新日志（贴入后按 Enter 两次结束）:");
+    rl2.on("line", (input) => {
+      if (input.trim() === "") {
+        blankCount++;
+        if (blankCount >= 2) {
+          rl2.close();
+          resolve(lines.join("\n").trim());
+          return;
+        }
+      } else {
+        blankCount = 0;
+      }
+      lines.push(input);
+    });
+  });
+
+  if (!releaseNotes) {
+    console.log("更新日志为空，退出");
+    rl.close();
+    process.exit(1);
+  }
+
   // 2. Update package.json
   pkg.version = newVersion;
   fs.writeFileSync(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + "\n");
