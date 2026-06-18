@@ -413,6 +413,24 @@ async function executeSend({
     });
   }
 
+  // 记录被剥离的渠道（配置不全）到历史
+  for (const item of matched) {
+    const sc = item.rule?.strippedChannels;
+    if (sc && sc.length > 0) {
+      for (const ch of sc) {
+        historyTargets.push({
+          type: ch,
+          name: ch === 'wechat'
+            ? (item.rule.wechatGroup || '微信')
+            : '邮件',
+          status: 'stripped',
+          error: null,
+          _fileName: item.originalName,
+        });
+      }
+    }
+  }
+
   const historyEntry = {
     date: new Date().toISOString(),
     folderPath,

@@ -163,6 +163,9 @@
               <template #default="{ row }">
                 <el-tag v-if="row.type === 'skip'" size="small" type="info" effect="plain">⏭ 跳过</el-tag>
                 <el-tag v-else-if="row.status === 'interrupted'" size="small" type="warning" effect="plain">⏹ 中断</el-tag>
+                <el-tag v-else-if="row.status === 'stripped'" size="small" type="warning" effect="plain">
+                  {{ row.type === 'wechat' ? '📱 微信' : '📧 邮件' }} (配置不全)
+                </el-tag>
                 <el-tag v-else size="small" :type="row.status === 'success' ? 'success' : 'danger'">
                   {{ row.type === 'wechat' ? '📱' : '📧' }} {{ row.name }}
                 </el-tag>
@@ -391,6 +394,7 @@ const currentHistoryEntry = computed(() => {
 
 function getHistoryFileName(entry, target, index) {
   if (target.type === 'skip') return target.name;
+  if (target._fileName) return target._fileName;
   if (entry.matchedDetails) {
     const detail = entry.matchedDetails.find(d => {
       if (target.type === 'wechat') return d.rule?.wechatGroup === target.name;
