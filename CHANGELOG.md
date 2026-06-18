@@ -1,5 +1,30 @@
 # Changelog
 
+## [v1.2.9] - 2026-06-18
+
+🚀 新增功能
+发送渠道独立验证：微信/邮件任一配置不全时，不再丢弃整行，只跳过缺失渠道，黄色 tag 提示"配置不全"
+历史记录按文件聚合：一条文件一行展示所有渠道 tag（含成功/失败/配置不全），回显时自动重新匹配而非使用过期快照
+环境依赖自检：启动时自动检测 Python/wx4py，缺失项仅在有问题时显示，移除手动检测按钮
+发布流程重构：pnpm release 展示提交边界，人工提炼更新日志写入 CHANGELOG.md，GitHub Release 和 Cloudflare Pages 均从 CHANGELOG.md 读取
+下载空白规则模板：示例行数据匹配真实模板文件
+自动安装 Python 环境：打包嵌入式 Python + 多源镜像 + 进度条
+🐛 Bug 修复
+修复邮箱地址在匹配列表显示为 [object Object] 的问题
+修复发送历史中同邮箱多文件归属错乱（富程威邮件被归到力高）
+修复 createSendPayload 丢弃 strippedChannels 导致历史缺警告 tag
+修复回显历史时邮箱对象未转字符串
+修复 downloadTemplate 示例数据与模板文件不一致
+清空全部 按钮改用 Dialog 替代 popconfirm 弹窗
+⚡ 优化
+wx4py 替代 uiautomation：UIA 直接操控微信控件，删除冗余的截图/OCR 旧方案，发送后不再手动最小化
+微信风控规避：open_chat 后 0.51.5s 随机停顿 + 不同群间 25s 随机间隔
+邮件附件强制 .xlsx 扩展名 + 正确的 MIME 类型声明
+微信发送 >100MB 文件自动跳过，建议走邮件
+移除冗余的 generate-changelog.js 自动生成，改为人机协作
+pnpm release 提交列表精简为最新/最旧两条 + 总数
+PRD 更新为 README.md，移除 XLSX_OPTIMIZATION_GUIDE.md
+
 ## [v1.2.7] - 2026-06-11
 
 ### 🚀 新功能
