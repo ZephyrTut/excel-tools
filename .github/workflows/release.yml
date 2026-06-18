@@ -83,31 +83,18 @@ jobs:
           $sw.Stop()
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Build installer: $([math]::Round($sw.Elapsed.TotalSeconds, 1))s"
 
-      - name: Generate release notes
+      - name: Generate release notes from CHANGELOG
         shell: pwsh
         run: |
           $currentTag = "${{ env.CURRENT_TAG }}"
-          $prevTag = git tag --sort=-version:refname | Where-Object { $_ -ne $currentTag } | Select-Object -First 1
-
-          if ($prevTag) {
-            $lines = git log "$prevTag..$currentTag" --oneline --no-decorate --format="- %s" `
-              | Where-Object { $_ -notmatch '^\- release: v' }
-            $log = $lines -join "`r`n"
+          $changelog = Get-Content -Path CHANGELOG.md -Raw -Encoding UTF8
+          # 提取当前版本段落：匹配 "## [vX.Y.Z] - YYYY-MM-DD" 到下一个 "## [v" 或文件结束
+          $pattern = "(?s)## \[$currentTag\].*?(?=\n## \[v|\z)"
+          if ($changelog -match $pattern) {
+            $body = $matches[0].Trim()
           } else {
-            $log = "Initial release."
+            $body = "## $currentTag`n`n更新内容待补充"
           }
-
-          $body = @(
-            "## Excel Tools $currentTag",
-            "",
-            "### 更新内容",
-            $log,
-            "",
-            "### Windows",
-            "- ``Excel-Tools-Setup-$currentTag.exe`` — 安装包",
-            "",
-            "Built automatically by GitHub Actions."
-          ) -join "`r`n"
           Set-Content -Path "$env:RUNNER_TEMP/release-body.md" -Value $body -Encoding UTF8
 
       - name: Upload GitHub release assets
@@ -232,41 +219,25 @@ jobs:
 
           $currentVersion = "${{ github.ref_name }}"
 
-          # Fetch release list (only tagName — body requires per-release API call)
-          Write-Host "Fetching releases via gh CLI..."
-          try {
-            $allReleases = gh release list --limit 100 --exclude-drafts --json tagName 2>$null | ConvertFrom-Json | Sort-Object tagName -Descending
-            Write-Host "Found $($allReleases.Count) releases"
-          } catch {
-            Write-Host "WARNING: Failed to list releases: $_"
-            $allReleases = @()
-          }
-
-          # Build version list HTML (fetch body per-release for changelog)
+          # Parse all version sections from CHANGELOG.md
+          $changelog = Get-Content -Path CHANGELOG.md -Raw -Encoding UTF8
+          $versionBlocks = [regex]::Matches($changelog, '(?s)## \[(v[\d.]+)\].*?(?=\n## \[v|\z)')
+          
           $versionItems = ""
-          foreach ($release in $allReleases) {
-            $ver = $release.tagName
+          foreach ($block in $versionBlocks) {
+            $ver = $block.Groups[1].Value
+            $content = $block.Groups[0].Value
             $badge = if ($ver -eq $currentVersion) { ' <span class="badge">★ 最新</span>' } else { '' }
-
-            # Fetch body separately for the changelog
-            $changelog = ""
-            try {
-              $body = gh release view "$ver" --json body 2>$null | ConvertFrom-Json | Select-Object -ExpandProperty body
-              if ($body -match '(?s)### 更新内容\s*\n(.+?)(?=\n###|\z)') {
-                $changelog = $matches[1].Trim()
-                $changelog = $changelog -replace '(?m)^\- ', '<li>'
-                $changelog = $changelog -replace '(?m)^  ', '&nbsp;&nbsp;'
-                $changelog = $changelog -replace '<li>(.*)', '<li>$1</li>'
-                $changelog = "<ul>$changelog</ul>"
-              }
-            } catch {
-              # No body available — show version without changelog
-            }
+            
+            # 提取更新内容（跳过 "## [vX.Y.Z] - date" 标题行）
+            $contentLines = $content -split '\n'
+            $bodyLines = $contentLines | Select-Object -Skip 1 | Where-Object { $_ -match '\S' } | ForEach-Object { "<li>" + ($_ -replace '^\s*-\s*', '') + "</li>" }
+            $changelogHtml = if ($bodyLines) { "<ul>" + ($bodyLines -join '') + "</ul>" } else { "" }
 
             $versionItems += '<li>'
             $versionItems += '<a href="https://excel-tools-release.oss-cn-hangzhou.aliyuncs.com/Excel-Tools-Setup-' + $ver + '.exe">' + $ver + '</a>' + $badge
-            if ($changelog) {
-              $versionItems += '<details><summary>更新内容</summary>' + $changelog + '</details>'
+            if ($changelogHtml) {
+              $versionItems += '<details><summary>更新内容</summary>' + $changelogHtml + '</details>'
             }
             $versionItems += '</li>'
           }
