@@ -20,6 +20,8 @@ import json
 import sys
 import io
 import os
+import time
+import random
 
 # 在导入 wx4py 之前，重定向 stdout 防止第三方库向 stdout 输出内容污染 JSON
 # wx4py / uiautomation / comtypes 可能在 import 或运行时向 stdout 打印日志
@@ -58,6 +60,8 @@ def send_file(group_name: str, file_path: str) -> dict:
             wx.chat_window.open_chat(
                 group_name, target_type="group", raise_on_target_not_found=True
             )
+            # 打开群聊后随机停顿 0.5~1.5s，模拟人为操作节奏
+            time.sleep(random.uniform(0.5, 1.5))
             # 直接发送文件（不再通过 send_file_to，它内部会重复 open_chat）
             wx.chat_window.send_file(abs_path)
         return {"success": True, "group": group_name, "file": abs_path}
