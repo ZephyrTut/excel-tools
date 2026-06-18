@@ -93,18 +93,40 @@ async function main() {
   })();
 
   if (lastTag) {
-    console.log(`\n📋 自 ${lastTag} 以来的提交:\n`);
     try {
-      const log = execSync(`git log ${lastTag}..HEAD --oneline --no-decorate`, { encoding: "utf-8" });
-      console.log(log);
+      const log = execSync(`git log ${lastTag}..HEAD --oneline --no-decorate`, { encoding: "utf-8" }).trim();
+      if (log) {
+        const lines = log.split("\n");
+        const newest = lines[0];
+        const oldest = lines[lines.length - 1];
+        console.log(`\n📋 自 ${lastTag} 以来的提交范围:\n`);
+        if (lines.length === 1) {
+          console.log(`  ${newest}`);
+        } else {
+          console.log(`  最新: ${newest}`);
+          console.log(`  最旧: ${oldest}`);
+          console.log(`  (共 ${lines.length} 个提交)`);
+        }
+      }
     } catch {
       console.log("  (无法获取提交列表)");
     }
   } else {
-    console.log("\n📋 首次发布，所有提交:\n");
     try {
-      const log = execSync("git log --oneline --no-decorate", { encoding: "utf-8" });
-      console.log(log);
+      const log = execSync("git log --oneline --no-decorate", { encoding: "utf-8" }).trim();
+      if (log) {
+        const lines = log.split("\n");
+        const newest = lines[0];
+        const oldest = lines[lines.length - 1];
+        console.log(`\n📋 首次发布，提交范围:\n`);
+        if (lines.length === 1) {
+          console.log(`  ${newest}`);
+        } else {
+          console.log(`  最新: ${newest}`);
+          console.log(`  最旧: ${oldest}`);
+          console.log(`  (共 ${lines.length} 个提交)`);
+        }
+      }
     } catch {
       console.log("  (无法获取提交列表)");
     }
