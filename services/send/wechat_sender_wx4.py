@@ -55,14 +55,12 @@ def send_file(group_name: str, file_path: str) -> dict:
 
     try:
         with WeChatClient() as wx:
-            # 先验证群存在（不存在会抛 TargetNotFoundError）
+            # 打开群聊（不存在会抛 TargetNotFoundError）
             wx.chat_window.open_chat(
                 group_name, target_type="group", raise_on_target_not_found=True
             )
-            # 群存在，发送文件
-            wx.chat_window.send_file_to(
-                group_name, abs_path, target_type="group"
-            )
+            # 直接发送文件（不再通过 send_file_to，它内部会重复 open_chat）
+            wx.chat_window.send_file(abs_path)
         return {"success": True, "group": group_name, "file": abs_path}
     except TargetNotFoundError:
         return {
