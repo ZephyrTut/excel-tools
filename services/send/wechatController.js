@@ -234,7 +234,7 @@ async function sendToWechatGroup(groupName, filePath, signal) {
  * @param {string} pythonCmd - Python 命令或路径
  * @returns {Promise<boolean>}
  */
-async function checkUiautomationInstalled(pythonCmd) {
+async function checkWx4pyInstalled(pythonCmd) {
   if (!pythonCmd) return false;
   try {
     const [prog, ...args] = pythonCmd.split(" ");
@@ -254,10 +254,10 @@ async function checkUiautomationInstalled(pythonCmd) {
  * @param {string} pythonCmd - Python 命令或路径
  * @returns {Promise<boolean>}
  */
-async function ensureUiautomationInstalled(pythonCmd) {
+async function ensureWx4pyInstalled(pythonCmd) {
   if (!pythonCmd) return false;
   // 先检查是否已安装
-  const installed = await checkUiautomationInstalled(pythonCmd);
+  const installed = await checkWx4pyInstalled(pythonCmd);
   if (installed) return true;
 
   try {
@@ -293,7 +293,7 @@ function ensurePthConfigured(pythonDir) {
 }
 
 /**
- * 自动下载嵌入式 Python 到指定目录，并安装 pip + uiautomation
+ * 自动下载嵌入式 Python 到指定目录，并安装 pip + wx4py
  * @param {string} destDir - 目标目录（如 app.getPath("userData")）
  * @param {function} [onProgress] - ({ percent: number, message: string }) => void
  * @returns {Promise<boolean>}
@@ -439,4 +439,4 @@ function downloadFile(url, dest, onProgress) {
   });
 }
 
-module.exports = { sendToWechatGroup, findPython, resetPythonCheck, getBundledPythonPath, checkUiautomationInstalled, ensureUiautomationInstalled, getUserPythonPath, autoInstallPython };
+module.exports = { sendToWechatGroup, findPython, resetPythonCheck, getBundledPythonPath, checkWx4pyInstalled, ensureWx4pyInstalled, getUserPythonPath, autoInstallPython };

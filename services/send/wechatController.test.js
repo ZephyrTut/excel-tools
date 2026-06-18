@@ -65,17 +65,17 @@ test("sendToWechatGroup accepts and propagates AbortSignal", async () => {
   assert.ok(typeof result.success === "boolean");
 });
 
-test("checkUiautomationInstalled returns false when pythonCmd is null", async () => {
-  const result = await wechatController.checkUiautomationInstalled(null);
+test("checkWx4pyInstalled returns false when pythonCmd is null", async () => {
+  const result = await wechatController.checkWx4pyInstalled(null);
   assert.equal(result, false);
 });
 
-test("checkUiautomationInstalled returns false when pythonCmd is empty", async () => {
-  const result = await wechatController.checkUiautomationInstalled("");
+test("checkWx4pyInstalled returns false when pythonCmd is empty", async () => {
+  const result = await wechatController.checkWx4pyInstalled("");
   assert.equal(result, false);
 });
 
-test("ensureUiautomationInstalled returns false when pythonCmd is null", async () => {
-  const result = await wechatController.ensureUiautomationInstalled(null);
+test("ensureWx4pyInstalled returns false when pythonCmd is null", async () => {
+  const result = await wechatController.ensureWx4pyInstalled(null);
   assert.equal(result, false);
 });

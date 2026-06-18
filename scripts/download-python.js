@@ -1,5 +1,5 @@
 /**
- * download-python.js — 下载嵌入式 Python 并为微信发送安装 uiautomation
+ * download-python.js — 下载嵌入式 Python 并为微信发送安装 wx4py
  *
  * 在 pnpm build 之前执行，将便携 Python 放入 resources/python/
  * 供 wechatController.js 在系统无 Python 时使用。
@@ -75,7 +75,7 @@ async function main() {
     console.error(`  ✗ 下载失败: ${err.message}`);
     console.error("  请手动下载并解压到 resources/python/ 目录:");
     console.error(`    ${zipUrl}`);
-    console.error("  然后运行: python get-pip.py && pip install uiautomation -t resources/python/");
+    console.error("  然后运行: python get-pip.py && pip install wx4py");
     process.exit(1);
   }
   console.log("  ✓ 下载完成");
@@ -124,16 +124,16 @@ async function main() {
   });
   console.log("  ✓ pip 安装完成");
 
-  // 8. 安装 uiautomation
-  console.log("  ⚙ 安装 uiautomation (用于微信群发送) ...");
-  execSync(`"${pythonExe}" -m pip install uiautomation --no-warn-script-location`, {
+  // 8. 安装 wx4py
+  console.log("  ⚙ 安装 wx4py (用于微信群发送) ...");
+  execSync(`"${pythonExe}" -m pip install wx4py --no-warn-script-location`, {
     stdio: "pipe",
     timeout: 120000,
   });
-  console.log("  ✓ uiautomation 安装完成");
+  console.log("  ✓ wx4py 安装完成");
 
   // 9. 写入标记文件
-  fs.writeFileSync(markerFile, `Python ${PYTHON_VERSION} embedded with uiautomation\n`, "utf-8");
+  fs.writeFileSync(markerFile, `Python ${PYTHON_VERSION} embedded with wx4py\n`, "utf-8");
 
   // 10. 清理临时文件
   fs.rmSync(tmpDir, { recursive: true, force: true });

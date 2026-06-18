@@ -3,8 +3,8 @@
 const {
   findPython,
   resetPythonCheck,
-  checkUiautomationInstalled,
-  ensureUiautomationInstalled,
+  checkWx4pyInstalled,
+  ensureWx4pyInstalled,
   autoInstallPython,
 } = require("./send/wechatController");
 
@@ -42,18 +42,18 @@ const DEPENDENCIES = [
     },
   },
   {
-    id: "uiautomation",
-    name: "uiautomation",
-    description: "微信 PC 端自动化的 Python 库 (pip install uiautomation)",
+    id: "wx4py",
+    name: "wx4py",
+    description: "微信 PC 端自动化的 Python 库 (pip install wx4py)",
     requiredBy: ["微信发送"],
     severity: "optional",
     check: async () => {
       if (!ctx.pythonPath) return false;
-      return checkUiautomationInstalled(ctx.pythonPath);
+      return checkWx4pyInstalled(ctx.pythonPath);
     },
     autoFix: async () => {
       if (!ctx.pythonPath) return false;
-      return ensureUiautomationInstalled(ctx.pythonPath);
+      return ensureWx4pyInstalled(ctx.pythonPath);
     },
   },
 ];
