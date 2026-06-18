@@ -659,6 +659,7 @@ async function refreshMatch() {
       originalName: r.originalName,
       mappedName: r.mappedName,
       channels: [...(r.channels || [])],
+      strippedChannels: [...(r.strippedChannels || [])],
       wechatGroup: r.wechatGroup,
       emailSubject: r.emailSubject,
       emailTo: [...(r.emailTo || [])],
@@ -671,6 +672,12 @@ async function refreshMatch() {
     }
     matchResult.value = result;
     addLog("info", `匹配完成: ${result.matched.length} 匹配, ${result.unmatched.length} 未匹配`);
+    // 展示渠道不全的警告
+    if (result.warnings && result.warnings.length > 0) {
+      for (const w of result.warnings) {
+        addLog("warn", `⚠ ${w}`);
+      }
+    }
   } catch (e) {
     addLog("error", `匹配失败: ${e.message}`);
   }
@@ -727,6 +734,17 @@ async function startSend() {
         r.success ? "success" : "error",
         `${channelIcon} ${r.target} → ${r.originalName} ${successIcon}${errorSuffix}`
       );
+    }
+    // 对渠道不全的文件显示警告
+    const seenWarn = new Set();
+    for (const m of (matchResult.value?.matched || [])) {
+      const sc = m.rule && m.rule.strippedChannels;
+      if (sc && sc.length > 0 && !seenWarn.has(m.originalName)) {
+        seenWarn.add(m.originalName);
+        const strippedLabels = sc.map(c => c === "wechat" ? "微信" : "邮件").join("、");
+        const usedLabels = m.channels.map(c => c === "wechat" ? "微信" : "邮件").join("、");
+        addLog("warn", `⚠ ${m.originalName} 仅通过${usedLabels}发送（${strippedLabels}渠道配置不全）`);
+      }
     }
 
     // 汇总
@@ -921,6 +939,18 @@ function echoHistory(entry) {
           t.status === 'success' ? 'success' : t.status === 'error' ? 'error' : 'warn',
           `${icon} ${t.name} → ${fileName} ${statusIcon}${errorStr}`
         );
+      }
+    }
+  }
+  // 还原渠道不全警告
+  const seenWarn = new Set();
+  if (entry.matchedDetails) {
+    for (const md of entry.matchedDetails) {
+      if (md.strippedChannels && md.strippedChannels.length > 0 && !seenWarn.has(md.originalName)) {
+        seenWarn.add(md.originalName);
+        const strippedLabels = md.strippedChannels.map(c => c === "wechat" ? "微信" : "邮件").join("、");
+        const usedLabels = md.channels.map(c => c === "wechat" ? "微信" : "邮件").join("、");
+        addLog("warn", `⚠ ${md.originalName} 仅通过${usedLabels}发送（${strippedLabels}渠道配置不全）`);
       }
     }
   }
