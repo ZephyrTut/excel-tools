@@ -1,87 +1,100 @@
 ---
 name: auto-release
-description: Conversational wizard for setting up semantic-release + Cloudflare Pages or Vercel deployment automation. Beginner-friendly with guided prompts.
+description: Use when a user asks to set up automated release workflows, semantic-release, GitHub Actions CI/CD for publishing, Cloudflare Pages or Vercel deployment, or says "搭自动发布" "自动化发版" " semantic-release 配置". Do NOT use when the project already has a working release pipeline — check first.
 ---
 
 # Auto-Release — 语义化发布自动化向导
 
-逐步引导用户从零搭建 `semantic-release` + Pages 部署的完整自动化发布流程。**优先推荐现成包，不手搓脚本。新手友好，每一步给明确指引。**
+逐步引导从零搭建 `semantic-release` + Pages 部署。**卖现成包不手搓。** 每一步先检查、再询问、再生成。
+
+## ⚠️ 加载后第一步：检查是否真的需要
+
+**在开始任何配置前，先确认这个项目是否需要搭：**
+
+```
+□ 是否已有 .github/workflows/release.yml？
+□ 是否已有 .releaserc？
+□ 是否已有 scripts/release.js？
+□ Git tags 是否已有 v1.x.x 格式的版本号？
+```
+
+如果以上 3 项以上已存在 → 项目已经有发布体系了。**不要重复搭建**。改为：
+
+> 你的项目已经有完整的发布自动化了。你是想：
+> 1. 了解现有流程怎么用？
+> 2. 增加新的部署目标（如 Cloudflare Pages）？
+> 3. 把现有流程迁移到 semantic-release？
+>
+> 请说明需求，我来针对性地改。
+
+## 核心原则
+
+- 永远先检查项目状态，再问用户选择，不假设
+- 推荐 semantic-release 生态现成插件，不自己写脚本
+- 手动步骤给精确 URL 和操作序号
+- 只装需要的，不加噪音（commitlint/husky 等不主动推）
+- 最后输出检查清单 + 完整流程图
 
 ---
 
-## Step 1: 探测项目上下文
-
-在开始任何配置前，先检查用户项目的当前状态：
+## Step 0: 项目状态检查
 
 ```
-检查项:
-  - package.json 是否存在？项目名、版本号？
-  - Git 仓库状态：是否初始化？remote origin 是否配置？
-  - 是否已有 .github/workflows/ 目录？
-  - 是否已有 .releaserc / release.config.js？
+检查清单:
+  □ package.json 存在？→ 没有就停止，告知只支持 Node.js 项目
+  □ Git 仓库已初始化？→ 没有就 git init
+  □ Git remote origin 已配置？→ 没有就停下来让用户先配
+  □ 是否已有 .releaserc？→ 有就问覆盖还是跳过
+  □ 是否已有 .github/workflows/release.yml？→ 有就问覆盖还是跳过
 ```
 
-**如果 package.json 不存在**：这不是 Node.js 项目，停止并告知用户目前只支持 Node.js 项目。
-
-**如果 Git remote 未配置**：提示用户先 `git remote add origin <url>`。
-
-**如果已有 .releaserc**：告知用户已有配置，询问是覆盖还是跳过。
-
----
-
-## Step 2: 确定项目类型
-
-询问用户：
+所有检查通过 → 进入 Step 1。
 
 > 你的项目是什么类型？
-> 1. **npm 包** — 发布到 npm registry（如 React 组件库、CLI 工具）
-> 2. **静态站点** — 构建后是 HTML/JS/CSS（如文档站、SPA）
+> 1. **npm 包** — 发布到 npm registry
+> 2. **静态站点** — 构建产物是 HTML/JS/CSS
 > 3. **其他** — 只发 GitHub Release，不额外发布
 
-根据回答：
+根据回答选插件：
 
-| 类型 | 额外插件 | 说明 |
-|------|---------|------|
-| npm 包 | `@semantic-release/npm` | 自动 `npm publish` |
-| 静态站点 | `@semantic-release/git` | 推送构建产物到 Git |
-| 其他 | 无 | 只创建 tag + GitHub Release |
+| 类型 | 插件 |
+|------|------|
+| npm 包 | `@semantic-release/npm` |
+| 静态站点 | `@semantic-release/git`（推送构建产物） |
+| 其他 | 不加发布插件 |
 
 ---
 
-## Step 3: 选择部署目标
+## Step 2: 选择部署目标
 
-> 你需要一个下载页/静态站点自动部署吗？
-> 1. **Cloudflare Pages** — 全球 CDN，国内需翻墙
-> 2. **Vercel** — 自动 HTTPS，GitHub 集成好
+> 需要自动部署下载页/站点吗？
+> 1. **Cloudflare Pages** — 全球 CDN，无带宽费
+> 2. **Vercel** — 自动 HTTPS，GitHub 集成
 > 3. **跳过** — 只发 GitHub Release
 
 ---
 
-## Step 4: 安装依赖
+## Step 3: 安装依赖
 
-根据用户选择，给出准确的安装命令：
+给出一条准确的命令，不推荐无关包：
 
 ```bash
 # 基础（所有类型都需要）
-npm install --save-dev semantic-release @semantic-release/changelog @semantic-release/git
+npm install --save-dev semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/github
 
 # npm 包额外
 npm install --save-dev @semantic-release/npm
 
-# 部署到 Cloudflare Pages
+# 部署 Cloudflare Pages → 用 wrangler CLI（不依赖 Git 集成）
 npm install --save-dev wrangler
 
-# 部署到 Vercel
+# 部署 Vercel
 npm install --save-dev vercel
 ```
 
 ---
 
-## Step 5: 生成配置文件
-
-### 5a. `.releaserc`
-
-根据项目类型生成。以下是 npm 包 + Cloudflare Pages 的示例：
+## Step 4: 生成 .releaserc
 
 ```json
 {
@@ -89,8 +102,11 @@ npm install --save-dev vercel
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    "@semantic-release/changelog",
-    "@semantic-release/npm",
+    [
+      "@semantic-release/changelog",
+      { "changelogFile": "CHANGELOG.md" }
+    ],
+    "<PUBLISH_PLUGIN>",
     [
       "@semantic-release/git",
       {
@@ -103,11 +119,13 @@ npm install --save-dev vercel
 }
 ```
 
-**静态站点**去掉 `@semantic-release/npm`，**其他**只保留前三个 + `@semantic-release/github`。
+`<PUBLISH_PLUGIN>` 替换规则：
+- npm 包 → `"@semantic-release/npm",`
+- 静态站点/其他 → 删除这一行
 
-### 5b. `.github/workflows/release.yml`
+---
 
-生成完整的 GitHub Actions 工作流。以下模板支持 Cloudflare Pages：
+## Step 5: 生成 .github/workflows/release.yml
 
 ```yaml
 name: Release
@@ -131,6 +149,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -139,23 +158,23 @@ jobs:
 
       - run: npm ci
 
-      # 如果是静态站点，在这之前加构建步骤
+      # 静态站点需要在这之前加构建步骤
       # - run: npm run build
 
-      - name: Release
+      - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
-      # === Cloudflare Pages（可选） ===
+      # === Cloudflare Pages ===
       - name: Deploy to Cloudflare Pages
         if: success()
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler pages deploy ./dist --project-name=<project-name> --branch main
+        run: npx wrangler pages deploy <OUTPUT_DIR> --project-name=<PROJECT_NAME> --branch main
 
-      # === Vercel（可选） ===
+      # === Vercel ===
       # - name: Deploy to Vercel
       #   if: success()
       #   env:
@@ -165,104 +184,110 @@ jobs:
       #   run: npx vercel deploy --prod --token=$VERCEL_TOKEN
 ```
 
+根据部署选择，删除不用的部署步骤，替换 `<OUTPUT_DIR>` 和 `<PROJECT_NAME>`。
+
 ---
 
 ## Step 6: 手动配置指引
 
-### Cloudflare Pages
+### Cloudflare Pages（wrangler CLI 方式）
 
-> ⚠️ 现在需要你去 Cloudflare 网页操作：
+> ⚠️ 去 Cloudflare 网页操作：
 >
 > **创建 API Token：**
 > 1. 打开 https://dash.cloudflare.com/profile/api-tokens
-> 2. 点击「创建令牌」→ 选「自定义令牌」
-> 3. 权限设置：Account → Cloudflare Pages → 编辑
+> 2. 点击「创建令牌」→「自定义令牌」
+> 3. 权限：Account → Cloudflare Pages → 编辑
 > 4. 账户资源：所有账户
-> 5. 点击「继续以显示摘要」→ 复制 token
+> 5. 复制 token
 >
 > **获取 Account ID：**
 > 1. 打开 https://dash.cloudflare.com
-> 2. 右侧「API」区域 → 复制「账户 ID」
+> 2. 右侧「API」→ 复制「账户 ID」
 >
 > **添加到 GitHub Secrets：**
 > 1. 打开 `https://github.com/<owner>/<repo>/settings/secrets/actions`
-> 2. 点击「New repository secret」
-> 3. 分别添加：
->    - Name: `CLOUDFLARE_API_TOKEN`, Value: 你复制的 token
->    - Name: `CLOUDFLARE_ACCOUNT_ID`, Value: 你复制的 Account ID
+> 2. New repository secret：
+>    - Name: `CLOUDFLARE_API_TOKEN`, Value: token
+>    - Name: `CLOUDFLARE_ACCOUNT_ID`, Value: 账户 ID
+>
+> **首次创建 Pages 项目：**
+> ```bash
+> npx wrangler pages project create <project-name> --production-branch main
+> ```
 >
 > 完成后回复「done」
 
 ### Vercel
 
-> ⚠️ 现在需要你去 Vercel 网页操作：
+> ⚠️ 去 Vercel 网页操作：
 >
 > **获取 Token：**
 > 1. 打开 https://vercel.com/account/tokens
-> 2. 点击「Create Token」
-> 3. 输入名称（如 `github-actions`），Scope 选「Full Account」
-> 4. 复制 token
+> 2. Create Token → 名称填 `github-actions`，Scope 选 Full Account
+> 3. 复制 token
 >
 > **获取 Project ID 和 Org ID：**
 > ```bash
-> npx vercel link   # 关联项目
-> npx vercel env ls # 查看 .vercel/project.json 里的 projectId 和 orgId
+> npx vercel link
+> cat .vercel/project.json  # 记下 projectId 和 orgId
 > ```
 >
 > **添加到 GitHub Secrets：**
-> 1. 打开 `https://github.com/<owner>/<repo>/settings/secrets/actions`
-> 2. 分别添加：`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`
+> 1. `VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`
 >
 > 完成后回复「done」
 
 ---
 
-## Step 7: 验证 & 总结
+## Step 7: 验证清单
 
-确认所有步骤完成后，**不要立即推送**。先帮用户检查：
-
-```
-✅ package.json 有 semantic-release 依赖
-✅ .releaserc 配置正确
-✅ .github/workflows/release.yml 已创建
-✅ GitHub Secrets 已配置
-✅ 项目有 remote origin
-```
-
-然后输出最终总结：
+全部完成后，逐项确认：
 
 ```
-## 🎉 自动化发布已配置完成！
+□ package.json devDependencies 有 semantic-release
+□ .releaserc 存在且插件链正确
+□ .github/workflows/release.yml 存在
+□ GitHub Actions permissions 设为 Read and write（Settings > Actions > General）
+□ GitHub Secrets 已添加（如 CLOUDFLARE_API_TOKEN）
+□ 项目已推送到 GitHub（git push origin main）
+```
 
-### 你的自动化流程
+---
 
-  代码 push 到 main 分支
+## 最终总结
+
+```
+🎉 自动化发布已就绪！
+
+  推送代码到 main
     ↓
   GitHub Actions 自动运行
     ↓
   semantic-release:
-    ├─ 分析 commit message 算版本号
+    ├─ 分析 commit → 算版本号
     ├─ 生成 CHANGELOG.md
     ├─ 创建 Git tag + GitHub Release
     └─ 部署到 <Cloudflare Pages / Vercel>
 
-### 提交规范
+提交规范
+  feat: 新功能    → minor (1.2.0 → 1.3.0)
+  fix:  Bug 修复  → patch (1.2.0 → 1.2.1)
+  feat!: 不兼容   → major (1.2.0 → 2.0.0)
+  或 commit body 含 BREAKING CHANGE
 
-每次 commit 请遵循 Conventional Commits:
-
-  feat: 新功能        → minor 版本 (1.2.0 → 1.3.0)
-  fix:  Bug 修复      → patch 版本 (1.2.0 → 1.2.1)
-  perf: 性能优化 (含 BREAKING CHANGE) → major 版本 (1.2.0 → 2.0.0)
-
-### 触发发布
-
-  git add . && git commit -m "feat: 新增用户登录功能" && git push
-
-就这么简单。每次 push 后去 GitHub Actions 看进度。
-
-### 后续建议
-
-  - 在 VSCode 装 Git Lens，用 AI 生成中文 commit message
-  - 工具推荐：commitizen（交互式写 commit）+ commitlint（CI 检查格式）
-  - 要加 OSS 镜像部署？重新运行 /auto-release 选跳过部署，手动参考文档
+触发发布
+  git add . && git commit -m "feat: xxx" && git push
 ```
+
+---
+
+## 常见问题
+
+| 问题 | 修复 |
+|------|------|
+| push 后没触发 | 检查分支名必须是 `main`，workflow 文件在 `.github/workflows/` |
+| permission denied | Settings > Actions > General > Workflow permissions → Read and write |
+| npm publish 401 | 添加 `NPM_TOKEN` 到 GitHub Secrets，`.releaserc` 里保留 `@semantic-release/npm` |
+| Cloudflare 部署失败 | 确认 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` 两个 secret 都已添加 |
+| `npm ci` 失败 | 确认 `package-lock.json` 已提交到 Git |
