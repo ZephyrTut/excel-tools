@@ -365,6 +365,10 @@ async function executeSend({
         });
       }
     }
+    // 不同群之间等待 2~5s 随机间隔，降低微信风控检测
+    if (i < queue.length - 1) {
+      await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+    }
   }
 
   // 如果被中断，标记剩余未发送项
