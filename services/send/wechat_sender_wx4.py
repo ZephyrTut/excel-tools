@@ -44,6 +44,21 @@ sys.stdout = _real_stdout
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
+def _try_clear_wechat_state():
+    """尽力清理微信残留状态（关闭搜索框/弹窗），失败不抛异常"""
+    try:
+        # 尝试短暂连接到微信窗口并发送 Escape 键关闭搜索框
+        import uiautomation as auto
+        wx_win = auto.WindowControl(searchDepth=1, ClassName="WeChatMainWndForPC")
+        if wx_win.Exists(maxSearchSeconds=1):
+            # 连续 Escape 确保关闭搜索框
+            for _ in range(3):
+                wx_win.SendKeys("{ESC}")
+                time.sleep(0.3)
+    except Exception:
+        pass  # 清理失败不影响主流程
+
+
 def send_file(group_name: str, file_path: str) -> dict:
     """通过 UIA 发送文件到微信群。成功返回 {"success": True}，失败含 error。"""
     abs_path = os.path.abspath(file_path)
@@ -66,6 +81,8 @@ def send_file(group_name: str, file_path: str) -> dict:
             wx.chat_window.send_file(abs_path)
         return {"success": True, "group": group_name, "file": abs_path}
     except TargetNotFoundError:
+        # 尝试关闭搜索框，避免残留状态影响后续发送
+        _try_clear_wechat_state()
         return {
             "success": False,
             "error": f"未找到群聊「{group_name}」，请检查群名是否正确",
@@ -76,8 +93,10 @@ def send_file(group_name: str, file_path: str) -> dict:
             "error": "未找到微信窗口，请确保微信已登录且窗口可见",
         }
     except ControlNotFoundError as e:
+        _try_clear_wechat_state()
         return {"success": False, "error": f"未找到微信控件: {e}"}
     except Exception as e:
+        _try_clear_wechat_state()
         return {"success": False, "error": f"发送失败: {e}"}
     finally:
         # 恢复真实 stdout
