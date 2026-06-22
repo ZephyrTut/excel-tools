@@ -4,6 +4,7 @@ const path = require("node:path");
 const ExcelJS = require("exceljs");
 const { parseRuleExcel } = require("../services/send/parseRuleExcel");
 const { matchFiles } = require("../services/send/ruleMatcher");
+const { buildSendQueue } = require("../services/send/sendService");
 
 const TEMPLATE_PATH = path.join(__dirname, "发送规则模板2.xlsx");
 
@@ -43,7 +44,6 @@ test("matchFiles 正确匹配文件名", async () => {
 });
 
 test("发送队列中失败项不中断后续", () => {
-  const { buildSendQueue } = require("../services/send/sendService");
 
   const matched = [
     {
