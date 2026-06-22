@@ -25,37 +25,6 @@ wx4py 替代 uiautomation：UIA 直接操控微信控件，删除冗余的截图
 pnpm release 提交列表精简为最新/最旧两条 + 总数
 PRD 更新为 README.md，移除 XLSX_OPTIMIZATION_GUIDE.md
 
-## [v1.2.7] - 2026-06-11
-
-### 🚀 新功能
-- auto-install Python with multi-source mirror, progress bar, and OSS sync (617d101)
-- 添加自动生成 CHANGELOG.md 的功能，并在发布时更新 (334930f)
-- add dependency check functionality and UI integration (27b41d6)
-
-### 🔹 其他
-- ci: fix gh release list — body not valid for list command, use view per release (314b091)
-- ci: fix Cloudflare Pages deploy — use env var directly, add gh error handling (44f3248)
-- release: v1.2.7 (2a57f1c)
-
-## [v1.2.6] - 2026-06-10
-
-### 🚀 新功能
-- Enhance send tool with history table, unmatched items logging, echo functionality, and abort signal handling (87b6e52)
-- add cancel send functionality and improve email handling (b5556ca)
-
-### 🐛 Bug 修复
-- unpack Python scripts from asar so Python can access them at runtime (f9c4cc8)
-- upgrade Node.js to v22 in CI for wrangler v4 compatibility (d92161f)
-- restore Cloudflare as single job step, add wrangler as devDep (819c60f)
-- switch wrangler install back to npm from pnpm (2907879)
-
-### 📦 构建
-- disable asar to avoid file access restrictions at runtime (49433d7)
-
-### 🔹 其他
-- release: v1.2.6 (17d3b85)
-- perf: split Cloudflare deploy to ubuntu job, fix workflow_dispatch tag error (cdc98c1)
-
 ## [v1.2.5] - 2026-06-09
 
 ### 🐛 Bug 修复
