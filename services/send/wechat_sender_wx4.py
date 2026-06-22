@@ -47,13 +47,13 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 def _try_clear_wechat_state():
     """尽力清理微信残留状态（关闭搜索框/弹窗），失败不抛异常"""
     try:
-        # 尝试短暂连接到微信窗口并发送 Escape 键关闭搜索框
+        # 尝试短暂连接到微信窗口并发送 F5 刷新键关闭搜索框
         import uiautomation as auto
         wx_win = auto.WindowControl(searchDepth=1, ClassName="WeChatMainWndForPC")
         if wx_win.Exists(maxSearchSeconds=1):
-            # 连续 Escape 确保关闭搜索框
+            # 连续 F5 确保关闭搜索框（用 F5 而非 ESC，避免与 Electron globalShortcut("Escape") 冲突）
             for _ in range(3):
-                wx_win.SendKeys("{ESC}")
+                wx_win.SendKeys("{F5}")
                 time.sleep(0.3)
     except Exception:
         pass  # 清理失败不影响主流程

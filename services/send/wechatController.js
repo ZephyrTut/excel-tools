@@ -186,17 +186,8 @@ async function sendToWechatGroup(groupName, filePath, signal) {
 
   const scriptPath = path.join(__dirname, "wechat_sender_wx4.py");
 
-  // Python 执行期间暂停 Escape 全局快捷键，防止 wx4py SendKeys("{ESC}") 误触发中断
-  let globalShortcut = null;
+  let stdout = "";
   try {
-    globalShortcut = require("electron").globalShortcut;
-  } catch { /* 测试环境无 Electron */ }
-  const wasEscRegistered = globalShortcut && globalShortcut.isRegistered("Escape");
-  if (wasEscRegistered) globalShortcut.unregister("Escape");
-
-  try {
-    let stdout = "";
-    try {
       const [prog, ...args] = pythonCmd.split(" ");
       const result = await execFileAsync(
         prog,
@@ -226,9 +217,6 @@ async function sendToWechatGroup(groupName, filePath, signal) {
       console.warn("[wechatController] 微信发送失败:", err.message);
       return { success: false, error: "微信发送失败，请确认微信已登录且窗口可见" };
     }
-  } finally {
-    if (wasEscRegistered && globalShortcut) globalShortcut.register("Escape", () => {});
-  }
 }
 
 /**
