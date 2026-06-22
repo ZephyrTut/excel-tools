@@ -186,46 +186,48 @@ async function sendToWechatGroup(groupName, filePath, signal) {
 
   const scriptPath = path.join(__dirname, "wechat_sender_wx4.py");
 
-  let stdout = "";
+  // Python 执行期间暂停 Escape 全局快捷键，防止 wx4py SendKeys("{ESC}") 误触发中断
+  let globalShortcut = null;
   try {
-    const [prog, ...args] = pythonCmd.split(" ");
-    const result = await execFileAsync(
-      prog,
-      [...args, scriptPath, "--group", groupName, "--file", filePath],
-      { timeout: 60000, signal }
-    );
-    stdout = result.stdout || "";
+    globalShortcut = require("electron").globalShortcut;
+  } catch { /* 测试环境无 Electron */ }
+  const wasEscRegistered = globalShortcut && globalShortcut.isRegistered("Escape");
+  if (wasEscRegistered) globalShortcut.unregister("Escape");
 
-    const parsed = extractJsonFromOutput(stdout);
-    if (parsed) {
-      return parsed;
-    }
-    // stdout 存在但无法提取 JSON
-    console.warn("[wechatController] 无法解析 Python 输出:", stdout.substring(0, 500));
-    return { success: false, error: "微信发送异常，请重试" };
-  } catch (err) {
-    // 用户中断
-    if (isAbortError(err)) {
-      return { success: false, error: "发送已取消" };
-    }
+  try {
+    let stdout = "";
+    try {
+      const [prog, ...args] = pythonCmd.split(" ");
+      const result = await execFileAsync(
+        prog,
+        [...args, scriptPath, "--group", groupName, "--file", filePath],
+        { timeout: 60000, signal }
+      );
+      stdout = result.stdout || "";
 
-    // Python 进程失败（非零退出码），尝试从 stderr/stdout 提取结构化错误
-    stdout = err.stdout || stdout;
-    if (stdout) {
       const parsed = extractJsonFromOutput(stdout);
-      if (parsed && parsed.error) {
-        return { success: false, error: parsed.error };
+      if (parsed) return parsed;
+
+      console.warn("[wechatController] 无法解析 Python 输出:", stdout.substring(0, 500));
+      return { success: false, error: "微信发送异常，请重试" };
+    } catch (err) {
+      if (isAbortError(err)) return { success: false, error: "发送已取消" };
+
+      stdout = err.stdout || stdout;
+      if (stdout) {
+        const parsed = extractJsonFromOutput(stdout);
+        if (parsed && parsed.error) return { success: false, error: parsed.error };
       }
-    }
 
-    // 超时
-    if (err.killed || (err.message || "").includes("timeout")) {
-      return { success: false, error: "微信发送超时，请确认微信已打开且窗口可见" };
-    }
+      if (err.killed || (err.message || "").includes("timeout")) {
+        return { success: false, error: "微信发送超时，请确认微信已打开且窗口可见" };
+      }
 
-    // 兜底：记录原始错误到日志，返回用户友好消息
-    console.warn("[wechatController] 微信发送失败:", err.message);
-    return { success: false, error: "微信发送失败，请确认微信已登录且窗口可见" };
+      console.warn("[wechatController] 微信发送失败:", err.message);
+      return { success: false, error: "微信发送失败，请确认微信已登录且窗口可见" };
+    }
+  } finally {
+    if (wasEscRegistered && globalShortcut) globalShortcut.register("Escape", () => {});
   }
 }
 
