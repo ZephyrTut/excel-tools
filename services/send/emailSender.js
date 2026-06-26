@@ -42,6 +42,7 @@ async function sendEmail({ smtpConfig, to, cc, subject, attachments }) {
       filename: nameWithoutExt + ".xlsx",
       path: att.filePath,
       contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      contentDisposition: "attachment", // 显式声明附件，兼容 Coremail 等严格 MIME 解析器
     };
   });
 
@@ -51,6 +52,8 @@ async function sendEmail({ smtpConfig, to, cc, subject, attachments }) {
       to: (to || []).map(toAddress).filter(Boolean).join(", "),
       cc: (cc || []).map(toAddress).filter(Boolean).join(", "),
       subject,
+      text: "请查收附件",
+      html: "<p>请查收附件</p>", // 同时提供 html 正文，兼容 Coremail 等 webmail
       attachments: mailAttachments,
     });
     return { success: true, messageId: info.messageId };
@@ -59,4 +62,4 @@ async function sendEmail({ smtpConfig, to, cc, subject, attachments }) {
   }
 }
 
-module.exports = { sendEmail };
+module.exports = { sendEmail, toAddress };

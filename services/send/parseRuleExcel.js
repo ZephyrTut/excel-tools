@@ -29,7 +29,14 @@ function cellText(row, col) {
  */
 function normalizeEmailAddress(raw) {
   if (!raw) return { name: null, address: "" };
-  const s = raw.trim();
+
+  // 清理全角空格、不换行空格、零宽字符等不可见 Unicode
+  let s = raw
+    .replace(/\u3000/g, " ")     // 全角空格 → 半角空格
+    .replace(/\u00A0/g, " ")     // 不换行空格
+    .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, "") // 零宽/控制字符
+    .trim();
+
   const match = s.match(/^(.+?)<([^>]+)>$/);
   if (match) {
     let name = match[1].trim().replace(/^["']|["']$/g, "").trim();
@@ -56,7 +63,7 @@ function normalizeEmailList(arr) {
  */
 function parseChannels(str) {
   const channels = [];
-  const parts = str.split(",").map((s) => s.trim().toLowerCase());
+  const parts = str.split(/[,，;；]/).map((s) => s.trim().toLowerCase());
   for (const part of parts) {
     if (part === "微信" || part === "wechat") channels.push("wechat");
     else if (part === "邮件" || part === "email") channels.push("email");
@@ -132,7 +139,7 @@ function parseRuleExcel(worksheet) {
     function splitComma(s) {
       if (!s) return [];
       return s
-        .split(",")
+        .split(/[,，;；]/)
         .map((x) => x.trim())
         .filter(Boolean);
     }

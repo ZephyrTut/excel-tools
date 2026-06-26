@@ -155,17 +155,6 @@ function extractJsonFromOutput(stdout) {
   }
 }
 
-/**
- * 判断是否是中断信号导致的错误
- */
-function isAbortError(err) {
-  return err && (
-    err.name === "AbortError" ||
-    (err.message || "").toLowerCase().includes("abort") ||
-    (err.message || "").includes("取消")
-  );
-}
-
 // ── 微信发送 ──────────────────────────────────────────────────────
 
 /**
@@ -192,7 +181,7 @@ async function sendToWechatGroup(groupName, filePath, signal) {
       const result = await execFileAsync(
         prog,
         [...args, scriptPath, "--group", groupName, "--file", filePath],
-        { timeout: 60000, signal }
+        { timeout: 60000 }
       );
       stdout = result.stdout || "";
 
@@ -202,7 +191,8 @@ async function sendToWechatGroup(groupName, filePath, signal) {
       console.warn("[wechatController] 无法解析 Python 输出:", stdout.substring(0, 500));
       return { success: false, error: "微信发送异常，请重试" };
     } catch (err) {
-      if (isAbortError(err)) return { success: false, error: "发送已取消" };
+      // 因为不再向 execFile 传 signal，这里的 AbortError 仅来自外部信号（极少见）
+      if (err.name === "AbortError") return { success: false, error: "发送已取消" };
 
       stdout = err.stdout || stdout;
       if (stdout) {

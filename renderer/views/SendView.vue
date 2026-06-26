@@ -97,8 +97,14 @@
         <div v-if="matchResult.error" class="send-error">{{ matchResult.error }}</div>
 
         <div v-if="matchResult.matched.length > 0" class="match-list">
-          <div v-for="item in matchResult.matched" :key="item.originalName" class="match-item">
-            <el-checkbox v-model="item.selected" style="margin-right: 8px" />
+          <div class="match-list-header">
+            <el-checkbox v-model="selectAll" style="margin-right: 8px">
+              <span style="font-weight: 600">全选</span>
+              <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px">{{ selectedCount }}/{{ matchResult.matched.length }}</span>
+            </el-checkbox>
+          </div>
+          <div v-for="item in matchResult.matched" :key="item.originalName" class="match-item" :class="{ 'match-item--no-channel': item._noChannel }">
+            <el-checkbox v-model="item.selected" @change="() => item._noChannel = false" style="margin-right: 8px" />
             <span class="match-filename">{{ item.originalName }}</span>
             <span class="match-arrow">→</span>
             <el-tag v-for="ch in (item.displayChannels || item.channels)" :key="ch" size="small" :type="ch === 'wechat' ? 'primary' : 'success'" style="margin-right: 4px">
@@ -121,8 +127,14 @@
     <!-- 操作区 -->
     <el-card class="panel-card" v-if="matchResult && matchResult.matched.length > 0">
       <div class="action-bar">
-        <el-button type="primary" @click="startSend" :disabled="sending || selectedCount === 0">
-          📤 开始发送 ({{ selectedCount }}项)
+        <el-button type="primary" @click="startSend('wechat')" :disabled="sending || wechatSelectedCount === 0">
+          📱 仅微信 ({{ wechatSelectedCount }}项)
+        </el-button>
+        <el-button type="primary" @click="startSend('email')" :disabled="sending || emailSelectedCount === 0">
+          📧 仅邮件 ({{ emailSelectedCount }}项)
+        </el-button>
+        <el-button type="primary" @click="startSend(null)" :disabled="sending || selectedCount === 0">
+          📤 全部发送 ({{ selectedCount }}项)
         </el-button>
         <el-button v-if="sending" type="danger" @click="cancelSend" style="margin-left: 8px">
           ⏹ 中断发送
@@ -339,6 +351,7 @@ const matchResult = ref(null);
 const sending = ref(false);
 const logs = ref([]);
 const sendResults = ref([]);
+const skippedExportItems = ref([]); // 被跳过的文件（未匹配/无渠道），供导出使用
 const history = ref([]);
 const smtpConfigured = ref(false);
 const showSmtpDialog = ref(false);
@@ -352,6 +365,19 @@ const depProgressPercent = ref(0);
 const depProgressMessage = ref("");
 const sendProgress = ref(0);
 const sendAborted = ref(false);
+const selectAll = computed({
+  get: () => {
+    const list = matchResult.value?.matched;
+    if (!list || list.length === 0) return false;
+    return list.every(m => m.selected !== false);
+  },
+  set: (val) => {
+    for (const m of matchResult.value?.matched || []) {
+      m.selected = val;
+      m._noChannel = false;
+    }
+  },
+});
 const folderDropActive = ref(false);
 const ruleDropActive = ref(false);
 const toolsDropActive = ref(false);
@@ -386,6 +412,20 @@ function onProviderChange(provider) {
 const selectedCount = computed(() => {
   if (!matchResult.value) return 0;
   return matchResult.value.matched.filter((m) => m.selected !== false).length;
+});
+
+const wechatSelectedCount = computed(() => {
+  if (!matchResult.value) return 0;
+  return matchResult.value.matched.filter(
+    (m) => m.selected !== false && (m.channels || []).includes('wechat')
+  ).length;
+});
+
+const emailSelectedCount = computed(() => {
+  if (!matchResult.value) return 0;
+  return matchResult.value.matched.filter(
+    (m) => m.selected !== false && (m.channels || []).includes('email')
+  ).length;
 });
 
 const failedItems = computed(() => sendResults.value.filter((r) => !r.success));
@@ -712,8 +752,31 @@ async function refreshMatch() {
   }
 }
 
-async function startSend() {
+async function startSend(filterChannel = null) {
   if (!matchResult.value) return;
+
+  // 清除上次发送的 _noChannel 标记和跳过记录
+  skippedExportItems.value = [];
+  for (const m of matchResult.value.matched) {
+    m._noChannel = false;
+  }
+
+  // 单渠道发送：自动取消勾选无该渠道的项
+  if (filterChannel) {
+    for (const m of matchResult.value.matched) {
+      if (m.selected !== false && !(m.channels || []).includes(filterChannel)) {
+        m.selected = false;
+        m._noChannel = true;
+        const channelLabel = filterChannel === 'wechat' ? '微信' : '邮件';
+        addLog("warn", `⏭ 跳过 ${m.originalName} (无${channelLabel}渠道)`);
+        skippedExportItems.value.push({
+          originalName: m.originalName,
+          reason: `无${channelLabel}渠道`,
+        });
+      }
+    }
+  }
+
   const selected = matchResult.value.matched.filter((m) => m.selected !== false);
   if (selected.length === 0) return;
 
@@ -735,7 +798,7 @@ async function startSend() {
 
   try {
     const result = await getApi().sendItems(
-      createSendPayload(selected, true, matchResult.value.unmatched || [])
+      createSendPayload(selected, true, matchResult.value.unmatched || [], filterChannel)
     );
     sending.value = false;
     window.removeEventListener("keydown", onKeyDown);
@@ -751,6 +814,10 @@ async function startSend() {
     if (matchResult.value?.unmatched?.length > 0) {
       for (const umName of matchResult.value.unmatched) {
         addLog("warn", `⏭ 跳过 ${umName} (未匹配到规则)`);
+        skippedExportItems.value.push({
+          originalName: umName,
+          reason: "未匹配到规则",
+        });
       }
     }
 
@@ -796,6 +863,13 @@ async function startSend() {
       addLog("warn", "⏹ 发送已被用户中断");
     } else {
       addLog("error", `发送异常: ${e.message}`);
+    }
+  } finally {
+    // 发送结束后清除灰化标记，避免 _noChannel 持久残留
+    if (matchResult.value) {
+      for (const m of matchResult.value.matched) {
+        m._noChannel = false;
+      }
     }
   }
 }
@@ -1027,7 +1101,8 @@ function clearLogs() {
 
 async function exportResults() {
   const results = sendResults.value;
-  if (results.length === 0) return;
+  const skipped = skippedExportItems.value;
+  if (results.length === 0 && skipped.length === 0) return;
 
   const headers = ["文件名", "渠道", "目标", "状态", "错误信息"];
   const rows = results.map((r) => [
@@ -1037,6 +1112,10 @@ async function exportResults() {
     r.success ? "成功" : "失败",
     r.error || "",
   ]);
+  // 追加被跳过的文件
+  for (const s of skipped) {
+    rows.push([s.originalName, "", "", "跳过", s.reason]);
+  }
 
   try {
     const ret = await getApi().exportSendResults({ headers, rows });
@@ -1078,10 +1157,22 @@ function formatDate(iso) {
   gap: 8px;
 }
 
+.match-list-header {
+  display: flex;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  margin-bottom: 4px;
+}
+
 .match-item {
   display: flex;
   align-items: center;
   font-size: 14px;
+}
+
+.match-item--no-channel {
+  opacity: 0.45;
 }
 
 .match-filename {

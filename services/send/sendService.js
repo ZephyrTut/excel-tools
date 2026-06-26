@@ -22,23 +22,17 @@ function formatEmailList(arr) {
 }
 
 function buildSendQueue(matched, wechatFirst = true) {
-  const priority = wechatFirst ? ["wechat", "email"] : ["email", "wechat"];
+  // 逐行顺序：按 Excel 规则行序处理，每行内的渠道按优先级排列
   const queue = [];
-
   for (const item of matched || []) {
     const channels = Array.isArray(item.channels) ? item.channels : [];
-    for (const channel of priority) {
-      if (channels.includes(channel)) {
-        queue.push({ ...item, channel });
-      }
-    }
-    for (const channel of channels) {
-      if (!priority.includes(channel)) {
-        queue.push({ ...item, channel });
-      }
+    const ordered = wechatFirst
+      ? channels.filter((c) => c === "wechat").concat(channels.filter((c) => c !== "wechat"))
+      : channels.filter((c) => c === "email").concat(channels.filter((c) => c !== "email"));
+    for (const channel of ordered) {
+      queue.push({ ...item, channel });
     }
   }
-
   return queue;
 }
 

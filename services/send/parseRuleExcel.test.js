@@ -208,3 +208,77 @@ test("parseRuleExcel keeps email sendable when wechat config is incomplete", () 
   assert.deepEqual(result.rules[0].strippedChannels, ["wechat"]);
   assert.deepEqual(result.rules[0].emailTo, [{ name: null, address: "boss@a.com" }]);
 });
+
+test("normalizeEmailAddress handles ailsa.lin<...> (dot in name, no quotes)", () => {
+  const { normalizeEmailAddress } = require("./parseRuleExcel");
+
+  assert.deepEqual(
+    normalizeEmailAddress("ailsa.lin<ailsa.lin@welding-tech.com.cn>"),
+    { name: "ailsa.lin", address: "ailsa.lin@welding-tech.com.cn" }
+  );
+});
+
+test("normalizeEmailAddress strips full-width spaces (U+3000)", () => {
+  const { normalizeEmailAddress } = require("./parseRuleExcel");
+
+  // 全角空格在名字前
+  assert.deepEqual(
+    normalizeEmailAddress("\u3000\u5f20\u4e09<zhang@test.com>"),
+    { name: "\u5f20\u4e09", address: "zhang@test.com" }
+  );
+});
+
+test("normalizeEmailAddress strips non-breaking spaces (U+00A0)", () => {
+  const { normalizeEmailAddress } = require("./parseRuleExcel");
+
+  assert.deepEqual(
+    normalizeEmailAddress(" " + "boss<boss@test.com>"),
+    { name: "boss", address: "boss@test.com" }
+  );
+});
+
+test("normalizeEmailAddress strips zero-width characters (U+200B)", () => {
+  const { normalizeEmailAddress } = require("./parseRuleExcel");
+
+  // 零宽空格夹在名字中间
+  assert.deepEqual(
+    normalizeEmailAddress("user\u200Bname<user@test.com>"),
+    { name: "username", address: "user@test.com" }
+  );
+});
+
+test("normalizeEmailAddress handles null/undefined inputs", () => {
+  const { normalizeEmailAddress } = require("./parseRuleExcel");
+
+  assert.deepEqual(normalizeEmailAddress(null), { name: null, address: "" });
+  assert.deepEqual(normalizeEmailAddress(undefined), { name: null, address: "" });
+  assert.deepEqual(normalizeEmailAddress(""), { name: null, address: "" });
+});
+
+test("splitComma in parseRuleExcel supports full-width delimiters", () => {
+  const ExcelJS = require("exceljs");
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("规则");
+  ws.addRow(["文件名(原)", "文件名(映射)", "分发方式", "微信群名", "邮件主题", "收件人", "抄送人"]);
+  // 收件人用全角逗号分隔
+  ws.addRow([
+    "月报.xlsx",
+    "",
+    "邮件",
+    "",
+    "月报",
+    "a@a.com\uff0cb@b.com\uff0cc@c.com",
+    "d@d.com\uff1be@e.com",
+  ]);
+
+  const result = parseRuleExcel(ws);
+
+  assert.equal(result.rules.length, 1);
+  assert.equal(result.rules[0].emailTo.length, 3, "全角逗号应拆分为 3 个收件人");
+  assert.equal(result.rules[0].emailTo[0].address, "a@a.com");
+  assert.equal(result.rules[0].emailTo[1].address, "b@b.com");
+  assert.equal(result.rules[0].emailTo[2].address, "c@c.com");
+  assert.equal(result.rules[0].emailCc.length, 2, "全角分号应拆分为 2 个抄送人");
+  assert.equal(result.rules[0].emailCc[0].address, "d@d.com");
+  assert.equal(result.rules[0].emailCc[1].address, "e@e.com");
+});

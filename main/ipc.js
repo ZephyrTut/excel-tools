@@ -621,7 +621,7 @@ function registerIpcHandlers() {
     const { matched, wechatFirst, unmatched } = payload || {};
     sendAbortController = new AbortController();
 
-    // 全局 Esc 快捷键：微信界面也能一键中断
+    // 全局 Esc 快捷键：微信界面也能一键中断（wx4py 已改用 F5，不再冲突）
     globalShortcut.register("Escape", () => {
       if (sendAbortController) {
         sendAbortController.abort();

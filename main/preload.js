@@ -57,6 +57,8 @@ const api = {
   selectInputFile: () => ipcRenderer.invoke("dialog:select-input-file"),
   selectTemplateFile: () => ipcRenderer.invoke("dialog:select-template-file"),
   selectOutputDir: () => ipcRenderer.invoke("dialog:select-output-dir"),
+  getFileInfo: (filePath) =>
+    ipcRenderer.invoke("file:get-info", filePath),
   getSheetNames: (filePath) =>
     ipcRenderer.invoke("file:get-sheet-names", filePath),
   getDirectorySheetNames: (inputDir, excludedPaths = []) =>
