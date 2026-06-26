@@ -191,7 +191,7 @@ async function sendToWechatGroup(groupName, filePath, signal) {
       console.warn("[wechatController] 无法解析 Python 输出:", stdout.substring(0, 500));
       return { success: false, error: "微信发送异常，请重试" };
     } catch (err) {
-      // 因为不再向 execFile 传 signal，这里的 AbortError 仅来自外部信号（极少见）
+      console.error("[wechatController] execFile error name:", err.name, "msg:", String(err.message || "").substring(0, 200));
       if (err.name === "AbortError") return { success: false, error: "发送已取消" };
 
       stdout = err.stdout || stdout;

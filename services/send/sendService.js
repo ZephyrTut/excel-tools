@@ -288,7 +288,7 @@ async function executeSend({
         if (fileSizeMB > 100) {
           result = { success: false, error: `文件过大 (${fileSizeMB.toFixed(1)} MB)，请通过邮件发送` };
         } else {
-          result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath, signal);
+          result = await sendToWechatGroup(item.rule.wechatGroup, item.filePath);
         }
         results.push({
           originalName: item.originalName,

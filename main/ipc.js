@@ -621,8 +621,8 @@ function registerIpcHandlers() {
     const { matched, wechatFirst, unmatched } = payload || {};
     sendAbortController = new AbortController();
 
-    // 全局 Esc 快捷键：微信界面也能一键中断（wx4py 已改用 F5，不再冲突）
-    globalShortcut.register("Escape", () => {
+    // 全局 Ctrl+Shift+X 快捷键：微信界面也能一键中断（用组合键避免 wx4py 的 Escape 键操作被误捕获）
+    globalShortcut.register("Ctrl+Shift+X", () => {
       if (sendAbortController) {
         sendAbortController.abort();
         const wins = BrowserWindow.getAllWindows();

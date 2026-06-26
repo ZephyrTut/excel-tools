@@ -139,7 +139,7 @@
         <el-button v-if="sending" type="danger" @click="cancelSend" style="margin-left: 8px">
           ⏹ 中断发送
         </el-button>
-        <el-text v-if="sending" size="small" type="info" style="margin-left: 8px">按 Esc 可中断</el-text>
+        <el-text v-if="sending" size="small" type="info" style="margin-left: 8px">按 Ctrl+Shift+X 可中断</el-text>
       </div>
     </el-card>
 
