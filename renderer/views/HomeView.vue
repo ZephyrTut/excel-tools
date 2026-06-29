@@ -3,9 +3,9 @@
     <!-- Hero 欢迎区 -->
     <section class="hero-section animate-fade-in-up">
       <div class="hero-accent"></div>
-      <h1 class="hero-title">Excel Tools</h1>
+      <h1 class="hero-title">Zenda</h1>
       <p class="hero-subtitle">
-        基于 Electron + ExcelJS 的高性能 Excel 自动化平台
+        账务数据，一键送达
       </p>
       <div class="hero-meta">
         <span class="hero-badge">v{{ version }}</span>

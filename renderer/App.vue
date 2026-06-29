@@ -5,8 +5,8 @@
       <div class="app-header-inner">
         <div class="app-brand">
           <span class="brand-icon">▣</span>
-          <span class="brand-name">Excel Tools</span>
-          <span class="brand-version">v{{ version }}</span>
+          <span class="brand-name">Zenda</span>
+          <span class="brand-version">账达 v{{ version }}</span>
         </div>
         <nav class="app-nav">
           <button
@@ -99,7 +99,7 @@ const active = ref("home");
 
 const tabs = [
   { name: "home",   label: "首页" },
-  { name: "split",  label: "Excel 拆分" },
+  { name: "split",  label: "报表拆分" },
   { name: "merge",  label: "合并汇总" },
   { name: "optimize", label: "文件压缩" },
   { name: "send",   label: "发送工具" },
