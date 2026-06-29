@@ -53,7 +53,7 @@
           </svg>
         </div>
         <h3 class="feature-title">文件压缩</h3>
-        <p class="feature-desc">XLSX ZIP 级别深度压缩——清理空单元格、冗余 XML、隐藏元数据，显著减小文件体积，兼容 Office。</p>
+        <p class="feature-desc">XLSX ZIP 级别深度压缩——清理空单元格、冗余 XML、隐藏元数据，显著减小文件体积。</p>
         <div class="feature-actions">
           <el-button type="warning" size="medium" round @click="emit('navigate', 'optimize')">
             开始压缩 →

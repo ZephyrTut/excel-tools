@@ -59,6 +59,9 @@ function matchFiles(fileNames, rules) {
     }
   }
 
+  // 按规则表行号排序（与规则表中的排列顺序一致）
+  matched.sort((a, b) => a.rule.originalRow - b.rule.originalRow);
+
   return { matched, unmatched };
 }
 

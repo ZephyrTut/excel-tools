@@ -55,5 +55,9 @@ CONTEXT.md
 .env.local
 .env.*.local
 
+# 用户手册（本地保留，不入库）
+docs/USER_GUIDE.md
+docs/USER_GUIDE.pdf
+
 # 测试覆盖率
 coverage/
